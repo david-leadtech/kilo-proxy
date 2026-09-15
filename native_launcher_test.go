@@ -45,6 +45,10 @@ func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nat
 		t.Fatal(err)
 	}
 	openCodeBinary := syntheticOpenCodeExecutable(t, u.owner.editorTestRoot)
+	clientBinary := filepath.Join(u.owner.editorTestRoot, "fake-client.exe")
+	if err := os.WriteFile(clientBinary, []byte("synthetic; never executed"), 0700); err != nil {
+		t.Fatal(err)
+	}
 	u.owner.openDesignCheckRunning = func(string) (bool, error) { return false, nil }
 	recorder := &nativeLaunchRecorder{entered: make(chan struct{}, 1), release: make(chan struct{}), failPrepare: failPrepare}
 	if !delay {
@@ -63,7 +67,7 @@ func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nat
 			if customPath != "" {
 				return customPath, nil
 			}
-			return "/fake/client", nil
+			return clientBinary, nil
 		},
 		terminal: func() (bool, string) { return true, "" },
 		start: func(plan clientLaunchPlan) error {

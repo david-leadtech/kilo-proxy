@@ -185,7 +185,7 @@ func TestOpenDesignEnginePreferencesUseAllowedNames(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "profile with spaces")
 	binary := filepath.Join(t.TempDir(), "local cli")
 	got, err := openDesignEnginePreferences("codex-cli", dir, binary, 8877, "local-one")
-	if err != nil || !reflect.DeepEqual(got, map[string]string{"CODEX_HOME": dir, "CODEX_BIN": binary}) {
+	if err != nil || !reflect.DeepEqual(got, map[string]string{"CODEX_HOME": dir, "CODEX_BIN": binary, "CODEX_API_KEY": "local-one"}) {
 		t.Fatal("Codex preferences must use its isolated profile and inherited process key")
 	}
 	got, err = openDesignEnginePreferences("claude", dir, binary, 8899, "local-two")

@@ -13,6 +13,9 @@ func (a *app) clientLaunchMessage(message string) string {
 		return message
 	}
 	known := map[string]string{
+		"Cannot resolve the detected Codex CLI executable.": "No se pudo localizar el ejecutable del Codex CLI detectado.",
+		"Cannot inspect the detected Codex CLI executable.": "No se pudo comprobar el ejecutable del Codex CLI detectado.",
+		"Open Design needs a native Codex executable. Repair the Codex CLI installation or install Codex Desktop, then refresh installed apps.": "Open Design necesita un ejecutable nativo de Codex. Repara la instalación del CLI o instala Codex Desktop y actualiza la detección.",
 		errOpenDesignCompatibility.Error(): "Actualiza Open Design a la versión 0.22.2 o posterior para usar su espacio CLI de Kilo; la versión instalada es anterior o no se ha podido comprobar.",
 		"Open Design desktop launch is available on macOS and Windows. Linux currently requires a source build.": "Puedes abrir Open Design en macOS y Windows. Linux requiere compilarlo desde el código fuente.",
 		"Open Design opened with its Kilo CLI profile. Use Local CLI mode in Open Design.":                       "Open Design abierto con su perfil CLI de Kilo. Utiliza el modo Local CLI en Open Design.",

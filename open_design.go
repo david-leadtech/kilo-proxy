@@ -185,7 +185,7 @@ func (a *app) openDesignEngineInfo(rt clientLaunchRuntime) map[string]clientLaun
 	result := map[string]clientLaunchAvailability{}
 	for _, engine := range openDesignEngines {
 		name, _ := launchClientIdentity(engine)
-		path, err := rt.resolve(engine, "")
+		path, err := resolveOpenDesignCLI(engine, rt)
 		if err == nil && engine == "opencode" && rt.platform == "windows" {
 			err = validateOpenDesignShimBinary(path, "windows", false)
 		}
@@ -278,7 +278,7 @@ func (a *app) openDesignProfileAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer a.launchMu.Unlock()
-	binary, err := rt.resolve(input.Engine, "")
+	binary, err := resolveOpenDesignCLI(input.Engine, rt)
 	if err == nil && input.Engine == "opencode" && rt.platform == "windows" {
 		err = validateOpenDesignShimBinary(binary, "windows", false)
 	}
@@ -399,7 +399,7 @@ func (a *app) applyOpenDesignProfile(plan *clientLaunchPlan, engine string, rt c
 	if err != nil || engine != "" && saved.Engine != engine {
 		return errors.New("Prepare the selected Open Design CLI engine before launching.")
 	}
-	binary, err := rt.resolve(saved.Engine, "")
+	binary, err := resolveOpenDesignCLI(saved.Engine, rt)
 	if err != nil {
 		return err
 	}

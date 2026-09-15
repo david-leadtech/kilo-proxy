@@ -70,6 +70,10 @@ func prepareOpenDesignEngineProfile(dir, engine string, library modelLibrary, ca
 		if err != nil {
 			return err
 		}
+		config, err = mergeOpenDesignOpenCodeImages(config, images, port, key)
+		if err != nil {
+			return err
+		}
 		settings, err := prepareProfileFile(path, config)
 		if err != nil {
 			return err
@@ -118,7 +122,9 @@ func openDesignEnginePreferences(engine, dir, binary string, port int, key strin
 		return nil, errors.New("Open Design requires a detected local CLI executable.")
 	}
 	if engine == "codex-cli" {
-		return map[string]string{"CODEX_HOME": dir, "CODEX_BIN": binary}, nil
+		// Open Design's connection check recognizes this API-key variable before
+		// trying ChatGPT login status. It is the local proxy key, never upstream auth.
+		return map[string]string{"CODEX_HOME": dir, "CODEX_BIN": binary, "CODEX_API_KEY": key}, nil
 	}
 	if engine == "opencode" {
 		return map[string]string{"OPENCODE_BIN": openDesignOpenCodeShimPath(dir)}, nil

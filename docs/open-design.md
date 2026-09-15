@@ -20,11 +20,21 @@ With **CLI default** selected, the engine starts with the default from your shar
 | --- | --- |
 | Codex CLI | Exact model IDs, display names, model catalog, default and supported reasoning levels. Enabled Kilo image generation is exposed through the managed images MCP. |
 | Claude Code | Exact gateway IDs and default, native model mappings, aliases and display names supported by the installed version. Reasoning is limited to supported Claude model families and CLI capabilities; unsupported levels are omitted. |
-| OpenCode | Exact model IDs, names, default and supported context/output limits through the local OpenAI-compatible provider. Reasoning remains controlled by OpenCode. |
+| OpenCode | Exact model IDs, names, default and supported context/output limits through the local OpenAI-compatible provider. Reasoning remains controlled by OpenCode. Enabled Kilo image generation is exposed through the managed images MCP. |
 
 Open Design has its own model picker. The generated Claude model list does not automatically populate every entry in that picker. Keep **CLI default** for the shared default, or enter a supported exact model ID in Open Design when choosing a different model. A shared display name is not an API model ID. Explicit model or reasoning choices inside Open Design can override the underlying CLI defaults.
 
 The selected model must support the engine's API protocol and be accessible to your organization: **Responses** for Codex CLI, **Anthropic Messages** for Claude Code, or **Chat Completions** for OpenCode. Local CLI exposes the engine's project tools, subject to its permissions and Open Design's capabilities. Open Design's direct API-provider/BYOK mode is a separate workflow; this integration configures Local CLI.
+
+## Generate images with OpenCode
+
+OpenCode can use the same Kilo image-generation MCP as Codex. Enable **Image generation** and save an image-output model in Kilo Proxy's Codex image settings, then quit the managed Open Design instance and launch it again with **OpenCode**. These image settings are shared by Kilo Proxy; the coding model remains independent.
+
+Preparation adds the `kilo_images` MCP server to Open Design's private OpenCode profile. Ask the agent to use its `generate_image` tool, for example: “Use kilo_images to generate a hero illustration, then copy the returned original file into this project.” The tool returns generated file paths and a preview; the agent can copy the original into the project using its file tools. Editing accepts a path returned by an earlier Kilo image-generation call. This does not configure Open Design's separate image-provider picker or video/audio providers.
+
+The remote MCP uses the existing `http://127.0.0.1:<port>/mcp/images` endpoint, local bearer authentication, disabled OAuth, and a six-minute timeout. Image usage appears in Kilo Proxy's Activity. Disabling image generation removes only Kilo's managed MCP entry on the next preparation; other servers and tool permissions are preserved.
+
+Open Design injects its own MCP servers through `OPENCODE_CONFIG_CONTENT`; the Kilo launcher preserves that configuration. [OpenCode merges the configurations](https://opencode.ai/docs/config/#precedence-order), so servers with different names coexist. Avoid defining another external server named `kilo_images` in Open Design: its higher-priority inline settings would override the managed entry. A conflicting same-name server in the private file stops preparation instead of being overwritten. Existing tool permissions still apply. The connection follows OpenCode's documented [remote MCP configuration](https://opencode.ai/docs/mcp-servers/#remote).
 
 ## Apply changes and reopen
 
@@ -49,7 +59,7 @@ Files live under `open-design/` in Kilo Proxy's [application configuration direc
 
 The namespace ID is derived from Kilo Proxy's configuration-directory path. Launching the same installed Open Design app normally continues to use its ordinary namespace.
 
-Codex receives the local proxy key through `KILO_LOCAL_API_KEY`; its generated provider and images MCP refer to that variable without embedding the key. Claude's private settings and Open Design's Claude environment preferences contain the local proxy key; OpenCode's private provider settings also contain it. Profile files use the existing private-write and backup handling. Your upstream personal Kilo credential is not exported to these profiles or launch arguments.
+Codex receives the local proxy key through `KILO_LOCAL_API_KEY`; its generated provider and images MCP refer to that variable without embedding the key. Its private Open Design environment preferences also set `CODEX_API_KEY` to the local proxy key so Open Design recognizes API authentication without requesting a ChatGPT login. Claude's private settings and Open Design's Claude environment preferences contain the local proxy key; OpenCode's private provider settings and enabled image MCP headers also contain it. Profile files use the existing private-write and backup handling. Your upstream personal Kilo credential is not exported to these profiles or launch arguments.
 
 OpenCode is launched through a private native Kilo Proxy executable that sets `OPENCODE_CONFIG` to this profile and then starts the detected OpenCode binary. This works on macOS and Windows without a shell script; Windows requires a native OpenCode `.exe` installation. The launcher forwards Open Design's arguments and process streams to the CLI.
 
@@ -64,6 +74,8 @@ Kilo Proxy detects these installed application locations:
 | Linux | Automatic packaged-desktop preparation and launch are unavailable. |
 
 The chosen CLI must also be detected. Kilo Proxy checks the packaged Open Design version and requires **v0.22.2 or later** for this integration; update an older installation before launching it through Kilo Proxy. Open Design hosts the CLI process itself, so this launch does not open an interactive terminal. The launcher does not install either application or discover arbitrary Open Design installations through a command named `od`.
+
+For Codex, this workflow uses the native CLI executable. If discovery finds an npm or script wrapper, Kilo Proxy checks for a matching native executable bundled in Codex Desktop on macOS, then in the npm installation. A wrapper with a missing native package shows a repair/install error. This check does not change ordinary terminal CLI discovery.
 
 Open Design v0.22.2 has no official prebuilt Linux desktop artifact. Follow its [run-from-source instructions](https://github.com/nexu-io/open-design/tree/73953213a6fec2c8092e8e77d229a3074aa828a9#-run-from-source) and configure that source build separately using its Local CLI settings. Kilo Proxy's [terminal commands](terminal-commands.md) provide `kilo-codex` and `kilo-claude` on Linux for running the configured agents in your current terminal; the packaged Open Design launcher does not automatically configure a source build.
 
