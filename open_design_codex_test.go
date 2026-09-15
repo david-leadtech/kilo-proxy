@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -62,6 +63,22 @@ func TestOpenDesignCodexWrapperUsesVerifiedBundle(t *testing.T) {
 	}
 	if got, err := resolveOpenDesignCodex(want, "macos", "arm64", nil); err != nil || got != want {
 		t.Fatalf("already native executable changed: %q, %v", got, err)
+	}
+}
+
+func TestOpenDesignNativeCodexHonorsHostFilePermissions(t *testing.T) {
+	path := writeOpenDesignCodexFixture(t, filepath.Join(t.TempDir(), "codex"), openDesignCodexNativeFixture("macos", "arm64"))
+	if !openDesignNativeCodex(path, "macos", "arm64") {
+		t.Fatal("valid executable header was rejected")
+	}
+	if err := os.Chmod(path, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := openDesignNativeCodex(path, "macos", "arm64"), runtime.GOOS == "windows"; got != want {
+		t.Fatalf("non-executable Unix mode on %s: accepted=%v, want %v", runtime.GOOS, got, want)
+	}
+	if openDesignNativeCodex(filepath.Dir(path), "macos", "arm64") {
+		t.Fatal("directory accepted as an executable")
 	}
 }
 

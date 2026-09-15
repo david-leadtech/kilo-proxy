@@ -106,7 +106,12 @@ func openDesignCodexTarget(platform, arch string) (string, string) {
 // or the discovered binary. Architecture mismatches are skipped.
 func openDesignNativeCodex(path, platform, arch string) bool {
 	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() || platform != "windows" && info.Mode().Perm()&0111 == 0 {
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	// Windows does not expose Unix executable bits, even when inspecting a
+	// different platform's header. Keep the permission check on Unix hosts.
+	if runtime.GOOS != "windows" && platform != "windows" && info.Mode().Perm()&0111 == 0 {
 		return false
 	}
 	f, err := os.Open(path)
