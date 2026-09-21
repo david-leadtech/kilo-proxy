@@ -59,7 +59,7 @@ func (a *app) adminHandler() http.Handler {
 			return
 		}
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
-			if r.Method != "GET" || (r.URL.Path != "/" && r.URL.Path != "/app.js" && r.URL.Path != "/desktop-helper.mjs" && r.URL.Path != "/editor-helper.mjs" && r.URL.Path != "/open-design-helper.mjs" && r.URL.Path != "/xcode-helper.mjs" && r.URL.Path != "/activity-helper.mjs" && r.URL.Path != "/usage-helper.mjs" && r.URL.Path != "/codex-catalog.mjs" && r.URL.Path != "/model-helper.mjs" && r.URL.Path != "/client-config.mjs" && r.URL.Path != "/claude-helper.mjs" && r.URL.Path != "/i18n.mjs" && r.URL.Path != "/style.css" && r.URL.Path != "/icon.svg") {
+			if r.Method != "GET" || (r.URL.Path != "/" && r.URL.Path != "/app.js" && r.URL.Path != "/desktop-helper.mjs" && r.URL.Path != "/editor-helper.mjs" && r.URL.Path != "/open-design-helper.mjs" && r.URL.Path != "/xcode-helper.mjs" && r.URL.Path != "/activity-helper.mjs" && r.URL.Path != "/usage-helper.mjs" && r.URL.Path != "/account-usage.mjs" && r.URL.Path != "/codex-catalog.mjs" && r.URL.Path != "/model-helper.mjs" && r.URL.Path != "/client-config.mjs" && r.URL.Path != "/claude-helper.mjs" && r.URL.Path != "/i18n.mjs" && r.URL.Path != "/style.css" && r.URL.Path != "/icon.svg") {
 				http.NotFound(w, r)
 				return
 			}
@@ -133,6 +133,8 @@ func (a *app) adminHandler() http.Handler {
 		switch r.URL.Path {
 		case "/api/activity/config":
 			a.activityConfig(w, r)
+		case "/api/billing/refresh":
+			a.refreshBilling(w, r)
 		case "/api/activity/clear":
 			a.clearActivity(w)
 		case "/api/language":
@@ -177,12 +179,14 @@ func (a *app) adminHandler() http.Handler {
 func (a *app) state(w http.ResponseWriter) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.ensureBillingRefreshLocked(false)
 	uptime := int64(0)
 	if a.proxyServer != nil {
 		uptime = int64(time.Since(a.started).Seconds())
 	}
 	jsonResponse(w, 200, map[string]any{
 		"imageGeneration": a.config.ImageGeneration,
+		"trayDisplay":     normalizeTrayDisplay(a.config.TrayDisplay),
 		"cursor":          a.cursor, "language": a.config.Language, "catalogRevision": a.catalogRevision,
 		"auth": a.login, "organizations": a.organizations, "accountEmail": a.accountEmail, "keySaved": a.keySaved,
 		"version": version, "desktop": a.desktop != nil, "port": a.config.Port, "orgId": a.config.OrgID,
@@ -191,6 +195,8 @@ func (a *app) state(w http.ResponseWriter) {
 		"zedBaseURL": zedBaseURL("http://127.0.0.1:"+strconv.Itoa(a.config.Port)+"/v1", a.config.LocalKey),
 		"requests":   a.requests, "failures": a.failures, "active": a.active, "uptime": uptime,
 		"usage":          a.usageSnapshot(),
+		"usageHistory":   a.usageHistorySnapshotLocked(),
+		"billing":        a.billingSnapshotLocked(),
 		"captureEnabled": a.captureEnabled, "activityEpoch": a.activityEpoch,
 		"events": a.events, "warning": a.vaultWarning,
 	})

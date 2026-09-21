@@ -72,15 +72,16 @@ type usageSummary struct {
 }
 
 type usageObserver struct {
-	mu            sync.Mutex
-	eventDropped  bool
-	usage         requestUsage
-	label, org    string
-	messages      bool
-	sse           bool
-	buffer, event []byte
-	dropping      bool
-	ended         bool
+	historyAccount string
+	mu             sync.Mutex
+	eventDropped   bool
+	usage          requestUsage
+	label, org     string
+	messages       bool
+	sse            bool
+	buffer, event  []byte
+	dropping       bool
+	ended          bool
 }
 type usageContextKey struct{}
 
@@ -441,6 +442,7 @@ func (a *app) recordUsage(u *usageObserver) {
 		return
 	}
 	a.usageTotal.add(u)
+	a.usageHistory.record(u.historyAccount, u, time.Now())
 	if a.usageSessions == nil {
 		a.usageSessions = make(map[string]*usageSummary)
 	}
@@ -476,5 +478,5 @@ func (a *app) usageSnapshot() map[string]any {
 func (u *usageObserver) snapshot() *usageObserver {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	return &usageObserver{usage: u.usage, label: u.label, org: u.org}
+	return &usageObserver{usage: u.usage, label: u.label, org: u.org, historyAccount: u.historyAccount}
 }

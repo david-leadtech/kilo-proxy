@@ -57,7 +57,7 @@ func imageTestApp(t *testing.T, generate http.HandlerFunc) *app {
 		}
 	}))
 	t.Cleanup(server.Close)
-	a := testApp(t)
+	a := captureTestApp(t)
 	setUpstream(a, server.URL)
 	a.apiKey = "image-upstream-secret"
 	a.config.OrgID = "image-org"

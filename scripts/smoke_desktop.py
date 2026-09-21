@@ -16,7 +16,7 @@ REQUIRED = {
     'window-and-tray-language-es', 'native-clipboard-via-ui', 'proxy-start-via-ui',
     'close-keeps-proxy', 'tray-reopen-preserves-session', 'tray-stop',
     'tray-appearance-persisted-icon', 'tray-appearance-persisted-spend',
-    'tray-appearance-persisted-icon-restored',
+    'tray-appearance-persisted-icon-restored', 'tray-appearance-persisted-balance',
     'shared-model-library-autosave', 'primary-navigation-preserves-shared-models',
     'model-edit-survives-window-close',
 }

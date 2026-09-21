@@ -98,6 +98,7 @@ type imageGenerationActivity struct {
 func (a *app) beginImageGeneration(r *http.Request, args imageGenerationArguments, key, org, localKey string) *imageGenerationActivity {
 	id, epoch, capture := a.beginActivity(r, key, localKey)
 	activity := &imageGenerationActivity{owner: a, id: id, epoch: epoch, started: time.Now(), capture: capture, usage: newUsageObserver(r, org), status: 502}
+	activity.usage.historyAccount = usageAccountID(key, org)
 	if capture != nil {
 		body, _ := json.Marshal(args)
 		capture.request.write(body)
@@ -110,7 +111,7 @@ func (activity *imageGenerationActivity) finish(result *imageGenerationResult, e
 	var detail *requestTrace
 	if activity.capture != nil {
 		if err != nil {
-			activity.capture.traceError = err.Error()
+			activity.capture.setError(err.Error())
 			b, _ := json.Marshal(map[string]string{"error": err.Error()})
 			activity.capture.response.write(b)
 		} else {
@@ -129,9 +130,10 @@ func (activity *imageGenerationActivity) finish(result *imageGenerationResult, e
 	}
 	if activity.capture != nil {
 		a.activeTraces--
+		delete(a.activeCaptures, activity.capture)
 	}
 	a.recordUsage(usage)
-	if activity.epoch != a.activityEpoch {
+	if activity.epoch != a.activityEpoch || !a.captureEnabled {
 		return
 	}
 	if detail != nil && a.captureEnabled {
@@ -245,8 +247,7 @@ func (a *app) generateImage(r *http.Request, args imageGenerationArguments, key,
 	activity := a.beginImageGeneration(r, args, key, org, localKey)
 	defer func() { activity.finish(result, resultErr) }()
 	if activity.capture != nil {
-		activity.capture.upRequestHeaders = request.Header.Clone()
-		activity.capture.upRequestHeaders.Set("Host", request.URL.Host)
+		activity.capture.upstreamRequest(request, false)
 		activity.capture.upRequest.write(bodyFor(traceContent))
 	}
 	// Image generation is nonstreaming and may need the full image timeout
@@ -267,8 +268,7 @@ func (a *app) generateImage(r *http.Request, args imageGenerationArguments, key,
 	defer response.Body.Close()
 	activity.status = response.StatusCode
 	if activity.capture != nil {
-		activity.capture.upstreamStatus = response.StatusCode
-		activity.capture.upResponseHeaders = response.Header.Clone()
+		activity.capture.upstreamResponse(response, false)
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, imageResponseLimit+1))
 	if err != nil || len(raw) > imageResponseLimit {

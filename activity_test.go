@@ -20,7 +20,7 @@ func activityRequest(a *app, body string) *httptest.ResponseRecorder {
 	return w
 }
 func TestActivityShowsBothSidesOfSchemaAdaptation(t *testing.T) {
-	a := testApp(t)
+	a := captureTestApp(t)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)
 		w.Header().Set("Set-Cookie", "private-cookie")
@@ -77,7 +77,7 @@ func TestActivityShowsBothSidesOfSchemaAdaptation(t *testing.T) {
 	}
 }
 func TestActivityBoundsRedactsAndRetainsRecentEntries(t *testing.T) {
-	a := testApp(t)
+	a := captureTestApp(t)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.Copy(io.Discard, r.Body); io.WriteString(w, "ok") }))
 	defer upstream.Close()
 	setUpstream(a, upstream.URL)
@@ -91,8 +91,8 @@ func TestActivityBoundsRedactsAndRetainsRecentEntries(t *testing.T) {
 		t.Fatal(w.Code)
 	}
 	activityRequest(a, `{"model":"test/model"}`)
-	if a.events[0].HasDetails {
-		t.Fatal("pause ignored")
+	if len(a.events) != 0 || len(a.traces) != 0 {
+		t.Fatal("disabled capture retained request history")
 	}
 	if w := adminRequest(a, "activity/clear", `{}`); w.Code != 200 || len(a.events) != 0 || len(a.traces) != 0 {
 		t.Fatal("history not cleared")
@@ -108,7 +108,7 @@ func TestActivityBoundsRedactsAndRetainsRecentEntries(t *testing.T) {
 	_ = c.part(nil, &c.response)
 }
 func TestActivityClearDoesNotRestoreInFlightBodies(t *testing.T) {
-	a := testApp(t)
+	a := captureTestApp(t)
 	started, release := make(chan struct{}), make(chan struct{})
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { close(started); <-release; io.WriteString(w, "complete") }))
 	defer upstream.Close()
@@ -125,7 +125,7 @@ func TestActivityClearDoesNotRestoreInFlightBodies(t *testing.T) {
 }
 
 func TestActivityCapturesSSEWithoutChangingResponse(t *testing.T) {
-	a := testApp(t)
+	a := captureTestApp(t)
 	payload := "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"Hello\"}\n\ndata: [DONE]\n\n"
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)

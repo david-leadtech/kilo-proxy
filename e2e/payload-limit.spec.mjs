@@ -3,6 +3,8 @@ import {writeFile} from 'node:fs/promises';
 
 test('oversized image history explains upstream 413 and preserves the original rejection in Activity',async({page,gateway,request})=>{
   await startProxy(page,gateway);
+  await page.locator('#capture-activity').check();
+  await expect.poll(async()=>(await state(request,gateway)).captureEnabled).toBe(true);
   await writeFile(gateway.launchControl,JSON.stringify({payloadTooLarge:true}));
   const local=await state(request,gateway);
   const response=await request.post(gateway.baseURL+'/responses',{

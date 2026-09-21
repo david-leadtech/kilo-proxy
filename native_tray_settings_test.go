@@ -28,6 +28,13 @@ func TestNativeTrayAppearancePointerAndPersistence(t *testing.T) {
 					t.Fatalf("tray preference did not persist through the UI: %+v %v", saved, err)
 				}
 				nativeGridCapture(t, h, "appearance-"+fmtSize(size)+"-"+lang)
+				h.click("○ "+u.tr("Account balance", "Saldo de la cuenta"), semantic.Button)
+				nativeTestWait(t, u, func() bool { return !u.busy["PUT/api/tray-settings"] })
+				saved, err = readSettings(u.owner.dir)
+				if err != nil || saved.TrayDisplay != trayDisplayBalance {
+					t.Fatalf("balance preference did not persist: %+v %v", saved, err)
+				}
+				h.frame()
 				h.click("○ "+u.tr("K icon", "Icono K"), semantic.Button)
 				nativeTestWait(t, u, func() bool { return !u.busy["PUT/api/tray-settings"] })
 				saved, err = readSettings(u.owner.dir)

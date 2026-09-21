@@ -64,7 +64,7 @@ Messages pass through Cursor and ngrok before reaching the local proxy. Local ng
 
 This works for Codex and other clients. Local failures after client validation also appear, including schema-bridge errors. Duration covers the complete request rather than time to first token. Local cancellations are recorded as `499`.
 
-Capture starts enabled each application launch. **Capture details** pauses it for new requests. **Clear history** removes existing rows and details and prevents older in-flight requests from restoring them; session counters remain. Closing the application discards the history.
+Capture is **off by default**. This also applies to older settings files without an explicit capture preference. Enable **Capture request details** in Activity to inspect requests. Your choice is saved in `settings.json` as `captureActivity`, and restored on later launches. When disabled, no recent request rows, headers or bodies are retained. Turning it off immediately clears completed captures and releases captured copies from in-flight requests. Enabling it again does not restore earlier requests. **Clear captures** also removes existing rows and details and prevents older in-flight requests from restoring them. Cost, token and cache accounting continues independently of capture. Closing the application discards captured content.
 
 Limits are 30 completed entries, 128 KiB per body, and 32 KiB per header set, with truncation indicators. At most 16 concurrent requests capture bodies; additional requests retain activity rows without details. Traces are held in memory only and never written to disk.
 
@@ -90,7 +90,7 @@ Use `--no-tray` for headless operation, with the printed panel URL available to 
 
 ## Passive spend tracking (0.13.0)
 
-Activity shows **reported inference costs** in USD and token usage for requests observed since this application process started. Values may come from the provider, including BYOK requests, or from the gateway; they can differ from the charges on the organization's Kilo invoice. The totals and session breakdown survive clearing the 30-entry trace history and pausing detail capture. Restarting the application resets them; accounting metadata is not saved to disk. Requests already completed before starting this version cannot be recovered.
+Activity shows **reported inference costs** in USD and token usage for requests observed since this application process started. Values may come from the provider, including BYOK requests, or from the gateway; they can differ from the charges on the organization's Kilo invoice. The current-process totals and conversation breakdown survive clearing the 30-entry trace history and disabling request capture. Restarting the application resets the conversation breakdown. Daily aggregates are retained separately for historical usage without request contents, headers, model names or conversation identifiers; see [account balance and usage history](billing.md). Requests from before local history was enabled cannot be recovered from the proxy.
 
 The reader observes upstream response bytes without changing the request, forwarding session headers, delaying streaming, or making additional inference/billing calls. Chat Completions, Responses, and Messages are handled as JSON or SSE. Cumulative usage snapshots replace prior values within the same request instead of being summed repeatedly. Messages input/cache usage from `message_start` is combined with final output usage. Individual activity rows include the response model and reported cost.
 

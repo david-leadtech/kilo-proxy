@@ -44,6 +44,7 @@ func TestE2EServer(t *testing.T) {
 	a.claudeProfileDir = filepath.Join(root, ".claude-kilo")
 	a.xcodeTestRoot = filepath.Join(root, "xcode")
 	a.config.Language = "en"
+	a.billingAutoRefresh = true
 	launchControl := filepath.Join(root, "launch-control.json")
 	launchRecords := filepath.Join(root, "launch-records.json")
 	prepareWaiting := filepath.Join(root, "prepare-waiting")
@@ -114,6 +115,42 @@ func TestE2EServer(t *testing.T) {
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/api/profile/balance", "/api/trpc/usageAnalytics.getTable":
+			control := readLaunchControl()
+			if control["billingFailure"] == true || r.Header.Get("Authorization") != "Bearer synthetic-kilo-personal-key" {
+				http.Error(w, "Synthetic expired credential", http.StatusUnauthorized)
+				return
+			}
+			org := r.Header.Get("X-KiloCode-OrganizationId")
+			if org != "e2e-team" && org != "other-team" {
+				http.Error(w, "Unexpected billing scope", http.StatusBadRequest)
+				return
+			}
+			if r.URL.Path == "/api/profile/balance" {
+				if control["billingMissingBalance"] == true {
+					jsonResponse(w, 200, map[string]any{"success": true})
+				} else {
+					balance := "248.623145"
+					if org == "other-team" {
+						balance = "100.001"
+					}
+					jsonResponse(w, 200, map[string]string{"balance": balance})
+				}
+				return
+			}
+			var query map[string]any
+			_ = json.Unmarshal([]byte(r.URL.Query().Get("input")), &query)
+			if query["organizationId"] != org || query["viewAs"] != "self" || query["costSource"] != "cost" || query["granularity"] != "day" {
+				http.Error(w, "Unexpected billed usage scope", 400)
+				return
+			}
+			today := time.Now().UTC()
+			rows := billingTestRow(today.Format("2006-01-02"), "1203456") + "," + billingTestRow(today.AddDate(0, 0, -1).Format("2006-01-02"), "8956780")
+			if org == "other-team" {
+				rows = ""
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, billingTestUsage(rows))
 		case "/api/models/stats":
 			jsonResponse(w, 200, []any{
 				map[string]any{"openrouterId": "vendor/one", "chartData": map[string]any{"modeRankings": map[string]int{"code": 9}}, "codingIndex": 95, "speedTokensPerSec": 50},

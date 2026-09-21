@@ -11,6 +11,7 @@ type trayState struct {
 	labels                                    trayLabels
 	status, team, address, activity           string
 	display, amount, spend, coverage, tooltip string
+	balance                                   string
 	running, pending, configured              bool
 }
 
@@ -43,6 +44,7 @@ func traySpendAmount(summary usageSummary) string {
 func (a *app) trayState() trayState {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.ensureBillingRefreshLocked(false)
 	labels := trayText(a.config.Language)
 	s := trayState{
 		labels:  labels,
@@ -61,8 +63,35 @@ func (a *app) trayState() trayState {
 	s.spend = spendLabel + ": " + s.amount
 	s.coverage = fmt.Sprintf(labels.coverage, a.usageTotal.Priced, a.usageTotal.Requests)
 	s.tooltip = labels.tooltip
+	billing := a.billingSnapshotLocked()
+	balanceAmount, balanceStatus := "—", labels.balanceUnavailable
+	balanceLabel := labels.balance
+	if billing.Scope == "organization" {
+		balanceLabel = labels.balanceTeam
+	} else if billing.Scope == "personal" {
+		balanceLabel = labels.balancePersonal
+	}
+	if billing.Status == "ready" && !billing.Stale {
+		balanceAmount = accountBalanceAmount(billing.BalanceUSD)
+		if balanceAmount != "—" {
+			balanceStatus = ""
+		}
+	} else if billing.Stale {
+		balanceStatus = labels.balanceStale
+	} else if billing.Status == "loading" {
+		balanceStatus = labels.balanceLoading
+	} else if billing.Status == "signed_out" {
+		balanceStatus = labels.balanceSignIn
+	}
+	s.balance = balanceLabel + ": " + balanceAmount
+	if balanceStatus != "" {
+		s.balance += " · " + balanceStatus
+	}
 	if s.display == trayDisplaySpend {
 		s.tooltip = "Kilo Proxy · " + s.spend + " · " + s.coverage
+	} else if s.display == trayDisplayBalance {
+		s.amount = balanceAmount
+		s.tooltip = "Kilo Proxy · " + s.balance
 	}
 	if a.config.OrgID != "" {
 		name := a.config.OrgID

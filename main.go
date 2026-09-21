@@ -95,6 +95,7 @@ func main() {
 		os.Exit(1)
 	}
 	stopFakeGateway := func() {}
+	app.billingAutoRefresh = *selfTest == ""
 	if *selfTest != "" {
 		app.launcher = &clientLaunchRuntime{home: isolatedProfile}
 		stopFakeGateway = app.desktopTestGateway()
@@ -126,6 +127,7 @@ func main() {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			_ = admin.Shutdown(ctx)
+			app.drainUsageHistory()
 			if isolatedProfile != "" {
 				_ = os.RemoveAll(isolatedProfile)
 			}

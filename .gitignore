@@ -20,6 +20,7 @@ settings.json
 auth.json
 credentials.json
 terminal-runtime.json
+usage-history.json
 *.pem
 *.key
 *.p12
