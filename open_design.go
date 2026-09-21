@@ -19,6 +19,9 @@ const openDesignProfileEndpoint = "/api/open-design/profile"
 
 var openDesignEngines = []string{"codex-cli", "claude", "opencode"}
 
+// Regenerate saved profiles when their generated configuration contract changes.
+const openDesignProfileRevision = 2
+
 type openDesignPrepareRequest struct {
 	Engine  string        `json:"engine"`
 	Library *modelLibrary `json:"library,omitempty"`
@@ -129,7 +132,7 @@ func (a *app) openDesignFingerprint(engine, binary string, library modelLibrary)
 			return ""
 		}
 	}
-	data, _ := json.Marshal([]any{engine, binary, library, a.config.Port, a.config.LocalKey, a.config.OrgID, a.config.ImageGeneration, source})
+	data, _ := json.Marshal([]any{engine, binary, library, a.config.Port, a.config.LocalKey, a.config.OrgID, a.config.ImageGeneration, source, openDesignProfileRevision})
 	return openDesignHash(data)
 }
 
