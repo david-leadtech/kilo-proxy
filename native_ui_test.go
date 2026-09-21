@@ -209,6 +209,9 @@ func TestNativeLanguageClipboardTeamsAndLoginCancel(t *testing.T) {
 }
 func TestNativeActivityCacheCaptureAndClearKeepAccounting(t *testing.T) {
 	u := nativeTestUI(t)
+	if w := adminRequest(u.owner, "activity/config", `{"enabled":true}`); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
 	if err := u.owner.start(); err != nil {
 		t.Fatal(err)
 	}
@@ -266,6 +269,25 @@ func TestNativeActivityCacheCaptureAndClearKeepAccounting(t *testing.T) {
 	nativeDecode(nativeMap(u.state["usage"])["total"], &after)
 	if after.CostUSD != total.CostUSD || after.Cached != total.Cached {
 		t.Fatal("clear captures reset accounting")
+	}
+}
+
+func TestNativeCaptureChoiceStaysVisibleWhileSaving(t *testing.T) {
+	u := nativeTestUI(t)
+	u.page = "activity"
+	u.state["captureEnabled"] = false
+	u.setChecked("activity.capture", true)
+	u.busy["POST/api/activity/config"] = true
+	nativeTestFrame(t, u)
+	if !u.checked("activity.capture") {
+		t.Fatal("the previous server snapshot replaced a pending capture choice")
+	}
+	// A rejected save releases the busy state without changing server state.
+	// The checkbox must then return to the actual persisted preference.
+	delete(u.busy, "POST/api/activity/config")
+	nativeTestFrame(t, u)
+	if u.checked("activity.capture") {
+		t.Fatal("capture choice did not revert after a failed save")
 	}
 }
 func TestNativeMoneyAndUnknownCache(t *testing.T) {

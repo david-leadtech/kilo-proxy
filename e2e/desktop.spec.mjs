@@ -398,6 +398,10 @@ test('OpenCode and Zed save multiple models, limits, backups and independent sel
 
 test('real JSON and SSE proxy traffic reaches cost, cache and redacted activity inspectors',async({page,gateway,request})=>{
   await startProxy(page,gateway);
+  await expect(page.locator('#capture-activity')).not.toBeChecked();
+  await expect(page.locator('#empty-activity-title')).toHaveText('Request capture is off');
+  await page.locator('#capture-activity').check();
+  await expect.poll(async()=>(await state(request,gateway)).captureEnabled).toBe(true);
   const initial=await state(request,gateway);
   const unauthorized=await request.post(gateway.baseURL+'/responses',{data:{model:first}});
   expect(unauthorized.status()).toBe(401);
@@ -436,6 +440,8 @@ test('real JSON and SSE proxy traffic reaches cost, cache and redacted activity 
   await page.locator('#capture-activity').click();
   await expect.poll(async()=>(await state(request,gateway)).captureEnabled).toBe(false);
   await expect(page.locator('#capture-activity')).not.toBeChecked();
+  await expect(page.locator('#activity-table')).toBeHidden();
+  await expect(page.locator('#activity-inspector')).toBeHidden();
   await page.locator('#clear-activity').click();
   await expect(page.locator('#activity-table')).toBeHidden();
   await expect(page.locator('#spend-total')).toHaveText('$0.024600');

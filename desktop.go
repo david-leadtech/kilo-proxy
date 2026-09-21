@@ -230,7 +230,7 @@ func (d *nativeDesktop) setupTray() {
 	systray.SetTitle("")
 	d.items = map[string]*systray.MenuItem{}
 	systray.AddMenuItem("Kilo Proxy · "+version, "").Disable()
-	for _, key := range []string{"status", "team", "address", "activity", "spend", "coverage"} {
+	for _, key := range []string{"status", "team", "address", "activity", "spend", "coverage", "balance"} {
 		d.items[key] = systray.AddMenuItem(" ", "")
 		d.items[key].Disable()
 	}
@@ -268,8 +268,8 @@ func (d *nativeDesktop) updateTray() {
 	if s == d.last {
 		return
 	}
-	if s.display != d.last.display || s.display == trayDisplaySpend && s.amount != d.last.amount {
-		if s.display == trayDisplaySpend {
+	if s.display != d.last.display || s.display != trayDisplayIcon && s.amount != d.last.amount {
+		if s.display == trayDisplaySpend || s.display == trayDisplayBalance {
 			systray.SetTitle(s.amount)
 		} else {
 			systray.SetTitle("")
@@ -281,6 +281,7 @@ func (d *nativeDesktop) updateTray() {
 	d.items["activity"].SetTitle(s.activity)
 	d.items["spend"].SetTitle(s.spend)
 	d.items["coverage"].SetTitle(s.coverage)
+	d.items["balance"].SetTitle(s.balance)
 	d.items["open"].SetTitle(s.labels.open)
 	start := s.labels.setup
 	if s.configured {

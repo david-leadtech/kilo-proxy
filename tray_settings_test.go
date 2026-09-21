@@ -60,7 +60,7 @@ func TestTraySettingsValidationAndAuthorization(t *testing.T) {
 		{http.MethodGet, "", "wrong-token", 401},
 		{http.MethodPut, `{"display":"spend"}`, "wrong-token", 401},
 		{http.MethodPut, `{}`, a.adminToken, 400},
-		{http.MethodPut, `{"display":"balance"}`, a.adminToken, 400},
+		{http.MethodPut, `{"display":"other"}`, a.adminToken, 400},
 		{http.MethodPut, `{"display":"spend","port":8888}`, a.adminToken, 400},
 		{http.MethodPut, `{"display":"spend"} {}`, a.adminToken, 400},
 	} {

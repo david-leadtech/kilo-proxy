@@ -91,7 +91,7 @@ func TestResponsesDelegationEndToEnd(t *testing.T) {
 					contentType = "text/event-stream"
 					payload = ": keepalive\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"Synthetic response\"}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_delegated\",\"output\":[],\"debug\":\"upstream-secret\"}}\n\ndata: [DONE]\n\n"
 				}
-				a := testApp(t)
+				a := captureTestApp(t)
 				var received map[string]any
 				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					raw, err := io.ReadAll(r.Body)
@@ -191,7 +191,7 @@ func TestResponsesDelegationComposesWithAnthropicSchemaBridge(t *testing.T) {
 				contentType = "text/event-stream"
 				payload = "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":" + payload + "}\n\ndata: [DONE]\n\n"
 			}
-			a := testApp(t)
+			a := captureTestApp(t)
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				raw, _ := io.ReadAll(r.Body)
 				received, err := decodeObject(raw)

@@ -31,6 +31,7 @@ func (systemVault) Delete(account string) error {
 
 // Only the local proxy key is stored here. The upstream API key never enters this file.
 type settings struct {
+	CaptureActivity bool                    `json:"captureActivity"`
 	ImageGeneration imageGenerationSettings `json:"imageGeneration"`
 	TrayDisplay     string                  `json:"trayDisplay,omitempty"`
 	Language        string                  `json:"language,omitempty"`

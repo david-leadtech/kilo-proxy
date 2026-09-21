@@ -106,6 +106,7 @@ func (u *nativeUI) activityPanel() layout.Widget {
 	total := usage.Total
 	costLabel, cost := u.reportedSpend(total)
 	panels := []layout.Widget{
+		u.accountUsagePanel(),
 		u.card(u.topRow(u.metric(costLabel, cost, u.coverage(total)), u.metric(u.tr("Requests", "Peticiones"), fmt.Sprintf("%.0f", nativeNumber(u.state, "requests")), fmt.Sprintf(u.tr("%.0f active · %.0f errors", "%.0f activas · %.0f errores"), nativeNumber(u.state, "active"), nativeNumber(u.state, "failures"))), u.metric(u.tr("Tokens", "Tokens"), nativeReportedCount(total.Input+total.Output, total.WithTokens, total.Requests), fmt.Sprintf(u.tr("%s input · %s output", "%s entrada · %s salida"), nativeCount(total.Input), nativeCount(total.Output)))), u.note(u.responseStats(total)), u.note(u.inferenceCostNote())),
 		u.card(u.heading(u.tr("Cache reuse", "Reutilización de caché")), u.topRow(u.metric(u.tr("Read from cache", "Leído de caché"), nativeReportedCount(total.Cached, total.WithCacheRead, total.Requests), u.cacheCaption(total, true)), u.metric(u.tr("Written to cache", "Escrito en caché"), nativeReportedCount(total.CacheWrite, total.WithCacheWrite, total.Requests), u.cacheCaption(total, false)), u.metric(u.tr("Prompt reused", "Prompt reutilizado"), nativeCacheRatio(total), fmt.Sprintf(u.tr("Ratio available for %d requests", "Ratio disponible en %d peticiones"), total.CacheRatioRequests))), u.note(u.tr("Missing usage is not counted as zero. Totals cover this Kilo Proxy process and use values returned by the gateway.", "Los datos ausentes no se cuentan como cero. Los totales cubren este proceso de Kilo Proxy y usan los valores devueltos por el gateway."))),
 	}
@@ -133,15 +134,30 @@ func (u *nativeUI) activityPanel() layout.Widget {
 		sessions = append(sessions, u.card(u.row(u.label(s.Label), u.label(price+" · "+nativeCount(s.Requests)+u.tr(" requests", " peticiones"))), u.note(u.tr("Organization: ", "Organización: ")+s.OrgID+" · "+s.Source), u.note(fmt.Sprintf(u.tr("Input %s · Output %s · Cached %s · Written %s · Reused %s", "Entrada %s · Salida %s · Caché %s · Escrita %s · Reutilizada %s"), nativeCount(s.Input), nativeCount(s.Output), nativeReportedCount(s.Cached, s.WithCacheRead, s.Requests), nativeReportedCount(s.CacheWrite, s.WithCacheWrite, s.Requests), nativeCacheRatio(s))), u.note(u.coverage(s)), u.note(u.responseStats(s)), u.note(last)))
 	}
 	panels = append(panels, u.card(sessions...))
-	u.setChecked("activity.capture", nativeBool(u.state, "captureEnabled"))
-	activity := []layout.Widget{u.heading(u.tr("Recent requests", "Peticiones recientes")), u.row(u.check("activity.capture", u.tr("Capture request details", "Capturar detalles"), func(enabled bool) {
-		u.call("POST", "/api/activity/config", map[string]bool{"enabled": enabled}, func(json.RawMessage) { u.state["captureEnabled"] = enabled })
-	}), u.button("activity.clear", u.tr("Clear captures", "Borrar capturas"), func() {
+	captureSaving := u.busy["POST/api/activity/config"]
+	if !captureSaving {
+		u.setChecked("activity.capture", nativeBool(u.state, "captureEnabled"))
+	}
+	activity := []layout.Widget{u.heading(u.tr("Recent requests", "Peticiones recientes")), u.row(u.disabled(!captureSaving, u.check("activity.capture", u.tr("Capture request details", "Capturar detalles"), func(enabled bool) {
+		u.call("POST", "/api/activity/config", map[string]bool{"enabled": enabled}, func(json.RawMessage) {
+			u.state["captureEnabled"] = enabled
+			if !enabled {
+				u.traceGeneration++
+				u.trace = nil
+				u.state["events"] = nil
+			}
+			u.refreshState()
+		})
+	})), u.button("activity.clear", u.tr("Clear captures", "Borrar capturas"), func() {
 		u.traceGeneration++
 		u.call("POST", "/api/activity/clear", map[string]any{}, func(json.RawMessage) { u.trace = nil; u.refreshState() })
-	})), u.note(u.tr("The last 30 captures stay in memory. Credentials are redacted; message content may still be sensitive. Clearing captures keeps cost and cache totals.", "Las últimas 30 capturas se guardan en memoria. Las credenciales se ocultan; el contenido de los mensajes puede ser sensible. Borrar capturas mantiene los totales de coste y caché."))}
+	})), u.note(u.tr("Off by default. Enabling capture keeps the last 30 requests in memory, including message content and redacted headers. Your choice is saved. Turning it off erases captures immediately; cost and cache totals continue.", "Desactivado por defecto. Al activarlo se guardan las últimas 30 peticiones en memoria, con mensajes y cabeceras ocultando credenciales. La elección se guarda. Desactivarlo borra las capturas inmediatamente; los totales de coste y caché continúan."))}
 	if len(events) == 0 {
-		activity = append(activity, u.note(u.tr("Waiting for your first request…", "Esperando tu primera petición…")))
+		if nativeBool(u.state, "captureEnabled") {
+			activity = append(activity, u.note(u.tr("Waiting for your first captured request…", "Esperando tu primera petición capturada…")))
+		} else {
+			activity = append(activity, u.note(u.tr("Request capture is off. Enable it only when you need to inspect requests for debugging.", "La captura está desactivada. Actívala cuando necesites inspeccionar peticiones para depurar.")))
+		}
 	}
 	for _, e := range events {
 		e := e

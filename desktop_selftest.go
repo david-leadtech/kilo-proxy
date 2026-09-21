@@ -182,7 +182,7 @@ func (d *nativeDesktop) checkDesktop(checks *[]string) error {
 		}
 		passed("window-and-tray-language-" + language)
 	}
-	for step, mode := range []string{trayDisplayIcon, trayDisplaySpend, trayDisplayIcon} {
+	for step, mode := range []string{trayDisplayIcon, trayDisplaySpend, trayDisplayBalance, trayDisplayIcon} {
 		if err := d.withUI(func() error {
 			d.ui.saveTraySettings(mode)
 			return nil
@@ -206,6 +206,9 @@ func (d *nativeDesktop) checkDesktop(checks *[]string) error {
 				if mode == trayDisplaySpend {
 					return title == "$0.00" && icon
 				}
+				if mode == trayDisplayBalance {
+					return title == "—" && icon
+				}
 				return title == "" && icon
 			}
 			return true
@@ -213,7 +216,7 @@ func (d *nativeDesktop) checkDesktop(checks *[]string) error {
 			return err
 		}
 		checkMode := mode
-		if step == 2 {
+		if step == 3 {
 			checkMode = "icon-restored"
 		}
 		passed("tray-appearance-persisted-" + checkMode)

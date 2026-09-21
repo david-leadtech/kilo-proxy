@@ -26,6 +26,14 @@ Open Design has its own model picker. The generated Claude model list does not a
 
 The selected model must support the engine's API protocol and be accessible to your organization: **Responses** for Codex CLI, **Anthropic Messages** for Claude Code, or **Chat Completions** for OpenCode. Local CLI exposes the engine's project tools, subject to its permissions and Open Design's capabilities. Open Design's direct API-provider/BYOK mode is a separate workflow; this integration configures Local CLI.
 
+## Generate images with Codex CLI
+
+Enable **Image generation** in Kilo Proxy's Codex image settings, then launch Open Design with **Codex CLI**. Its private profile exposes `kilo_images.generate_image`. Open Design 0.22.2 starts Codex with `approvalPolicy: "never"`, so an image call that requires an approval prompt can otherwise fail with `MCP tool call requires approval, but approval policy is never` before reaching Kilo Proxy.
+
+When no explicit image-tool or server approval policy exists, preparation adds `approval_mode = "approve"` for **only** `mcp_servers.kilo_images.tools.generate_image` in the private Open Design profile. This permits image requests from that workspace without a separate Codex prompt; generation can use your team's Kilo credit. Global approvals, sandbox settings, unrelated MCP tools, and ordinary Codex Desktop/CLI profiles keep their existing permissions. Custom image-tool/server approval policies and enabled/disabled tool lists are preserved. An explicit policy requiring a prompt can still prevent noninteractive image calls. See Codex's [per-tool approval configuration](https://learn.chatgpt.com/docs/config-file/config-reference).
+
+After updating Kilo Proxy, quit the managed Open Design instance and launch it again from Kilo Proxy to refresh the profile. Disabling image generation removes the managed images server, including its scoped approval, on the next preparation. A successful MCP connection alone does not confirm generation: ask for an image and inspect the tool result and Kilo Proxy's Activity for permission, model-access, or credit errors.
+
 ## Generate images with OpenCode
 
 OpenCode can use the same Kilo image-generation MCP as Codex. Enable **Image generation** and save an image-output model in Kilo Proxy's Codex image settings, then quit the managed Open Design instance and launch it again with **OpenCode**. These image settings are shared by Kilo Proxy; the coding model remains independent.

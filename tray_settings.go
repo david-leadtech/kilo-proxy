@@ -3,13 +3,14 @@ package main
 import "net/http"
 
 const (
-	trayDisplayIcon  = "icon"
-	trayDisplaySpend = "spend"
+	trayDisplayIcon    = "icon"
+	trayDisplaySpend   = "spend"
+	trayDisplayBalance = "balance"
 )
 
 func normalizeTrayDisplay(display string) string {
-	if display == trayDisplaySpend {
-		return trayDisplaySpend
+	if display == trayDisplaySpend || display == trayDisplayBalance {
+		return display
 	}
 	return trayDisplayIcon
 }
@@ -34,8 +35,8 @@ func (a *app) traySettings(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &input) {
 		return
 	}
-	if input.Display != trayDisplayIcon && input.Display != trayDisplaySpend {
-		jsonError(w, http.StatusBadRequest, "Selecciona icon o spend para la bandeja.")
+	if input.Display != trayDisplayIcon && input.Display != trayDisplaySpend && input.Display != trayDisplayBalance {
+		jsonError(w, http.StatusBadRequest, "Selecciona icon, spend o balance para la bandeja.")
 		return
 	}
 	a.mu.Lock()

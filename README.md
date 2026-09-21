@@ -75,9 +75,11 @@ The application and tray support **English / Español**. The first launch reads 
 
 In **Activity → Recent requests**, click a completed request to open its inspector. View the original client request, the request forwarded to Kilo, Kilo’s response, and the response returned to the client. Each stage includes headers and body, including tool calls and SSE data.
 
-The last 30 requests are kept in memory only. Capture starts enabled and can be paused or cleared. Authentication headers and known keys are redacted in debug copies; arbitrary secrets inside prompts are not automatically detected. See [capture limits and security details](docs/security-and-debugging.md).
+Request capture is **off by default**, including for existing installations upgrading without an explicit preference. Enable **Capture request details** in Activity when debugging; the choice is saved between launches. When enabled, the last 30 requests are kept in memory only. Turning capture off immediately erases retained requests and cancels in-flight captures; cost and token accounting continues independently. Authentication headers and known keys are redacted in debug copies; arbitrary secrets inside prompts are not automatically detected. See [capture limits and security details](docs/security-and-debugging.md).
 
 ## Track observed spend
+
+**Activity → Kilo account** shows the remaining shared team balance and your billed usage today, yesterday and over the last 30 days, fetched from Kilo. **Settings → Appearance → Account balance** can display the balance beside the K icon. A separate private `usage-history.json` automatically saves local daily aggregates across restarts, even with request capture disabled. Remote account charges and locally observed inference costs are labeled separately. See [balance, usage history, privacy and API limits](docs/billing.md).
 
 **Activity** shows reported inference costs in USD, input/output/cache tokens, and a conversation breakdown. Reported provider costs, including BYOK requests, can differ from the organization's Kilo charge; each request identifies the selected cost source. It listens to responses passing through the proxy, including streaming, and keeps totals independently of the last 30 debug captures. Codex task IDs and Claude Code session IDs are used when present; requests without an identifier are marked unassigned.
 

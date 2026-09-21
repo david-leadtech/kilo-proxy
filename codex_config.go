@@ -144,7 +144,7 @@ func saveCodexProfileWithToken(dir string, catalog []byte, port int, token strin
 	return saveCodexProfileOptions(dir, catalog, port, token, nil, nil)
 }
 
-func saveCodexProfileOptions(dir string, catalog []byte, port int, token string, images *imageGenerationSettings, extra []profileFile) (bool, bool, error) {
+func saveCodexProfileOptions(dir string, catalog []byte, port int, token string, images *imageGenerationSettings, extra []profileFile, transforms ...func([]byte) ([]byte, error)) (bool, bool, error) {
 	info, err := os.Lstat(dir)
 	if errors.Is(err, os.ErrNotExist) {
 		if err = os.MkdirAll(dir, 0700); err != nil {
@@ -172,6 +172,12 @@ func saveCodexProfileOptions(dir string, catalog []byte, port int, token string,
 	}
 	if token != "" {
 		config, err = codexXcodeAuth(config, token)
+		if err != nil {
+			return false, false, err
+		}
+	}
+	for _, transform := range transforms {
+		config, err = transform(config)
 		if err != nil {
 			return false, false, err
 		}

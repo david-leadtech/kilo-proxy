@@ -17,7 +17,7 @@ func (u *nativeUI) loadTraySettings() {
 }
 
 func (u *nativeUI) saveTraySettings(display string) {
-	if display != trayDisplayIcon && display != trayDisplaySpend {
+	if display != trayDisplayIcon && display != trayDisplaySpend && display != trayDisplayBalance {
 		return
 	}
 	u.call("PUT", "/api/tray-settings", traySettingsResponse{Display: display}, func(raw json.RawMessage) {
@@ -38,6 +38,7 @@ func (u *nativeUI) appearancePanel() layout.Widget {
 	for _, choice := range []struct{ value, en, es string }{
 		{trayDisplayIcon, "K icon", "Icono K"},
 		{trayDisplaySpend, "Session cost", "Coste de esta sesión"},
+		{trayDisplayBalance, "Account balance", "Saldo de la cuenta"},
 	} {
 		label := "○ " + u.tr(choice.en, choice.es)
 		if selected == choice.value {
@@ -45,7 +46,7 @@ func (u *nativeUI) appearancePanel() layout.Widget {
 		}
 		choices = append(choices, u.disabled(!saving, u.button("appearance.tray."+choice.value, label, func() { u.saveTraySettings(choice.value) })))
 	}
-	platformNote := u.tr("Session cost shows the K icon with the amount beside it in the menu bar.", "El modo Coste de esta sesión muestra el icono K con el importe a su lado en la barra de menús.")
+	platformNote := u.tr("Cost and balance modes show the K icon with the amount beside it in the menu bar.", "Los modos de coste y saldo muestran el icono K con el importe a su lado en la barra de menús.")
 	switch runtime.GOOS {
 	case "windows":
 		platformNote = u.tr("Windows keeps the K icon. The amount appears on hover and in the tray menu.", "Windows mantiene el icono K. El importe aparece al pasar el cursor y en el menú de la bandeja.")
@@ -57,6 +58,7 @@ func (u *nativeUI) appearancePanel() layout.Widget {
 		u.note(u.tr("Tray display", "Mostrar en la bandeja")),
 		u.row(choices...),
 		u.note(platformNote),
+		u.note(u.tr("Account balance comes from Kilo for the selected account or organization. A dash means it is unavailable or out of date; open Activity to refresh it. It does not include a separate BYOK provider's balance.", "El saldo se consulta en Kilo para la cuenta u organización seleccionada. Un guion indica que no está disponible o está desactualizado; puedes actualizarlo en Actividad. No incluye el saldo del proveedor BYOK externo.")),
 		u.note(u.tr("Session cost covers this Kilo Proxy process, including all connected clients and images. It resets when you quit and reopen the app; stopping the proxy or clearing captures keeps it.", "El coste de esta sesión incluye todos los clientes conectados y las imágenes de este proceso de Kilo Proxy. Se reinicia al salir y volver a abrir la app; detener el proxy o borrar capturas lo mantiene.")),
 		u.note(u.tr("An asterisk marks a reported subtotal when some requests have no cost. A dash means no cost has been reported. Reported inference costs can differ from your organization's Kilo charge.", "Un asterisco indica un subtotal informado cuando faltan costes de algunas peticiones. Un guion indica que no se ha informado ningún coste. El coste de inferencia informado puede diferir del cargo de tu organización en Kilo.")),
 	}

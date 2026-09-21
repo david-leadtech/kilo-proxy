@@ -108,7 +108,7 @@ func TestZedManagedRoutesAuthenticateAndForward(t *testing.T) {
 		}
 	}))
 	defer upstream.Close()
-	a := testApp(t)
+	a := captureTestApp(t)
 	setUpstream(a, upstream.URL)
 	h := a.inferenceHandler("upstream-secret", "company-org", key, host)
 	base := zedProxyPrefix(key) + "/v1"

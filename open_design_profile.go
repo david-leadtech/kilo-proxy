@@ -29,7 +29,9 @@ func prepareOpenDesignEngineProfile(dir, engine string, library modelLibrary, ca
 		}
 		// The packaged daemon forwards inherited *_API_KEY variables. Keep the
 		// normal env_key contract for both Responses and the managed images MCP.
-		_, _, err = saveCodexProfileOptions(dir, models, port, "", &images, nil)
+		_, _, err = saveCodexProfileOptions(dir, models, port, "", &images, nil, func(data []byte) ([]byte, error) {
+			return mergeOpenDesignCodexImageApproval(data, images)
+		})
 		return err
 	}
 	if engine == "opencode" {

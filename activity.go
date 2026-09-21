@@ -30,15 +30,19 @@ type requestTrace struct {
 	UpstreamStatus   int       `json:"upstreamStatus"`
 }
 type traceBuffer struct {
-	mu    sync.Mutex
-	data  []byte
-	total int64
-	limit int
+	mu       sync.Mutex
+	disabled bool
+	data     []byte
+	total    int64
+	limit    int
 }
 
 func (b *traceBuffer) write(data []byte) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.disabled {
+		return
+	}
 	b.total += int64(len(data))
 	if remaining := b.limit - len(b.data); remaining > 0 {
 		if len(data) > remaining {
@@ -46,6 +50,15 @@ func (b *traceBuffer) write(data []byte) {
 		}
 		b.data = append(b.data, data...)
 	}
+}
+
+func (b *traceBuffer) discard() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	clear(b.data)
+	b.data = nil
+	b.total = 0
+	b.disabled = true
 }
 
 type traceReader struct {
@@ -60,12 +73,71 @@ func (r *traceReader) Read(p []byte) (int, error) {
 }
 
 type traceCapture struct {
+	mu                                                  sync.Mutex
+	disabled                                            bool
 	traceError                                          string
 	request, upRequest, upResponse, response            traceBuffer
 	requestHeaders, upRequestHeaders, upResponseHeaders http.Header
 	upstreamStatus                                      int
 	secrets                                             []string
 }
+
+// Disabling capture releases both completed traces and the copies held by
+// requests still in flight. Readers already installed in the pipeline become
+// no-ops, including when capture is enabled again before the request finishes.
+func (c *traceCapture) discard() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.disabled = true
+	c.requestHeaders, c.upRequestHeaders, c.upResponseHeaders = nil, nil, nil
+	c.traceError = ""
+	for _, b := range []*traceBuffer{&c.request, &c.upRequest, &c.upResponse, &c.response} {
+		b.discard()
+	}
+}
+
+func (c *traceCapture) setError(message string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.disabled {
+		return
+	}
+	c.traceError = c.redact(message)
+	if len(c.traceError) > 2048 {
+		c.traceError = c.traceError[:2048]
+	}
+}
+
+func (c *traceCapture) upstreamRequest(r *http.Request, captureBody bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.disabled {
+		return
+	}
+	c.upRequestHeaders = r.Header.Clone()
+	host := r.Host
+	if host == "" {
+		host = r.URL.Host
+	}
+	c.upRequestHeaders.Set("Host", host)
+	if captureBody && r.Body != nil {
+		r.Body = &traceReader{r.Body, &c.upRequest}
+	}
+}
+
+func (c *traceCapture) upstreamResponse(response *http.Response, captureBody bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.disabled {
+		return
+	}
+	c.upstreamStatus = response.StatusCode
+	c.upResponseHeaders = response.Header.Clone()
+	if captureBody && response.Body != nil {
+		response.Body = &traceReader{response.Body, &c.upResponse}
+	}
+}
+
 type traceContextKey struct{}
 
 func newTraceCapture(r *http.Request, secrets []string) *traceCapture {
@@ -132,6 +204,11 @@ func (c *traceCapture) part(headers http.Header, b *traceBuffer) tracePart {
 	return tracePart{HeadersTruncated: headersTruncated, Headers: safe, Body: value, Bytes: total, Truncated: truncated}
 }
 func (c *traceCapture) finish(id string, headers http.Header) *requestTrace {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.disabled {
+		return nil
+	}
 	return &requestTrace{Error: c.redact(c.traceError), ID: id, Request: c.part(c.requestHeaders, &c.request), UpstreamRequest: c.part(c.upRequestHeaders, &c.upRequest), UpstreamResponse: c.part(c.upResponseHeaders, &c.upResponse), Response: c.part(headers, &c.response), UpstreamStatus: c.upstreamStatus}
 }
 
@@ -140,23 +217,11 @@ type traceTransport struct{ base http.RoundTripper }
 func (t traceTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	c, _ := r.Context().Value(traceContextKey{}).(*traceCapture)
 	if c != nil {
-		c.upRequestHeaders = r.Header.Clone()
-		host := r.Host
-		if host == "" {
-			host = r.URL.Host
-		}
-		c.upRequestHeaders.Set("Host", host)
-		if r.Body != nil {
-			r.Body = &traceReader{r.Body, &c.upRequest}
-		}
+		c.upstreamRequest(r, true)
 	}
 	response, err := t.base.RoundTrip(r)
 	if c != nil && response != nil {
-		c.upstreamStatus = response.StatusCode
-		c.upResponseHeaders = response.Header.Clone()
-		if response.Body != nil {
-			response.Body = &traceReader{response.Body, &c.upResponse}
-		}
+		c.upstreamResponse(response, true)
 	}
 	if u, _ := r.Context().Value(usageContextKey{}).(*usageObserver); u != nil && response != nil && response.Body != nil {
 		u.configure(response)
@@ -171,27 +236,52 @@ func (a *app) activityDetail(w http.ResponseWriter, r *http.Request) {
 	detail := a.traces[id]
 	a.mu.Unlock()
 	if detail == nil {
-		jsonError(w, 404, "Details unavailable: capture was paused or the entry expired.")
+		jsonError(w, 404, "Details unavailable: capture is off or the entry expired.")
 		return
 	}
 	jsonResponse(w, 200, detail)
 }
 func (a *app) activityConfig(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Enabled bool `json:"enabled"`
+		Enabled *bool `json:"enabled"`
 	}
 	if !decodeBody(w, r, &input) {
 		return
 	}
+	if input.Enabled == nil {
+		jsonError(w, http.StatusBadRequest, "Choose whether to enable request capture.")
+		return
+	}
 	a.mu.Lock()
-	a.captureEnabled = input.Enabled
-	a.mu.Unlock()
+	defer a.mu.Unlock()
+	cfg := a.config
+	cfg.CaptureActivity = *input.Enabled
+	if err := writeSettings(a.dir, cfg); err != nil {
+		jsonError(w, http.StatusInternalServerError, "Could not save request capture. Check the configuration folder permissions.")
+		return
+	}
+	a.config = cfg
+	if a.captureEnabled != *input.Enabled {
+		a.activityEpoch++
+	}
+	a.captureEnabled = *input.Enabled
+	if !a.captureEnabled {
+		a.discardActivityLocked()
+	}
 	jsonResponse(w, 200, map[string]bool{"ok": true})
 }
-func (a *app) clearActivity(w http.ResponseWriter) {
-	a.mu.Lock()
+
+func (a *app) discardActivityLocked() {
 	a.events = nil
 	a.traces = make(map[string]*requestTrace)
+	for capture := range a.activeCaptures {
+		capture.discard()
+	}
+}
+
+func (a *app) clearActivity(w http.ResponseWriter) {
+	a.mu.Lock()
+	a.discardActivityLocked()
 	a.activityEpoch++
 	a.mu.Unlock()
 	jsonResponse(w, 200, map[string]bool{"ok": true})
@@ -206,5 +296,10 @@ func (a *app) beginActivity(r *http.Request, key, localKey string) (string, uint
 		return id, a.activityEpoch, nil
 	}
 	a.activeTraces++
-	return id, a.activityEpoch, newTraceCapture(r, []string{key, localKey, a.adminToken})
+	capture := newTraceCapture(r, []string{key, localKey, a.adminToken})
+	if a.activeCaptures == nil {
+		a.activeCaptures = make(map[*traceCapture]struct{})
+	}
+	a.activeCaptures[capture] = struct{}{}
+	return id, a.activityEpoch, capture
 }

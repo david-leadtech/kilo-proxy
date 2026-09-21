@@ -44,7 +44,7 @@ func TestPayloadErrorProxyPreservesLargeRequestAndOriginalTrace(t *testing.T) {
 				_, _ = io.WriteString(w, upstreamBody)
 			}))
 			defer upstream.Close()
-			a := testApp(t)
+			a := captureTestApp(t)
 			setUpstream(a, upstream.URL)
 			r := httptest.NewRequest("POST", "http://127.0.0.1:8877/v1/responses", bytes.NewReader(payload))
 			r.Header.Set("Authorization", "Bearer synthetic-local")
@@ -193,7 +193,7 @@ func TestPayloadErrorProxyUnrelatedResponsesPassThrough(t *testing.T) {
 				data = `{"output":"FUNCTION_PAYLOAD_TOO_LARGE is a code example"}`
 			}
 			original := &payloadCountBody{reader: strings.NewReader(data)}
-			a := testApp(t)
+			a := captureTestApp(t)
 			a.transport = usageMemoryTransport(func(r *http.Request) (*http.Response, error) {
 				_, _ = io.Copy(io.Discard, r.Body)
 				return &http.Response{StatusCode: status, Request: r, Body: original, ContentLength: int64(len(data)), Header: http.Header{"Content-Type": {"application/json"}, "Content-Length": {strconv.Itoa(len(data))}, "Digest": {"original"}}}, nil

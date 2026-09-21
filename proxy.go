@@ -30,6 +30,9 @@ type event struct {
 }
 
 type app struct {
+	usageHistory           *usageHistoryStore
+	billing                billingCache
+	billingAutoRefresh     bool
 	modelLibrary           *modelLibraryStore
 	imageGenerationURL     string
 	imageGenerationMu      sync.Mutex
@@ -50,6 +53,7 @@ type app struct {
 	usageSessions          map[string]*usageSummary
 	captureEnabled         bool
 	activeTraces           int
+	activeCaptures         map[*traceCapture]struct{}
 	nextEventID            uint64
 	activityEpoch          uint64
 	traces                 map[string]*requestTrace
@@ -101,8 +105,9 @@ func newApp(dir string, vault credentialVault) (*app, error) {
 	tr.ResponseHeaderTimeout = 120 * time.Second
 	a := &app{dir: dir, config: cfg, vault: vault, adminToken: randomKey(""), upstream: u, transport: tr, quit: make(chan struct{})}
 	a.modelLibrary = newModelLibraryStore(dir)
+	a.usageHistory = newUsageHistoryStore(dir)
 	a.zedCredentialStore = storeZedCredential
-	a.captureEnabled = true
+	a.captureEnabled = cfg.CaptureActivity
 	a.traces = make(map[string]*requestTrace)
 	a.accountURL = kiloAccountURL
 	a.authPollInterval = 3 * time.Second
@@ -171,10 +176,7 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			if capture, _ := r.Context().Value(traceContextKey{}).(*traceCapture); capture != nil {
-				capture.traceError = capture.redact(err.Error())
-				if len(capture.traceError) > 2048 {
-					capture.traceError = capture.traceError[:2048]
-				}
+				capture.setError(err.Error())
 			}
 			jsonError(w, http.StatusBadGateway, "No se pudo conectar con Kilo. Comprueba la red e inténtalo de nuevo.")
 		},
@@ -214,6 +216,7 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 		var usage *usageObserver
 		if r.Method == http.MethodPost {
 			usage = newUsageObserver(r, orgID)
+			usage.historyAccount = usageAccountID(key, orgID)
 			r = r.WithContext(context.WithValue(r.Context(), usageContextKey{}, usage))
 		}
 		id, epoch, capture := a.beginActivity(r, key, localKey)
@@ -234,6 +237,7 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 			defer a.mu.Unlock()
 			if capture != nil {
 				a.activeTraces--
+				delete(a.activeCaptures, capture)
 			}
 			if usage != nil {
 				usage = usage.snapshot()
@@ -254,7 +258,7 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 			if usage != nil {
 				usageDetail = &usage.usage
 			}
-			if epoch != a.activityEpoch {
+			if epoch != a.activityEpoch || !a.captureEnabled {
 				return
 			}
 			if detail != nil && a.captureEnabled {
@@ -378,6 +382,7 @@ func (a *app) stop() {
 	if srv != nil {
 		_ = srv.Close()
 	}
+	a.drainUsageHistory()
 }
 
 // Anthropic SDKs may append this fixed beta flag; no credential or arbitrary query forwarding.

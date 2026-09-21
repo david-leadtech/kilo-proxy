@@ -1,3 +1,4 @@
+import {renderAccountUsage} from './account-usage.mjs';
 import {createOpenDesignHelper} from './open-design-helper.mjs';
 import {createEditorHelper} from './editor-helper.mjs';
 import {configureDesktop, writeClipboard, openExternal, bindDesktopLinks} from './desktop-helper.mjs';
@@ -127,9 +128,9 @@ function toast(message) {
 function lock(title, message) {
   lockContent = [title, message]; $('locked-title').textContent = t(title); $('locked-message').textContent = t(message); $('locked').hidden = false;
 }
-async function api(path, body) {
+async function api(path, body, method = body === undefined ? 'GET' : 'POST') {
   const response = await fetch('/api/' + path, {
-    method: body === undefined ? 'GET' : 'POST',
+    method,
     headers: {Authorization: 'Bearer ' + token, ...(body === undefined ? {} : {'Content-Type': 'application/json'})},
     ...(body === undefined ? {} : {body: JSON.stringify(body)})
   });
@@ -309,8 +310,14 @@ function render(s) {
   const dot = document.createElement('span'); dot.className = 'device-dot'; $('endpoint-status').append(dot, s.running ? t('Escuchando · listo para recibir peticiones de tu editor.') : t('Arranca el proxy para aceptar peticiones.'));
   $('connection-foot').textContent = s.running ? t('Detener interrumpe las peticiones que estén en curso.') : t('La clave de Kilo nunca se copia a tu editor.');
   $('request-count').textContent = s.requests; $('active-count').textContent = s.active; $('error-count').textContent = s.failures;
-  $('capture-activity').checked=s.captureEnabled;
+  // action() renders the last server snapshot before saving. Keep the user's
+  // pending choice visible until that save finishes, and prevent a second edit.
+  if (!busy) $('capture-activity').checked=s.captureEnabled;
+  $('capture-activity').disabled=busy;
+  $('empty-activity-title').textContent=s.captureEnabled?t('Esperando tu primera petición capturada…'):t('Captura desactivada');
+  $('empty-activity-help').textContent=s.captureEnabled?t('Verás el endpoint, las cabeceras y los cuerpos capturados para depurar.'):t('Activa la captura cuando necesites inspeccionar peticiones para depurar.');
   renderUsage(s.usage);
+  renderAccountUsage($('account-usage'), s, language, busy);
   if(activeTrace && !(s.events || []).some(event=>event.id===activeTrace.id)){activeTrace=null;traceRequest++;}
   renderTrace();
   $('empty-activity').hidden = !!s.events?.length; $('activity-table').hidden = !s.events?.length;
@@ -397,7 +404,7 @@ function renderTrace(){
  if($('trace-format').checked)body=formatTraceJSON(body);
  $('trace-body').textContent=body || t('Sin cuerpo capturado');
 }
-$('capture-activity').addEventListener('change',event=>{const enabled=event.target.checked;action(()=>api('activity/config',{enabled}));});
+$('capture-activity').addEventListener('change',event=>{const enabled=event.target.checked;action(async()=>{await api('activity/config',{enabled});if(!enabled){activeTrace=null;traceRequest++;renderTrace();}});});
 $('clear-activity').addEventListener('click',()=>action(async()=>{await api('activity/clear',{});activeTrace=null;traceRequest++;renderTrace();}));
 $('close-trace').addEventListener('click',()=>{activeTrace=null;traceRequest++;renderTrace();});
 $('trace-format').addEventListener('change',renderTrace);
@@ -901,3 +908,13 @@ $('cursor-copy-url').addEventListener('click',()=>copy(state?.cursor?.baseURL||'
 $('cursor-copy-key').addEventListener('click',()=>copy(state?.cursor?.key||''));
 
 $('cursor-check').addEventListener('click',async()=>{busy=true;renderCursorConnection();try{await api('cursor',{action:'check'});notify(()=>language==='en'?'Public HTTPS and authentication verified. Now test a chat in Cursor.':'HTTPS público y autenticación verificados. Prueba ahora un chat en Cursor.')}catch(error){notify(error.message,true)}finally{busy=false;renderCursorConnection()}});
+
+$('account-usage').addEventListener('click', event => {
+  if (event.target.closest('#refresh-billing')) action(() => api('billing/refresh', {}));
+});
+$('account-usage').addEventListener('change', event => {
+  if (event.target.id === 'account-tray-display') {
+    const display = event.target.value;
+    action(async () => { await api('tray-settings', {display}, 'PUT'); });
+  }
+});

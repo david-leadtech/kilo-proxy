@@ -66,13 +66,24 @@ func mergeCodexImages(data []byte, images imageGenerationSettings, port int) ([]
 		return nil, errors.New("MCP server kilo_images is already used by another configuration. Rename that server before enabling Kilo images; no files were changed")
 	}
 	if images.Enabled {
-		servers[codexImagesServer] = map[string]any{
+		managed, _ := raw.(map[string]any)
+		if managed == nil {
+			managed = map[string]any{}
+		}
+		// Keep explicit tool restrictions and approval choices while refreshing
+		// the connection fields owned by Kilo.
+		for name, value := range map[string]any{
 			"url":                  "http://127.0.0.1:" + strconv.Itoa(port) + "/mcp/images",
 			"bearer_token_env_var": "KILO_LOCAL_API_KEY",
 			"startup_timeout_sec":  int64(15),
 			"tool_timeout_sec":     int64(360),
-			"enabled":              true,
+		} {
+			managed[name] = value
 		}
+		if _, exists := managed["enabled"]; !exists {
+			managed["enabled"] = true
+		}
+		servers[codexImagesServer] = managed
 	} else {
 		delete(servers, codexImagesServer)
 	}

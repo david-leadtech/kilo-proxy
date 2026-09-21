@@ -108,7 +108,7 @@ func TestUsageIndependentOfTraceLimitsPauseAndClear(t *testing.T) {
 			t.Fatal("observation altered upstream bytes")
 		}
 	}
-	if a.usageTotal.Requests != 35 || a.usageTotal.Priced != 35 || a.usageTotal.CostUSD != "0.350000000" || len(a.events) != 30 || len(a.traces) != 0 || len(a.usageSessions) != 1 {
+	if a.usageTotal.Requests != 35 || a.usageTotal.Priced != 35 || a.usageTotal.CostUSD != "0.350000000" || len(a.events) != 0 || len(a.traces) != 0 || len(a.usageSessions) != 1 {
 		t.Fatalf("usage did not survive trace limits: %+v", a.usageTotal)
 	}
 	a.clearActivity(httptest.NewRecorder())
@@ -440,7 +440,7 @@ func TestUsageCancellationBeforeAndAfterTerminalEvent(t *testing.T) {
 		{name: "after terminal with limited earlier event", body: "data: " + strings.Repeat("x", usageBufferLimit+10) + "\n\n" + completed, complete: true, limited: true, status: 200, priced: 1, incomplete: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			a := testApp(t)
+			a := captureTestApp(t)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			// The complete production handler and usage reader run against memory,
