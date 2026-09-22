@@ -45,6 +45,16 @@ Upstream payload limits can be lower than the local upload limit. When an upstre
 
 The catalog is public and can be retrieved without login. When credentials and an organization are saved, both are included in the backend request. Only normalized metadata reaches the browser. Changing the connection invalidates prior catalog requests. Catalog access and prices do not prove balance, negotiated discounts, or organization policy.
 
+## Large image handling
+
+**Settings → Large images** saves `imageTransport.mode` (`off`, `compress`, or `upload`) and `imageTransport.profile` (`high`, `balanced`, or `small`) in `settings.json`. Existing installations and fresh profiles default to **Off**, with **High quality** as the initial compression profile. Choices take effect for new Responses requests without restarting; smaller requests are unchanged.
+
+**Compress locally** optimizes outbound copies without changing local originals or creating stored remote attachments. It tries lossless optimization first, then the chosen fixed quality profile if needed. If that still cannot make the body fit, it reports a failure rather than dropping to a lower profile or uploading images automatically.
+
+**Upload to Kilo · Experimental** moves original inline images to Kilo's Cloud Agent attachment storage and sends temporary links to the model provider. This uses the existing account credential and needs no tunnel or personal bucket. This use of Cloud Agent storage is not a documented Gateway integration.
+
+Uploads preserve the image bytes and do not enable request capture. For upload-backed requests, captured response bodies are omitted to avoid retaining temporary links echoed across streaming chunks; metadata and redacted upstream requests remain available. Deletion is requested after completion, failure, or cancellation, with bounded retries and an on-screen warning when cleanup cannot be confirmed. Normal quit waits for bounded cleanup. Link expiry is not deletion. Bookkeeping is in memory only, so a crash or machine shutdown can leave remote copies that the next launch cannot clean up automatically. See [profiles, image limits, and deletion behavior](image-uploads.md).
+
 ## Optional Cursor HTTPS ingress
 
 **Connect HTTPS tunnel** starts a separate loopback listener and ngrok process. Only this listener is exposed through ngrok; the ordinary proxy and admin panel keep their existing network restrictions. Cursor uses an independent, in-memory `kl_cursor_…` bearer token and can request only selected models through Chat Completions. The public model list is generated locally. Requests are limited to 16 MiB and eight concurrent generations; browser-origin requests, arbitrary query strings, and other routes are rejected.

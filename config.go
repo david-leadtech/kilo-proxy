@@ -31,6 +31,7 @@ func (systemVault) Delete(account string) error {
 
 // Only the local proxy key is stored here. The upstream API key never enters this file.
 type settings struct {
+	ImageTransport  imageTransportSettings  `json:"imageTransport"`
 	CaptureActivity bool                    `json:"captureActivity"`
 	ImageGeneration imageGenerationSettings `json:"imageGeneration"`
 	TrayDisplay     string                  `json:"trayDisplay,omitempty"`
@@ -43,7 +44,7 @@ type settings struct {
 }
 
 func readSettings(dir string) (settings, error) {
-	s := settings{Port: 8877, LocalKey: randomKey("kl_local_"), VaultID: randomKey("profile_"), TrayDisplay: trayDisplayIcon}
+	s := settings{Port: 8877, LocalKey: randomKey("kl_local_"), VaultID: randomKey("profile_"), TrayDisplay: trayDisplayIcon, ImageTransport: normalizeImageTransportSettings(imageTransportSettings{})}
 	b, err := os.ReadFile(filepath.Join(dir, "settings.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
@@ -55,6 +56,10 @@ func readSettings(dir string) (settings, error) {
 		return s, err
 	}
 	s.TrayDisplay = normalizeTrayDisplay(s.TrayDisplay)
+	s.ImageTransport = normalizeImageTransportSettings(s.ImageTransport)
+	if err := validateImageTransportSettings(s.ImageTransport); err != nil {
+		return s, errors.New("invalid image transport settings; restore a valid configuration")
+	}
 	if s.Port < 1024 || s.Port > 65535 || len(s.LocalKey) < 32 || len(s.VaultID) < 32 {
 		return s, errors.New("invalid settings.json; restore a valid configuration")
 	}
