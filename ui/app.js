@@ -39,7 +39,7 @@ if (token && /^[a-f0-9]{64}$/.test(token)) {
   sessionStorage.setItem('kilo-local-control', token);
   history.replaceState(null, '', '/');
 } else token = sessionStorage.getItem('kilo-local-control') || '';
-let state, client = 'generic', busy = false, stopped = false, initialized = false, toastTimer;
+let state, client = 'generic', busy = false, stopped = false, initialized = false, toastTimer, imageTransportPending = null;
 let lastAuthStatus, teamSignature = '';
 const clientModels = {};
 const codexClients = Object.fromEntries(['codex','codex-cli'].map(id=>[id,{models:new Map(),initial:'',setup:null,preparing:false,imageGeneration:null,imageGenerationBaseline:null}]));
@@ -261,6 +261,32 @@ function renderSnippet() {
   $('snippet-code').textContent = snippet();
   renderClientLaunch();
 }
+function renderImageTransport(s) {
+  const L=(en,es)=>language==='es'?es:en;
+  const current=imageTransportPending??s.imageTransport??{mode:'off',profile:'high'};
+  $('image-transport-title').textContent=L('Large images','Imágenes grandes');
+  $('image-transport-description').textContent=L("Choose how to handle inline images when a Responses request exceeds 4.4 MB, just below Kilo's limit. Smaller requests and your original files stay unchanged.", 'Elige cómo tratar las imágenes cuando una petición Responses supera 4,4 MB, justo por debajo del límite de Kilo. Las peticiones pequeñas y tus archivos originales no cambian.');
+  $('image-transport-mode-label').textContent=L('Large image handling','Tratamiento de imágenes grandes');
+  for(const [mode,en,es] of [['off','Off','Desactivado'],['compress','Compress locally','Comprimir en local'],['upload','Upload to Kilo · Experimental','Subir a Kilo · Experimental']])$('image-transport-mode').querySelector(`option[value="${mode}"]`).textContent=L(en,es);
+  $('image-transport-mode').value=current.mode||'off';
+  $('image-transport-mode').disabled=busy;
+  $('image-compression-options').hidden=current.mode!=='compress';
+  $('image-compression-profile-label').textContent=L('Compression profile','Perfil de compresión');
+  for(const [profile,en,es] of [['high','High quality','Alta calidad'],['balanced','Balanced','Equilibrado'],['small','Small size','Tamaño pequeño']])$('image-compression-profile').querySelector(`option[value="${profile}"]`).textContent=L(en,es);
+  $('image-compression-profile').value=current.profile||'high';
+  $('image-compression-profile').disabled=busy;
+  $('image-compression-levels').textContent=L('High quality: up to 3072 px / quality 92. Balanced: 2048 px / quality 85. Small size: 1280 px / quality 75. Aspect ratio is preserved.', 'Alta calidad: hasta 3072 px / calidad 92. Equilibrado: 2048 px / calidad 85. Tamaño pequeño: 1280 px / calidad 75. Se conserva la proporción.');
+  $('image-compression-note').textContent=L('Tries lossless optimization first, then your selected profile if needed. Only outbound copies change. If the request still does not fit, it stops with an explanation; it never lowers quality further or uploads images automatically.', 'Primero intenta optimizar sin pérdidas y después aplica el perfil elegido si hace falta. Solo cambian las copias enviadas. Si la petición sigue sin caber, se detiene y lo explica; nunca reduce más la calidad ni sube imágenes automáticamente.');
+  $('image-upload-options').hidden=current.mode!=='upload';
+  $('image-upload-description').textContent=L('Uploads original image bytes to Kilo and sends temporary links. No resizing, tunnel, or storage setup is needed. Up to 5 unique images uploaded per request, 20 MiB each.', 'Sube las imágenes originales a Kilo y envía enlaces temporales. No cambia su tamaño ni requiere configurar un túnel o almacenamiento. Hasta 5 imágenes únicas subidas por petición y 20 MiB por imagen.');
+  $('image-upload-limit').textContent=L("Experimental: uses Kilo's Cloud Agent attachment storage with your account. This is not a documented Gateway integration and may stop working.", 'Experimental: usa el almacenamiento de adjuntos de Cloud Agent de Kilo con tu cuenta. No es una integración documentada del Gateway y puede dejar de funcionar.');
+  $('image-upload-cleanup').textContent=L('Deletion is requested after completion or cancellation. Network failures or an app crash can leave remote copies behind; an expired link does not mean the image was deleted. Any unconfirmed deletion is shown here.', 'Se solicita el borrado al terminar o cancelar. Un fallo de red o el cierre inesperado de la app puede dejar copias remotas; que un enlace caduque no significa que la imagen se haya borrado. Los borrados sin confirmar se muestran aquí.');
+  $('image-transport-off').hidden=current.mode!=='off';
+  $('image-transport-off').textContent=L("Images pass through unchanged. Large requests can still exceed Kilo's limit and need conversation compaction or fewer attachments.", 'Las imágenes se envían sin cambios. Las peticiones grandes pueden superar el límite de Kilo y requerir compactar la conversación o reducir los adjuntos.');
+  $('image-transport-saving').textContent=L('Off by default. Changes save automatically for new requests, without restarting. Switching mode still allows cleanup of earlier uploads.', 'Desactivado por defecto. Los cambios se guardan automáticamente para nuevas peticiones, sin reiniciar. Cambiar de modo permite que continúe la limpieza de subidas anteriores.');
+  $('image-upload-warning').hidden=!s.imageUploadWarning;
+  $('image-upload-warning').textContent=s.imageUploadWarning?L('Image cleanup needs attention: ','Revisa la limpieza de imágenes: ')+t(s.imageUploadWarning):'';
+}
 function render(s) {
   state = s;
   for(const selection of Object.values(codexClients))if(selection.imageGeneration===null){selection.imageGeneration=imageGenerationSelection(s.imageGeneration);selection.imageGenerationBaseline=imageGenerationSelection(s.imageGeneration);}
@@ -270,6 +296,7 @@ function render(s) {
     $('org-id').value = s.orgId; $('port').value = s.port; $('remember').checked = s.remember; initialized = true;
     if (s.warning) notify(s.warning, true);
   }
+  renderImageTransport(s);
   $('toggle-key').textContent = t($('api-key').type === 'password' ? 'Ver' : 'Ocultar');
   $('toggle-key').setAttribute('aria-label', t($('api-key').type === 'password' ? 'Mostrar API key' : 'Ocultar API key'));
   $('version').textContent = 'v' + s.version;
@@ -917,4 +944,11 @@ $('account-usage').addEventListener('change', event => {
     const display = event.target.value;
     action(async () => { await api('tray-settings', {display}, 'PUT'); });
   }
+});
+for(const id of ['image-transport-mode','image-compression-profile'])$(id).addEventListener('change', async event => {
+  const current={mode:state?.imageTransport?.mode||'off',profile:state?.imageTransport?.profile||'high'};
+  if(id==='image-transport-mode')current.mode=event.target.value;else current.profile=event.target.value;
+  imageTransportPending=current;
+  try { await action(() => api('image-transport-settings', current, 'PUT')); }
+  finally { imageTransportPending=null; if(state)renderImageTransport(state); }
 });

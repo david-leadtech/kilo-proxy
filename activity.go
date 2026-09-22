@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
@@ -32,6 +33,7 @@ type requestTrace struct {
 type traceBuffer struct {
 	mu       sync.Mutex
 	disabled bool
+	omitted  bool
 	data     []byte
 	total    int64
 	limit    int
@@ -44,6 +46,9 @@ func (b *traceBuffer) write(data []byte) {
 		return
 	}
 	b.total += int64(len(data))
+	if b.omitted {
+		return
+	}
 	if remaining := b.limit - len(b.data); remaining > 0 {
 		if len(data) > remaining {
 			data = data[:remaining]
@@ -166,6 +171,47 @@ func (c *traceCapture) redact(value string) string {
 	}
 	return value
 }
+
+// New credentials can be introduced by adapters after the incoming body was
+// read. Expand the overlap before any upstream/response bytes are captured.
+func (c *traceCapture) addSecrets(values ...string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.disabled {
+		return
+	}
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		escaped, _ := json.Marshal(value)
+		for _, secret := range []string{value, string(escaped[1 : len(escaped)-1])} {
+			c.secrets = append(c.secrets, secret)
+			for _, buffer := range []*traceBuffer{&c.request, &c.upRequest, &c.upResponse, &c.response} {
+				buffer.mu.Lock()
+				if limit := traceBodyLimit + len(secret); buffer.limit < limit {
+					buffer.limit = limit
+				}
+				buffer.mu.Unlock()
+			}
+		}
+	}
+}
+
+// A model may echo a signed URL across separate streaming delta events. Whole
+// string redaction cannot safely remove those fragments; omit response bodies
+// for requests using uploaded images, retaining byte counts/status/headers.
+func (c *traceCapture) omitImageUploadResponses() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, buffer := range []*traceBuffer{&c.upResponse, &c.response} {
+		buffer.mu.Lock()
+		clear(buffer.data)
+		buffer.data = nil
+		buffer.omitted = true
+		buffer.mu.Unlock()
+	}
+}
 func (c *traceCapture) part(headers http.Header, b *traceBuffer) tracePart {
 	safe := make(http.Header)
 	headerBudget := 32 << 10
@@ -191,8 +237,11 @@ func (c *traceCapture) part(headers http.Header, b *traceBuffer) tracePart {
 		}
 	}
 	b.mu.Lock()
-	raw, total := string(b.data), b.total
+	raw, total, omitted := string(b.data), b.total, b.omitted
 	b.mu.Unlock()
+	if omitted {
+		return tracePart{HeadersTruncated: headersTruncated, Headers: safe, Body: "[Response body omitted: temporary image links may contain access credentials.]", Bytes: total}
+	}
 	value := strings.ToValidUTF8(c.redact(raw), "�")
 	truncated := total > int64(traceBodyLimit)
 	if len(value) > traceBodyLimit {

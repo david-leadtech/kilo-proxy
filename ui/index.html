@@ -43,6 +43,17 @@
           <div id="endpoint-status" class="endpoint-status"><span class="device-dot"></span> Arranca el proxy para aceptar peticiones.</div>
         </section>
       </div>
+      <section class="card clients-card" id="image-transport-settings" aria-labelledby="image-transport-title">
+        <h2 id="image-transport-title"></h2>
+        <p id="image-transport-description" class="field-help"></p>
+        <label for="image-transport-mode" id="image-transport-mode-label"></label>
+        <select id="image-transport-mode" disabled aria-describedby="image-transport-description"><option value="off"></option><option value="compress"></option><option value="upload"></option></select>
+        <div id="image-compression-options" hidden><label for="image-compression-profile" id="image-compression-profile-label"></label><select id="image-compression-profile"><option value="high"></option><option value="balanced"></option><option value="small"></option></select><p id="image-compression-levels" class="field-help"></p><p id="image-compression-note" class="field-help"></p></div>
+        <p id="image-transport-off" class="field-help"></p>
+        <div id="image-upload-options" hidden><p id="image-upload-description" class="field-help"></p><p id="image-upload-limit" class="field-help"></p><p id="image-upload-cleanup" class="field-help"></p></div>
+        <p id="image-transport-saving" class="field-help"></p>
+        <p id="image-upload-warning" class="notice" role="status" hidden></p>
+      </section>
       <section class="card clients-card" id="clients" aria-labelledby="clients-title">
         <div class="clients-top"><div><div class="step-label">03 / TU HERRAMIENTA, TUS REGLAS</div><h2 id="clients-title">Conecta tu editor</h2></div><div class="tabs" role="tablist" aria-label="Editor"><button role="tab" aria-selected="true" aria-controls="client-panel" id="tab-generic" data-client="generic">Cualquiera</button><button role="tab" aria-selected="false" aria-controls="client-panel" id="tab-zed" data-client="zed" tabindex="-1">Zed</button><button role="tab" aria-selected="false" aria-controls="client-panel" id="tab-opencode" data-client="opencode" tabindex="-1">OpenCode</button><button role="tab" aria-selected="false" aria-controls="client-panel" id="tab-open-design" data-client="open-design" tabindex="-1">Open Design</button><button role="tab" aria-selected="false" aria-controls="client-panel" id="tab-cursor" data-client="cursor" tabindex="-1">Cursor</button><button role="tab" aria-selected="false" aria-controls="client-panel" id="tab-xcode" data-client="xcode" tabindex="-1">Xcode</button><button role="tab" aria-selected="false" aria-controls="client-panel" id="tab-codex" data-client="codex" tabindex="-1">Codex Desktop</button><button role="tab" aria-selected="false" aria-controls="client-panel" id="tab-codex-cli" data-client="codex-cli" tabindex="-1">Codex CLI</button><button role="tab" aria-selected="false" aria-controls="client-panel" id="tab-claude" data-client="claude" tabindex="-1">Claude Code</button></div></div>
         <section id="client-launch-bar" class="client-launch-bar" hidden aria-labelledby="client-launch-title">

@@ -126,6 +126,10 @@ func (a *app) adminHandler() http.Handler {
 			a.traySettings(w, r)
 			return
 		}
+		if r.URL.Path == "/api/image-transport-settings" {
+			a.imageTransportSettings(w, r)
+			return
+		}
 		if r.Method != "POST" {
 			jsonError(w, 405, "Método no permitido.")
 			return
@@ -185,9 +189,11 @@ func (a *app) state(w http.ResponseWriter) {
 		uptime = int64(time.Since(a.started).Seconds())
 	}
 	jsonResponse(w, 200, map[string]any{
-		"imageGeneration": a.config.ImageGeneration,
-		"trayDisplay":     normalizeTrayDisplay(a.config.TrayDisplay),
-		"cursor":          a.cursor, "language": a.config.Language, "catalogRevision": a.catalogRevision,
+		"imageTransport":     a.config.ImageTransport,
+		"imageUploadWarning": a.imageUploadWarning,
+		"imageGeneration":    a.config.ImageGeneration,
+		"trayDisplay":        normalizeTrayDisplay(a.config.TrayDisplay),
+		"cursor":             a.cursor, "language": a.config.Language, "catalogRevision": a.catalogRevision,
 		"auth": a.login, "organizations": a.organizations, "accountEmail": a.accountEmail, "keySaved": a.keySaved,
 		"version": version, "desktop": a.desktop != nil, "port": a.config.Port, "orgId": a.config.OrgID,
 		"localKey": a.config.LocalKey, "hasKey": a.apiKey != "", "remember": a.config.Remember,

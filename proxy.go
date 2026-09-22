@@ -30,66 +30,70 @@ type event struct {
 }
 
 type app struct {
-	usageHistory           *usageHistoryStore
-	billing                billingCache
-	billingAutoRefresh     bool
-	modelLibrary           *modelLibraryStore
-	imageGenerationURL     string
-	imageGenerationMu      sync.Mutex
-	imageGenerationActive  int
-	launcher               *clientLaunchRuntime
-	openDesignCheckRunning func(string) (bool, error)
-	openDesignLaunchUntil  time.Time
-	terminalCommandsBinary string
-	terminalCommandsShell  string
-	launchMu               sync.Mutex
-	desktop                desktopBridge
-	desktopProbes          chan desktopProbe
-	editorTestRoot         string
-	editorMu               sync.Mutex
-	zedCredentialStore     func(context.Context, string, string, string) error
-	cursor                 *cursorSession
-	usageTotal             usageSummary
-	usageSessions          map[string]*usageSummary
-	captureEnabled         bool
-	activeTraces           int
-	activeCaptures         map[*traceCapture]struct{}
-	nextEventID            uint64
-	activityEpoch          uint64
-	traces                 map[string]*requestTrace
-	codexProfileDir        string
-	codexCLIProfileDir     string
-	xcodeTestRoot          string
-	claudeProfileDir       string
-	catalogRevision        uint64
-	modelStatsURL          string
-	modelStatsCache        modelStatsCache
-	accountURL             string
-	authPollInterval       time.Duration
-	login                  *loginSession
-	organizations          []organization
-	accountEmail           string
-	keySaved               bool
-	connectionNeedsSave    bool // Device login and auto-selected teams still need an explicit config save.
-	mu                     sync.Mutex
-	dir                    string
-	config                 settings
-	apiKey                 string
-	vault                  credentialVault
-	vaultWarning           string
-	adminToken             string
-	adminHost              string
-	upstream               *url.URL
-	transport              http.RoundTripper
-	proxyServer            *http.Server
-	proxyListener          net.Listener
-	started                time.Time
-	requests               int
-	failures               int
-	active                 int
-	events                 []event
-	quit                   chan struct{}
-	quitOnce               sync.Once
+	attachmentClientFactory func(string, string) *imageAttachmentClient
+	imageUploadsActive      int
+	imageUploadsDone        chan struct{}
+	imageUploadWarning      string
+	usageHistory            *usageHistoryStore
+	billing                 billingCache
+	billingAutoRefresh      bool
+	modelLibrary            *modelLibraryStore
+	imageGenerationURL      string
+	imageGenerationMu       sync.Mutex
+	imageGenerationActive   int
+	launcher                *clientLaunchRuntime
+	openDesignCheckRunning  func(string) (bool, error)
+	openDesignLaunchUntil   time.Time
+	terminalCommandsBinary  string
+	terminalCommandsShell   string
+	launchMu                sync.Mutex
+	desktop                 desktopBridge
+	desktopProbes           chan desktopProbe
+	editorTestRoot          string
+	editorMu                sync.Mutex
+	zedCredentialStore      func(context.Context, string, string, string) error
+	cursor                  *cursorSession
+	usageTotal              usageSummary
+	usageSessions           map[string]*usageSummary
+	captureEnabled          bool
+	activeTraces            int
+	activeCaptures          map[*traceCapture]struct{}
+	nextEventID             uint64
+	activityEpoch           uint64
+	traces                  map[string]*requestTrace
+	codexProfileDir         string
+	codexCLIProfileDir      string
+	xcodeTestRoot           string
+	claudeProfileDir        string
+	catalogRevision         uint64
+	modelStatsURL           string
+	modelStatsCache         modelStatsCache
+	accountURL              string
+	authPollInterval        time.Duration
+	login                   *loginSession
+	organizations           []organization
+	accountEmail            string
+	keySaved                bool
+	connectionNeedsSave     bool // Device login and auto-selected teams still need an explicit config save.
+	mu                      sync.Mutex
+	dir                     string
+	config                  settings
+	apiKey                  string
+	vault                   credentialVault
+	vaultWarning            string
+	adminToken              string
+	adminHost               string
+	upstream                *url.URL
+	transport               http.RoundTripper
+	proxyServer             *http.Server
+	proxyListener           net.Listener
+	started                 time.Time
+	requests                int
+	failures                int
+	active                  int
+	events                  []event
+	quit                    chan struct{}
+	quitOnce                sync.Once
 }
 
 func newApp(dir string, vault credentialVault) (*app, error) {
@@ -301,7 +305,33 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 			r = r.WithContext(context.WithValue(r.Context(), schemaBridgeContextKey{}, bridge))
 		}
 
-		proxy.ServeHTTP(recorder, r)
+		imageRequest, cleanupImages, err := a.prepareResponseImageUploads(r, key, orgID)
+		if cleanupImages != nil {
+			defer func() {
+				// Observe the inference deadline before cleanup cancels its
+				// child context; completed usage remains authoritative.
+				if requestErr := imageRequest.Context().Err(); requestErr != nil && (usage == nil || !usage.snapshot().usage.Complete) {
+					recorder.status = 499
+					if errors.Is(requestErr, context.DeadlineExceeded) {
+						recorder.status = http.StatusGatewayTimeout
+					}
+				}
+				cleanupImages()
+			}()
+		}
+		if err != nil {
+			status := http.StatusBadGateway
+			var uploadError *imageUploadRequestError
+			var oversized *http.MaxBytesError
+			if errors.As(err, &uploadError) {
+				status = uploadError.status
+			} else if errors.As(err, &oversized) {
+				status = http.StatusRequestEntityTooLarge
+			}
+			jsonError(recorder, status, err.Error())
+			return
+		}
+		proxy.ServeHTTP(recorder, imageRequest)
 	})
 }
 

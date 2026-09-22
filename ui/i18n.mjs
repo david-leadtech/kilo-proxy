@@ -1,4 +1,8 @@
 export const translations = {
+"Elige high, balanced o small para la compresión de imágenes.": "Choose high, balanced, or small for image compression.",
+"Elige off, compress o upload para las imágenes grandes.": "Choose off, compress, or upload for large images.",
+"No se pudo guardar la preferencia de imágenes. Revisa los permisos de la carpeta de configuración.": "Could not save the image preference. Check the configuration folder permissions.",
+"Kilo no pudo confirmar el borrado de las imágenes temporales. Los archivos pueden permanecer en tu cuenta de Kilo hasta que se ejecute su limpieza de subidas pendientes. Cerrar la app no garantiza su borrado.": "Kilo could not confirm deletion of temporary images. Files may remain in your Kilo account until its pending-upload cleanup runs. Closing the app does not guarantee deletion.",
 "Copiar arranque (opcional) ↗":"Copy launch command (optional) ↗",
 "Perfil listo en {path}. Ábrelo con el botón superior. El comando de arranque es opcional.":"Profile ready at {path}. Open it with the button above. The launch command is optional.",
 "Hay cambios sin guardar. Se guardarán antes de abrir.":"There are unsaved changes. They will be saved before opening.",
