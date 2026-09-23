@@ -75,3 +75,34 @@ test('Oh My Pi launch automatically prepares and saves changed names before open
  expect((await saved(request,gateway)).selection.models[0].name).toBe('Updated before launch');
  await expect(page.locator('#client-launch-status')).not.toHaveClass(/error/);
 });
+
+test('Oh My Pi keeps limit editors open when a state poll follows a reasoning change',async({page,gateway,request})=>{
+ await page.locator('#tab-omp').click();await choose(page,first).check();
+ // Hold the next real background poll until the user has changed reasoning
+ // and opened the limits. That poll must redraw the modified model selection.
+ let release,arrived;
+ const gate=new Promise(resolve=>{release=resolve;}),polling=new Promise(resolve=>{arrived=resolve;});
+ let held=false;
+ const isState=response=>new URL(response.url()).pathname==='/api/state';
+ await page.route('**/api/state',async route=>{
+  if(!held){held=true;arrived();await gate;}
+  await route.continue();
+ });
+ try{
+  await polling;
+  await page.locator(`[data-editor-effort="${first}"]`).selectOption('high');
+  const row=page.locator('.codex-model-entry').filter({has:choose(page,first)});
+  await row.locator('details > summary').click();
+  await expect(row.locator('details')).toHaveAttribute('open','');
+  const refreshed=page.waitForResponse(isState);release();await refreshed;
+  // The app schedules its next poll only after consuming and rendering the
+  // previous response. Waiting for it avoids racing the first render itself.
+  await page.waitForResponse(isState);
+  await expect(row.locator('details')).toHaveAttribute('open','');
+  await row.getByRole('spinbutton',{name:'Context tokens: '+first,exact:true}).fill('80000');
+  await row.getByRole('spinbutton',{name:'Max output tokens (0 = unspecified): '+first,exact:true}).fill('5000');
+  await page.locator('#editor-save').click();
+  await expect(page.locator('#editor-status')).toContainText('Configuration saved:');
+  expect((await saved(request,gateway)).selection.models[0]).toMatchObject({contextWindow:80000,maxOutputTokens:5000,effort:'high'});
+ }finally{release();}
+});

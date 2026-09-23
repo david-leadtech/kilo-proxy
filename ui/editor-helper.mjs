@@ -71,6 +71,9 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
   const matches=sortModels(filterModels(filterModelLab([...all.values()],$('editor-lab').value),q,false).filter(m=>!only||selected.models.has(m.id)),$('editor-sort').value);
   const next=JSON.stringify([ctx.client,ctx.language,matches,payload(),working]);if(next===signature)return;
   if(!force&&renderedClient===ctx.client&&!working&&$('editor-picker').contains(document.activeElement)&&document.activeElement.matches('input[type=text],input[type=number]'))return;
+  // A background state refresh can render a changed name/reasoning preference
+  // before the next input gains focus. Keep the user's limit panels expanded.
+  const expandedLimits=renderedClient===ctx.client?new Set([...$('editor-picker').querySelectorAll('details[open]')].map(details=>details.dataset.editorLimits)):new Set();
   signature=next;renderedClient=ctx.client;
   const scroll=$('editor-picker').scrollTop;$('editor-picker').replaceChildren();
   for(const m of matches.slice(0,200)){
@@ -91,7 +94,7 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
      for(const level of levels){const option=document.createElement('option');option.value=level;option.textContent=level;effort.append(option)}
      effort.value=levels.includes(value.effort)?value.effort:'';effort.disabled=working||!levels.length;effort.addEventListener('change',()=>{value.effort=effort.value;controls()});label.append(effort);row.append(label);
     }
-    const limits=document.createElement('details'),summary=document.createElement('summary');summary.textContent=L('Context and output limits','Límites de contexto y salida');limits.append(summary);
+    const limits=document.createElement('details'),summary=document.createElement('summary');limits.dataset.editorLimits=m.id;limits.open=expandedLimits.has(m.id);summary.textContent=L('Context and output limits','Límites de contexto y salida');limits.append(summary);
     for(const [field,title,fallback]of [['contextWindow',L('Context tokens','Tokens de contexto'),200000],['maxOutputTokens',L('Max output tokens (0 = unspecified)','Salida máxima (0 = sin especificar)'),0]]){
      const l=document.createElement('label'),input=document.createElement('input');l.textContent=title;input.type='number';input.min=field==='contextWindow'?'1024':'0';input.max='100000000';input.value=value[field]||fallback;input.setAttribute('aria-label',title+': '+m.id);input.disabled=working;input.addEventListener('input',()=>{value[field]=Number(input.value);controls()});l.append(input);limits.append(l)
     }row.append(limits);entry.append(row)
