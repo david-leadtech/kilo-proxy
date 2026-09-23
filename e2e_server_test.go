@@ -42,6 +42,7 @@ func TestE2EServer(t *testing.T) {
 	a.codexProfileDir = filepath.Join(root, ".codex-kilo-desktop")
 	a.codexCLIProfileDir = filepath.Join(root, ".codex-kilo-cli")
 	a.claudeProfileDir = filepath.Join(root, ".claude-kilo")
+	a.ompProfileDir = filepath.Join(root, ".omp-kilo")
 	a.xcodeTestRoot = filepath.Join(root, "xcode")
 	a.config.Language = "en"
 	a.billingAutoRefresh = true
@@ -286,7 +287,7 @@ func TestE2EServer(t *testing.T) {
 		"proxyPort": a.config.Port, "baseURL": "http://127.0.0.1:" + strconv.Itoa(a.config.Port) + "/v1", "root": root,
 		"imageRecords": imageRecords, "imageBase64": imageBase64,
 		"launchControl": launchControl, "launchRecords": launchRecords, "prepareWaiting": prepareWaiting, "stateWaiting": stateWaiting,
-		"profiles": map[string]string{"codex": a.codexProfileDir, "codex-cli": a.codexCLIProfileDir, "claude": a.claudeProfileDir, "opencode": filepath.Join(root, ".opencode-kilo"), "zed": filepath.Join(root, ".config", "zed")},
+		"profiles": map[string]string{"codex": a.codexProfileDir, "codex-cli": a.codexCLIProfileDir, "claude": a.claudeProfileDir, "omp": a.ompProfileDir, "opencode": filepath.Join(root, ".opencode-kilo"), "zed": filepath.Join(root, ".config", "zed")},
 	})
 	if err != nil {
 		t.Fatal(err)

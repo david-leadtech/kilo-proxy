@@ -24,7 +24,7 @@ The default API URL is `http://127.0.0.1:8877/v1`. The editor uses a randomly ge
 
 Closing the application window leaves the proxy running. The system tray / menu bar can reopen the interface, show status and observed spend, start or stop the saved connection, and quit the application. **Settings → Appearance** saves your choice of **K icon** or **Session cost**; macOS shows the K icon and amount together in **Session cost**, while other tray hosts may use the K icon, tooltip and menu. Stopping cancels active requests. The proxy does not start automatically when opening the application.
 
-On macOS and Linux, **Settings → Terminal commands → Install terminal commands** adds `kilo-codex` and `kilo-claude`. Open a new terminal in your project and run either command to use the latest saved shared models in that terminal. Arguments pass through, including `kilo-codex resume` and `kilo-claude --resume`. Keep Kilo Proxy open, including in the tray; the commands start its saved connection when needed. Your ordinary `codex` and `claude` profiles keep their usual authentication. See [terminal command setup](docs/terminal-commands.md).
+On macOS and Linux, **Settings → Terminal commands → Install terminal commands** adds `kilo-codex`, `kilo-claude` and `kilo-omp` together. Open a new terminal in your project and run the command for your installed CLI to use the latest saved shared models in that terminal. Arguments pass through, including `kilo-codex resume`, `kilo-claude --resume` and `kilo-omp --resume`. Keep Kilo Proxy open, including in the tray; the commands start its saved connection when needed. Your ordinary `codex`, `claude` and `omp` profiles keep their usual authentication. If you installed the commands before `kilo-omp` was added, run **Update terminal commands** once. See [terminal command setup](docs/terminal-commands.md).
 
 ## Downloads
 
@@ -45,6 +45,7 @@ macOS bundles have an **ad-hoc signature** covering the executable, bundle metad
 | Codex Desktop | Separate GUI profile, multiple models, short display names, native reasoning selector |
 | Codex CLI | Separate generated profile using the shared models, names, reasoning levels and terminal launcher |
 | OpenCode | Automatic profile preparation, multiple models, names, limits, and scoped launcher |
+| Oh My Pi | Isolated OMP terminal profile, shared models, names, supported reasoning, and Kilo image MCP |
 | Open Design | Codex CLI, Claude Code or OpenCode engine, private profiles from shared models, separate desktop workspace, and automatic proxy startup |
 | Claude Code | Automatic isolated profile, version-aware model picker, short names, native effort and terminal launcher |
 | Zed | Automatic local credentials and JSONC settings updates, multiple models, names, and initial model |
@@ -70,6 +71,8 @@ From v0.23.1, image results include a preview bounded to **1024 pixels per side 
 The Claude Code card detects the installed version, prepares a separate profile with backups, and opens an interactive terminal. Shared names and reasoning preferences apply only where that version and model support them. See [client setup](docs/clients.md) for profile isolation, saving, and compatibility limits.
 
 OpenCode and Zed receive the shared IDs, names, default and token limits through JSONC-preserving updates. Their reasoning remains automatic. OpenCode includes local authentication in its dedicated profile; Zed receives its local key in the system credential store and refreshes the provider when the key changes, including in an already-open editor. See [their setup guide](docs/opencode-and-zed.md).
+
+**Oh My Pi** opens the installed `omp` terminal agent with a dedicated `~/.omp-kilo` profile. It uses the shared models, short names, default and supported reasoning over Responses. The local image MCP is configured when image generation is enabled. See [Oh My Pi setup and compatibility](docs/oh-my-pi.md).
 
 The application and tray support **English / Español**. The first launch reads the operating system’s preferred language, with English as the fallback. An explicitly saved language takes priority; changing it updates the interface and tray without restarting the proxy. Documentation and release instructions are in English.
 

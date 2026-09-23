@@ -11,6 +11,10 @@ import (
 
 const terminalAgentFlag = "--terminal-agent"
 
+func terminalClientSupported(client string) bool {
+	return client == "codex-cli" || client == "claude" || client == "omp"
+}
+
 func terminalPlatformSupported(platform string) bool {
 	return platform == "darwin" || platform == "macos" || platform == "linux"
 }
@@ -73,8 +77,8 @@ func (a *app) terminalPrepareAPI(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &input) {
 		return
 	}
-	if input.Client != "codex-cli" && input.Client != "claude" || len(input.ClaudeVersion) > 64 || strings.ContainsAny(input.ClaudeVersion, "\r\n\x00") {
-		jsonError(w, 400, "Choose kilo-codex or kilo-claude.")
+	if !terminalClientSupported(input.Client) || len(input.ClaudeVersion) > 64 || strings.ContainsAny(input.ClaudeVersion, "\r\n\x00") {
+		jsonError(w, 400, "Choose kilo-codex, kilo-claude or kilo-omp.")
 		return
 	}
 	if !a.launchMu.TryLock() {
@@ -147,6 +151,11 @@ func terminalLibraryChoices(library modelLibrary, catalog []modelInfo) []nativeM
 // Caller holds a.mu, the same lock used by GUI profile preparation.
 func (a *app) prepareTerminalProfile(client, home string, library modelLibrary, caps claudeCapabilities) error {
 	if err := validateModelLibrary(library); err != nil {
+		return err
+	}
+	if client == "omp" {
+		selection := ompSelectionFromChoices(terminalLibraryChoices(library, readNativeCatalogCache(a.dir, a.config.OrgID)), library.DefaultModel)
+		_, err := a.saveOMPProfile(selection)
 		return err
 	}
 	if client == "codex-cli" {

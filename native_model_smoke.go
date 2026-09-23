@@ -50,7 +50,7 @@ func (u *nativeUI) modelSmokeAction(action, value string) (bool, error) {
 		u.persistLibraryEdits()
 		return true, nil
 	case "verify-shared-agents":
-		for _, key := range []string{"codex", "codex-cli", "claude", "opencode", "zed"} {
+		for _, key := range []string{"codex", "codex-cli", "claude", "opencode", "omp", "zed"} {
 			s := u.sharedClientSelection(key)
 			u.syncClientSelection(key, s)
 			choice := s.choice(modelSmokeDefault)

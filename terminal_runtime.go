@@ -27,9 +27,10 @@ type terminalRuntime struct {
 	Token         string `json:"token"`
 	CodexProfile  string `json:"codexProfile"`
 	ClaudeProfile string `json:"claudeProfile"`
+	OMPProfile    string `json:"ompProfile,omitempty"`
 }
 
-var errTerminalAppUnavailable = errors.New("Open the updated Kilo Proxy app first. It can stay in the system tray while you use kilo-codex or kilo-claude.")
+var errTerminalAppUnavailable = errors.New("Open the updated Kilo Proxy app first. It can stay in the system tray while you use kilo-codex, kilo-claude or kilo-omp.")
 
 func validateTerminalRuntime(info terminalRuntime) error {
 	host, port, err := net.SplitHostPort(info.Host)
@@ -38,7 +39,13 @@ func validateTerminalRuntime(info terminalRuntime) error {
 	if err != nil || numberErr != nil || host != "127.0.0.1" || p < 1 || p > 65535 || info.Host != net.JoinHostPort(host, strconv.Itoa(p)) || info.Version != 1 || tokenErr != nil || len(token) != 32 {
 		return errTerminalAppUnavailable
 	}
-	for _, path := range []string{info.CodexProfile, info.ClaudeProfile} {
+	paths := []string{info.CodexProfile, info.ClaudeProfile}
+	// Older app descriptors still support Codex/Claude; OMP requires its own
+	// trusted profile path before a response can be accepted.
+	if info.OMPProfile != "" {
+		paths = append(paths, info.OMPProfile)
+	}
+	for _, path := range paths {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path || len(path) > 4096 || strings.ContainsAny(path, "\x00\r\n") {
 			return errTerminalAppUnavailable
 		}
@@ -70,6 +77,11 @@ func (a *app) publishTerminalRuntime() (func(), error) {
 	if info.ClaudeProfile == "" {
 		info.ClaudeProfile = filepath.Join(home, ".claude-kilo")
 	}
+	_, ompProfile, err := a.ompPaths()
+	if err != nil {
+		return func() {}, err
+	}
+	info.OMPProfile = ompProfile
 	if err := validateTerminalRuntime(info); err != nil {
 		return func() {}, err
 	}
@@ -159,6 +171,13 @@ func validateTerminalProfile(plan clientLaunchPlan, info terminalRuntime) error 
 		}
 	case "claude":
 		if len(plan.Env) != 1 || plan.Env["CLAUDE_CONFIG_DIR"] != info.ClaudeProfile || !reflect.DeepEqual(plan.Args, []string{"--settings", filepath.Join(info.ClaudeProfile, "settings.json")}) || !reflect.DeepEqual(plan.Unset, nativeClaudeResetEnv) {
+			return invalid
+		}
+	case "omp":
+		if info.OMPProfile == "" || len(plan.Unset) != 0 || !reflect.DeepEqual(plan.Env, map[string]string{"PI_CODING_AGENT_DIR": info.OMPProfile, "OMP_PROFILE": "", "PI_PROFILE": "", "PI_OPENAI_STATEFUL": "0"}) {
+			return invalid
+		}
+		if len(plan.Args) != 2 || plan.Args[0] != "--model" || !strings.HasPrefix(plan.Args[1], "kilo-local/") || !helperValidModelID(strings.TrimPrefix(plan.Args[1], "kilo-local/")) {
 			return invalid
 		}
 	default:

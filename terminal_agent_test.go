@@ -42,7 +42,7 @@ func TestTerminalPrepareUsesSharedLibraryAndLocalProfiles(t *testing.T) {
 	if err := atomicCatalogFile(filepath.Join(a.dir, "model-catalog.json"), cache); err != nil {
 		t.Fatal(err)
 	}
-	for _, client := range []string{"codex-cli", "claude"} {
+	for _, client := range []string{"codex-cli", "claude", "omp"} {
 		request, _ := json.Marshal(terminalPrepareRequest{Client: client, Directory: a.launcher.home, ClaudeVersion: "2.1.251"})
 		w := adminRequest(a, "terminal/prepare", string(request))
 		if w.Code != 200 {
@@ -228,7 +228,7 @@ func TestTerminalClientProcessHelper(t *testing.T) {
 	}
 	input, _ := io.ReadAll(os.Stdin)
 	directory, _ := os.Getwd()
-	_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"args": args, "input": string(input), "cwd": directory, "codexHome": os.Getenv("CODEX_HOME"), "localKey": os.Getenv("KILO_LOCAL_API_KEY"), "claudeHome": os.Getenv("CLAUDE_CONFIG_DIR"), "anthropicKey": os.Getenv("ANTHROPIC_API_KEY"), "anthropicBase": os.Getenv("ANTHROPIC_BASE_URL")})
+	_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"args": args, "input": string(input), "cwd": directory, "codexHome": os.Getenv("CODEX_HOME"), "localKey": os.Getenv("KILO_LOCAL_API_KEY"), "claudeHome": os.Getenv("CLAUDE_CONFIG_DIR"), "anthropicKey": os.Getenv("ANTHROPIC_API_KEY"), "anthropicBase": os.Getenv("ANTHROPIC_BASE_URL"), "ompHome": os.Getenv("PI_CODING_AGENT_DIR"), "ompProfile": os.Getenv("OMP_PROFILE"), "piProfile": os.Getenv("PI_PROFILE"), "stateful": os.Getenv("PI_OPENAI_STATEFUL")})
 	os.Exit(23)
 }
 
@@ -250,7 +250,7 @@ func TestTerminalAgentRunsInCurrentTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	self, _ := os.Executable()
-	for _, name := range []string{"codex", "claude"} {
+	for _, name := range []string{"codex", "claude", "omp"} {
 		script := "#!/bin/sh\nif [ \"$1\" = --version ]; then printf '2.1.251 (synthetic client)\\n'; exit 0; fi\nexec " + helperShellQuote(self) + " -test.run='^TestTerminalClientProcessHelper$' -- \"$@\"\n"
 		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0700); err != nil {
 			t.Fatal(err)
@@ -261,7 +261,7 @@ func TestTerminalAgentRunsInCurrentTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	args := []string{"resume", "with spaces", "literal$(should-not-run)", "semi;colon", "--model", "vendor/two", strings.Repeat("large prompt ", 1000)}
-	for _, client := range []string{"codex-cli", "claude"} {
+	for _, client := range []string{"codex-cli", "claude", "omp"} {
 		binary := self
 		arguments := append([]string{"-test.run=^TestTerminalAgentProcessHelper$", "--", client, "--config-dir", a.dir, "--"}, args...)
 		// Optional packaging check exercises the actual distributed main/exec
@@ -277,7 +277,7 @@ func TestTerminalAgentRunsInCurrentTerminal(t *testing.T) {
 		defer cancel()
 		command := exec.CommandContext(ctx, binary, arguments...)
 		command.Dir = project
-		command.Env = clientChildEnvironment(os.Environ(), map[string]string{"KILO_TERMINAL_PROCESS_TEST": "1", "PATH": bin + string(os.PathListSeparator) + os.Getenv("PATH"), "DISPLAY": "", "WAYLAND_DISPLAY": "", "CODEX_HOME": "/wrong-codex", "KILO_LOCAL_API_KEY": "wrong-local", "CLAUDE_CONFIG_DIR": "/wrong-claude", "ANTHROPIC_API_KEY": "wrong-auth", "ANTHROPIC_BASE_URL": "https://wrong.example"}, nil, runtime.GOOS)
+		command.Env = clientChildEnvironment(os.Environ(), map[string]string{"KILO_TERMINAL_PROCESS_TEST": "1", "PATH": bin + string(os.PathListSeparator) + os.Getenv("PATH"), "DISPLAY": "", "WAYLAND_DISPLAY": "", "CODEX_HOME": "/wrong-codex", "KILO_LOCAL_API_KEY": "wrong-local", "CLAUDE_CONFIG_DIR": "/wrong-claude", "ANTHROPIC_API_KEY": "wrong-auth", "ANTHROPIC_BASE_URL": "https://wrong.example", "PI_CODING_AGENT_DIR": "/wrong-omp", "OMP_PROFILE": "personal", "PI_PROFILE": "work", "PI_OPENAI_STATEFUL": "1"}, nil, runtime.GOOS)
 		command.Stdin = strings.NewReader("stdin preserved\n")
 		var output, stderr bytes.Buffer
 		command.Stdout, command.Stderr = &output, &stderr
@@ -289,6 +289,7 @@ func TestTerminalAgentRunsInCurrentTerminal(t *testing.T) {
 		var got struct {
 			Args                                                                     []string
 			Input, Cwd, CodexHome, LocalKey, ClaudeHome, AnthropicKey, AnthropicBase string
+			OMPHome, OMPProfile, PIProfile, Stateful                                 string
 		}
 		if err := json.Unmarshal(output.Bytes(), &got); err != nil {
 			t.Fatal(err, output.String())
@@ -296,6 +297,9 @@ func TestTerminalAgentRunsInCurrentTerminal(t *testing.T) {
 		wantArgs := args
 		if client == "claude" {
 			wantArgs = append([]string{"--settings", filepath.Join(a.claudeProfileDir, "settings.json")}, args...)
+		}
+		if client == "omp" {
+			wantArgs = append([]string{"--model", "kilo-local/vendor/two"}, args...)
 		}
 		canonicalProject, _ := filepath.EvalSymlinks(project)
 		canonicalCwd, _ := filepath.EvalSymlinks(got.Cwd)
@@ -307,6 +311,9 @@ func TestTerminalAgentRunsInCurrentTerminal(t *testing.T) {
 		}
 		if client == "claude" && (got.ClaudeHome != a.claudeProfileDir || got.AnthropicKey != "" || got.AnthropicBase != "") {
 			t.Fatal("Claude inherited another provider's auth")
+		}
+		if client == "omp" && (got.OMPHome != a.ompProfileDir || got.OMPProfile != "" || got.PIProfile != "" || got.Stateful != "0") {
+			t.Fatal("Oh My Pi inherited another profile or enabled stateful Responses")
 		}
 		if stderr.Len() != 0 {
 			t.Fatal(fmt.Sprintf("unexpected launcher stderr: %s", stderr.String()))

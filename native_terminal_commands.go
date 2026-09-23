@@ -86,7 +86,7 @@ func nativeTerminalCommandsMessage(message, language string) string {
 		if translated := translations[message]; translated != "" {
 			return translated
 		}
-		for _, name := range []string{"kilo-codex", "kilo-claude"} {
+		for _, name := range []string{"kilo-codex", "kilo-claude", "kilo-omp"} {
 			if message == "An unrelated "+name+" already exists. Move or rename it before installing terminal commands." {
 				return "Ya existe un " + name + " ajeno a Kilo Proxy. Muévelo o cámbiale el nombre antes de instalar los comandos de terminal."
 			}
@@ -103,12 +103,12 @@ func (u *nativeUI) terminalCommandsPanel() layout.Widget {
 	checking, installing := u.busy["GET"+nativeTerminalCommandsEndpoint], u.busy["POST"+nativeTerminalCommandsEndpoint]
 	children := []layout.Widget{u.heading(u.tr("Terminal commands", "Comandos de terminal"))}
 	if s.Checked && !s.Info.Supported {
-		return u.card(append(children, u.note(u.tr("kilo-codex and kilo-claude are available on macOS and Linux.", "kilo-codex y kilo-claude están disponibles en macOS y Linux.")))...)
+		return u.card(append(children, u.note(u.tr("kilo-codex, kilo-claude and kilo-omp are available on macOS and Linux.", "kilo-codex, kilo-claude y kilo-omp están disponibles en macOS y Linux.")))...)
 	}
 	children = append(children,
-		u.note(u.tr("Use kilo-codex or kilo-claude in your current terminal and project. They forward arguments and use your latest saved shared models.", "Usa kilo-codex o kilo-claude en tu terminal y proyecto actuales. Pasan tus argumentos al CLI y usan los últimos modelos compartidos guardados.")),
+		u.note(u.tr("Use kilo-codex, kilo-claude or kilo-omp in your current terminal and project. They forward arguments and use your latest saved shared models.", "Usa kilo-codex, kilo-claude o kilo-omp en tu terminal y proyecto actuales. Pasan tus argumentos al CLI y usan los últimos modelos compartidos guardados.")),
 		u.note(u.tr("Keep Kilo Proxy open, including in the tray. The commands start its saved connection if stopped.", "Mantén Kilo Proxy abierto, también en la bandeja. Los comandos inician su conexión guardada si está detenida.")),
-		u.note(u.tr("Installs to ~/.local/bin and configures PATH for zsh, bash or fish. Install Codex CLI or Claude Code separately.", "Se instalan en ~/.local/bin y configuran PATH para zsh, bash o fish. Instala Codex CLI o Claude Code por separado.")),
+		u.note(u.tr("Installs to ~/.local/bin and configures PATH for zsh, bash or fish. Install Codex CLI, Claude Code or Oh My Pi separately.", "Se instalan en ~/.local/bin y configuran PATH para zsh, bash o fish. Instala Codex CLI, Claude Code u Oh My Pi por separado.")),
 	)
 	label := u.tr("Install terminal commands", "Instalar comandos de terminal")
 	if s.Info.Installed {
@@ -143,14 +143,20 @@ func (u *nativeUI) terminalCommandsPanel() layout.Widget {
 		if len(s.Info.StartupFiles) > 0 {
 			children = append(children, u.note(u.tr("Shell startup files: ", "Archivos de inicio del shell: ")+strings.Join(s.Info.StartupFiles, ", ")))
 		}
-		paths := []string{}
-		for _, name := range []string{"kilo-codex", "kilo-claude"} {
+		for _, name := range []string{"kilo-codex", "kilo-claude", "kilo-omp"} {
 			if path := s.Info.Commands[name]; path != "" {
-				paths = append(paths, path)
+				command := name
+				if !s.Info.PathConfigured {
+					command = helperShellQuote(path)
+				}
+				copyAction := u.button("terminal-commands.copy."+name, u.tr("Copy ", "Copiar ")+name, func() { u.copy(command) })
+				copyButton := func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.X = min(gtx.Constraints.Max.X, gtx.Dp(164))
+					gtx.Constraints.Max.X = gtx.Constraints.Min.X
+					return copyAction(gtx)
+				}
+				children = append(children, u.actionRow(u.code("terminal-commands.command."+name, command), copyButton))
 			}
-		}
-		if !s.Info.PathConfigured && len(paths) > 0 {
-			children = append(children, u.code("terminal-commands.paths", strings.Join(paths, "\n")))
 		}
 	}
 	return u.card(children...)

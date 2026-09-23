@@ -281,7 +281,7 @@ func TestNativeLibrarySharedNamesDefaultsAndSafeClaudeEffort(t *testing.T) {
 	u.setValue(nativeClientField(sharedModelKey, s.Initial, "reasoning"), "high")
 	nativeTestFrame(t, u)
 	u.flushModelLibrary()
-	for _, key := range []string{"codex", "codex-cli", "opencode", "zed", "claude"} {
+	for _, key := range []string{"codex", "codex-cli", "opencode", "omp", "zed", "claude"} {
 		u.setValue("clients-claude-mode", "modern")
 		derived := u.sharedClientSelection(key)
 		if !reflect.DeepEqual(derived.ids(), s.ids()) || derived.Initial != s.Initial || derived.choice("vendor/one").DisplayName != "My daily model" || derived.choice(s.Initial).DisplayName != "My Claude" {

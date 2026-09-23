@@ -125,6 +125,8 @@ func nativeClientEndpoint(key string) string {
 		return "/api/" + key + "/catalog"
 	case "claude":
 		return "/api/claude/profile"
+	case "omp":
+		return "/api/omp/profile"
 	case "opencode", "zed":
 		return "/api/editors/" + key + "/profile"
 	case "xcode-chat", "xcode-codex", "xcode-claude":
@@ -134,6 +136,10 @@ func nativeClientEndpoint(key string) string {
 }
 
 func nativeClientPayload(key string, s *nativeClientSelection) (any, error) {
+	if key == "omp" {
+		selection := nativeOMPSelection(s)
+		return selection, validateOMPSelection(selection)
+	}
 	if key == "open-design" {
 		library := modelLibrary{SchemaVersion: 1, DefaultModel: s.Initial}
 		for _, m := range s.Models {
@@ -406,7 +412,7 @@ func (u *nativeUI) clientsPanel() layout.Widget {
 			}
 		})
 	}
-	widgets := []layout.Widget{u.pills(u.button("agents.back", u.tr("← All agents", "← Todos los agentes"), func() { u.page = "agents" })), u.heading(map[string]string{"codex": "Codex Desktop", "codex-cli": "Codex CLI", "claude": "Claude Code", "opencode": "OpenCode", "zed": "Zed", "open-design": "Open Design", "cursor": "Cursor", "xcode": "Xcode", "generic": u.tr("Other agents", "Otros agentes")}[u.client])}
+	widgets := []layout.Widget{u.pills(u.button("agents.back", u.tr("← All agents", "← Todos los agentes"), func() { u.page = "agents" })), u.heading(map[string]string{"codex": "Codex Desktop", "codex-cli": "Codex CLI", "claude": "Claude Code", "opencode": "OpenCode", "omp": "Oh My Pi", "zed": "Zed", "open-design": "Open Design", "cursor": "Cursor", "xcode": "Xcode", "generic": u.tr("Other agents", "Otros agentes")}[u.client])}
 	key := u.client
 	if key == "xcode" {
 		variants := []layout.Widget{}
@@ -468,6 +474,9 @@ func (u *nativeUI) clientsPanel() layout.Widget {
 	}
 	if key == "open-design" {
 		protocol = u.tr("Uses your selected CLI engine with its Kilo configuration.", "Usa el motor CLI elegido con su configuración de Kilo.")
+	}
+	if key == "omp" {
+		protocol = u.agentCompatibility(key)
 	}
 	widgets = append(widgets, u.note(protocol))
 	modelSummary := u.sharedModelSummary()
@@ -784,7 +793,7 @@ func (u *nativeUI) clientActions(key string, s *nativeClientSelection) layout.Wi
 		if key == "codex" {
 			widgets = append(widgets, u.row(u.selectField("clients-platform", u.tr("Command operating system", "Sistema operativo del comando"), []string{"macos", "windows", "linux"}), u.field("clients-app-path", u.tr("Command application path", "Ruta de aplicación del comando"), "/Applications/ChatGPT.app", false)))
 		}
-		if key == "codex-cli" || key == "claude" || key == "opencode" {
+		if key == "codex-cli" || key == "claude" || key == "opencode" || key == "omp" {
 			widgets = append(widgets, u.selectField("clients-shell", u.tr("Command shell", "Shell del comando"), []string{"unix", "powershell"}))
 		}
 	}
@@ -815,6 +824,9 @@ func (u *nativeUI) clientActions(key string, s *nativeClientSelection) layout.Wi
 	if key == "opencode" {
 		widgets = append(widgets, u.note(u.tr("Launch opens a terminal in your project; then use /models. No /connect needed. Global/project OpenCode settings still merge and may override this profile.", "Abrir inicia una terminal en tu proyecto; después usa /models. No hace falta /connect. Los ajustes globales/del proyecto se combinan y pueden prevalecer.")))
 	}
+	if key == "omp" {
+		widgets = append(widgets, u.note(u.tr("The isolated ~/.omp-kilo profile keeps your normal Oh My Pi configuration separate. No /login is needed. Install Oh My Pi first, then refresh detection.", "El perfil separado ~/.omp-kilo conserva aparte tu configuración habitual de Oh My Pi. No hace falta /login. Instala Oh My Pi y actualiza la detección.")), u.button("client:omp:install", u.tr("Oh My Pi installation instructions", "Instrucciones de instalación de Oh My Pi"), func() { u.open("https://omp.sh/") }))
+	}
 	if key == "codex" || key == "codex-cli" {
 		widgets = append(widgets, u.note(u.tr("The normal Codex profile stays separate. Restart the Kilo instance after preparing changes, then choose the model and reasoning in Codex.", "El perfil normal de Codex queda separado. Reinicia la instancia Kilo tras preparar cambios y elige modelo y razonamiento en Codex.")), u.disabled(len(s.Models) > 0, u.button("client:"+key+":catalog-copy", u.tr("Copy models.json", "Copiar models.json"), func() {
 			u.syncClientSelection(key, s)
@@ -833,11 +845,18 @@ func (u *nativeUI) clientActions(key string, s *nativeClientSelection) layout.Wi
 	}
 	widgets = append(widgets, u.check("client:"+key+":show-config", u.tr("Show optional configuration export", "Mostrar exportación de configuración opcional"), func(bool) {}))
 	if u.checked("client:"+key+":show-config") && len(s.Models) > 0 {
+		if key == "omp" {
+			widgets = append(widgets, u.note(u.tr("models.yml · Kilo provider and shared model list", "models.yml · proveedor Kilo y lista de modelos compartida")))
+		}
 		if key == "zed" {
 			widgets = append(widgets, u.note(u.tr("Copying configuration alone does not save credentials. Use Prepare or set the local key in Zed’s kilo-local provider.", "Copiar solo la configuración no guarda las credenciales. Usa Preparar o configura la clave local en el proveedor kilo-local de Zed.")))
 		}
 		if text, err := u.clientExport(key, s, false); err == nil {
-			widgets = append(widgets, u.code("client:"+key+":config", text), u.button("client:"+key+":config-copy", u.tr("Copy complete configuration", "Copiar configuración completa"), func() {
+			copyConfigLabel := u.tr("Copy complete configuration", "Copiar configuración completa")
+			if key == "omp" {
+				copyConfigLabel = u.tr("Copy models.yml", "Copiar models.yml")
+			}
+			widgets = append(widgets, u.code("client:"+key+":config", text), u.button("client:"+key+":config-copy", copyConfigLabel, func() {
 				u.syncClientSelection(key, s)
 				text, err := u.clientExport(key, s, true)
 				if err != nil {
@@ -848,6 +867,17 @@ func (u *nativeUI) clientActions(key string, s *nativeClientSelection) layout.Wi
 			}))
 		} else {
 			widgets = append(widgets, u.note(err.Error()))
+		}
+		if key == "omp" {
+			if data, err := buildOMPSettings(nativeOMPSelection(s)); err == nil {
+				widgets = append(widgets, u.note(u.tr("config.yml · default model and reasoning", "config.yml · modelo inicial y razonamiento")), u.code("client:omp:settings", string(data)), u.button("client:omp:settings-copy", u.tr("Copy config.yml", "Copiar config.yml"), func() {
+					if data, err := buildOMPSettings(nativeOMPSelection(s)); err == nil {
+						u.copy(string(data))
+					} else {
+						u.notice = err.Error()
+					}
+				}))
+			}
 		}
 	}
 	return u.column(widgets...)
@@ -939,6 +969,9 @@ func (u *nativeUI) loadClient(key string) {
 }
 
 func decodeNativeClientSelection(key string, data []byte, catalog []modelInfo) (*nativeClientSelection, error) {
+	if key == "omp" {
+		return decodeNativeOMPSelection(data, catalog)
+	}
 	s := &nativeClientSelection{Aliases: map[string]string{}, Mode: "installed"}
 	lookup := func(id string) modelInfo {
 		for _, m := range catalog {
@@ -1047,6 +1080,8 @@ func (u *nativeUI) clientLaunch(key string, s *nativeClientSelection, reveal boo
 		return claudeLaunchCommand(u.value("clients-shell"), u.language)
 	case "opencode":
 		return openCodeLaunchCommand(s.Path, s.Initial, u.value("clients-shell"))
+	case "omp":
+		return ompLaunchCommand(nativeOMPProfileDir(s.Path), s.Initial, u.value("clients-shell")), nil
 	case "zed":
 		if reveal {
 			return local, nil
@@ -1072,6 +1107,10 @@ func (u *nativeUI) clientExport(key string, s *nativeClientSelection, reveal boo
 	}
 	if key == "opencode" || key == "zed" {
 		data, err := mergeEditorSettings(nil, key, payload.(editorSelection), base, local)
+		return string(data), err
+	}
+	if key == "omp" {
+		data, err := buildOMPModels(payload.(ompSelection), base, local)
 		return string(data), err
 	}
 	if key == "codex" || key == "codex-cli" {

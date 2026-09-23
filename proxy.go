@@ -65,6 +65,7 @@ type app struct {
 	codexCLIProfileDir      string
 	xcodeTestRoot           string
 	claudeProfileDir        string
+	ompProfileDir           string
 	catalogRevision         uint64
 	modelStatsURL           string
 	modelStatsCache         modelStatsCache
