@@ -58,6 +58,7 @@ func nativeTestUI(t *testing.T) *nativeUI {
 	a.codexProfileDir = filepath.Join(root, ".codex-kilo-desktop")
 	a.codexCLIProfileDir = filepath.Join(root, ".codex-kilo-cli")
 	a.claudeProfileDir = filepath.Join(root, ".claude-kilo")
+	a.ompProfileDir = filepath.Join(root, ".omp-kilo")
 	a.xcodeTestRoot = filepath.Join(root, "xcode")
 	a.config.Language = "en"
 	a.apiKey = "synthetic-kilo-personal-key"

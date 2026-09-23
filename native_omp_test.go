@@ -101,6 +101,15 @@ func TestNativeOMPAgentCardOpensPreparedSharedProfile(t *testing.T) {
 				t.Fatalf("Oh My Pi card did not prepare and launch: %s", u.notice)
 			}
 			prepared := u.clientState().selection("omp")
+			profileDir := filepath.Join(u.owner.editorTestRoot, ".omp-kilo")
+			if prepared.Path != filepath.Join(profileDir, "models.yml") {
+				t.Fatalf("Oh My Pi preparation escaped the fixture: %q", prepared.Path)
+			}
+			for _, name := range []string{"models.yml", "config.yml", "mcp.json", "kilo-models.json"} {
+				if info, err := os.Stat(filepath.Join(profileDir, name)); err != nil || !info.Mode().IsRegular() {
+					t.Fatalf("Oh My Pi did not prepare %s inside the fixture: %v", name, err)
+				}
+			}
 			if data, err := os.ReadFile(prepared.Path); err != nil || !strings.Contains(string(data), "vendor/one") {
 				t.Fatalf("shared model missing from prepared profile: %v", err)
 			}
