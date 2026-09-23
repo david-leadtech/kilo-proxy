@@ -111,6 +111,7 @@ const descriptions = {
   generic: ['Dos valores. Ninguna cabecera extra.', 'En tu herramienta, elige un proveedor compatible con OpenAI. Pega la URL y la clave local. El modelo mantiene su ID de Kilo.', 'Conexión compatible con OpenAI'],
   zed: ['Tu agente de Zed, con saldo de empresa.', 'En Agent Settings → LLM Providers, añade un proveedor compatible con OpenAI. Combina este bloque con tus ajustes y guarda la clave local en la interfaz del proveedor.', 'settings.json · combinar con tus ajustes'],
   'open-design': ['Open Design', '', ''],
+  omp: ['Oh My Pi', '', ''],
   opencode: ['OpenCode, conectado directamente.', 'Configuración para OpenCode v1. En /connect → Other usa el ID kilo-local y pega la clave local. Combina este bloque con tu configuración.', 'opencode.json · v1'],
   codex: ['Codex Desktop: dos instancias independientes.', 'Selecciona tus modelos y pulsa «Preparar Codex GUI». El helper crea el perfil aislado y guarda la configuración en este ordenador. Después copia el arranque para abrir una segunda instancia gráfica.', 'config.toml · plantilla opcional para otro ordenador'],
   'codex-cli': ['Codex CLI en otra terminal.', 'Selecciona modelos y pulsa «Preparar Codex CLI». El helper crea y actualiza su perfil independiente. Copia el arranque y usa /model en Codex para cambiar de modelo y razonamiento.', 'config.toml · plantilla opcional para otro ordenador'],
@@ -165,7 +166,7 @@ function clientLaunchSelection(){
  }
  if(client==='claude')return {id:client,count:multiClients.claude.models.size,ready:claudeSetup?.signature===claudeSetupSignature(),fingerprint:claudeSetupSignature(),working:claudePreparing||claudeDetecting,prepare:prepareClaude};
  if(client==='open-design')return openDesignHelper.launchState();
- if(['opencode','zed'].includes(client))return editorHelper.launchState();
+ if(['opencode','zed','omp'].includes(client))return editorHelper.launchState();
  if(client==='xcode')return xcodeHelper.launchState();
  if(client==='cursor')return {id:client,count:cursorModels.size,ready:true,fingerprint:JSON.stringify(state?.cursor),working:busy};
  return null;
@@ -176,8 +177,8 @@ function renderClientLaunch(){
  if(!selection)return;
  if(!launchDetected&&!launchDetecting)void detectLaunchClients();
  const installed=launchInfo?.clients?.[selection.id],custom=selection.id==='codex'&&$('client-launch-app').value.trim();
- const available=!!installed?.available||!!custom,terminal=installed?.kind==='terminal'||['codex-cli','claude','opencode'].includes(selection.id);
- const name=installed?.name||({'codex':'Codex Desktop','codex-cli':'Codex CLI',claude:'Claude Code',opencode:'OpenCode','open-design':'Open Design',zed:'Zed',cursor:'Cursor'}[selection.id]||'Xcode');
+ const available=!!installed?.available||!!custom,terminal=installed?.kind==='terminal'||['codex-cli','claude','opencode','omp'].includes(selection.id);
+ const name=installed?.name||({'codex':'Codex Desktop','codex-cli':'Codex CLI',claude:'Claude Code',opencode:'OpenCode',omp:'Oh My Pi','open-design':'Open Design',zed:'Zed',cursor:'Cursor'}[selection.id]||'Xcode');
  $('client-launch-title').textContent=L('Open on this computer','Abrir en este ordenador');
  $('client-launch-refresh').textContent=launchDetecting?L('Checking…','Comprobando…'):L('Check installed apps','Comprobar aplicaciones');
  $('client-launch-refresh').disabled=launchDetecting||launchBusy;
@@ -226,7 +227,7 @@ function renderSnippet() {
  const openDesignActive=client==='open-design';
  $('open-design-helper').hidden=!openDesignActive;
  if(openDesignActive)openDesignHelper.render({state,catalog,language});
- const xcodeActive=client==='xcode',editorActive=['opencode','zed'].includes(client);
+ const xcodeActive=client==='xcode',editorActive=['opencode','zed','omp'].includes(client);
  $('editor-helper').hidden=!editorActive;
  if(editorActive)editorHelper.render({client,state,catalog,language});
  $('xcode-helper').hidden=!xcodeActive;

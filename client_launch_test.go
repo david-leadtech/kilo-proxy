@@ -22,6 +22,7 @@ func launchTestApp(t *testing.T) *app {
 	a.codexProfileDir = filepath.Join(home, "desktop")
 	a.codexCLIProfileDir = filepath.Join(home, "cli")
 	a.claudeProfileDir = filepath.Join(home, "claude")
+	a.ompProfileDir = filepath.Join(home, "omp")
 	a.xcodeTestRoot = filepath.Join(home, "xcode")
 	a.launcher = &clientLaunchRuntime{home: home, platform: "macos", resolve: func(string, string) (string, error) { return "/synthetic/client", nil }, terminal: func() (bool, string) { return true, "" }, start: func(clientLaunchPlan) error { return nil }}
 	return a
@@ -130,6 +131,14 @@ func launchPrepareFixture(t *testing.T, a *app, client string) {
 	case "opencode", "zed":
 		endpoint = "editors/" + client + "/profile"
 		body, _ = json.Marshal(exampleEditorSelection())
+	case "omp":
+		endpoint = "omp/profile"
+		editor := exampleEditorSelection()
+		selection := ompSelection{Initial: editor.Initial}
+		for _, model := range editor.Models {
+			selection.Models = append(selection.Models, ompModel{editorModel: model})
+		}
+		body, _ = json.Marshal(selection)
 	default:
 		s := claudeSelection{Models: []claudeModel{{ID: "vendor/test"}}, Initial: "vendor/test", Mode: "modern"}
 		endpoint = "claude/profile"

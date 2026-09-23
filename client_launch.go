@@ -38,7 +38,7 @@ type clientLaunchAvailability struct {
 	Reason    string `json:"reason"`
 }
 
-var launchClients = []string{"codex", "codex-cli", "claude", "opencode", "open-design", "zed", "cursor", "xcode-chat", "xcode-codex", "xcode-claude"}
+var launchClients = []string{"codex", "codex-cli", "claude", "opencode", "omp", "open-design", "zed", "cursor", "xcode-chat", "xcode-codex", "xcode-claude"}
 
 func launchClientIdentity(id string) (string, string) {
 	switch id {
@@ -50,6 +50,8 @@ func launchClientIdentity(id string) (string, string) {
 		return "Claude Code", "terminal"
 	case "opencode":
 		return "OpenCode", "terminal"
+	case "omp":
+		return "Oh My Pi", "terminal"
 	case "open-design":
 		return "Open Design", "desktop"
 	case "zed":

@@ -62,6 +62,17 @@ func resolveLaunchClient(id, custom string) (string, error) {
 		return resolveOpenDesignLaunchClient(runtime.GOOS, home, os.Getenv("LOCALAPPDATA"))
 	}
 	if kind == "terminal" {
+		if id == "omp" {
+			if path, err := exec.LookPath("omp"); err == nil && filepath.IsAbs(path) {
+				return path, nil
+			}
+			home, _ := os.UserHomeDir()
+			for _, path := range ompInstallationPaths(home, runtime.GOOS, os.Getenv("LOCALAPPDATA"), os.Getenv("PI_INSTALL_DIR")) {
+				if launchExecutable(path) {
+					return path, nil
+				}
+			}
+		}
 		command := id
 		if id == "codex-cli" {
 			command = "codex"
@@ -115,6 +126,21 @@ func resolveLaunchClient(id, custom string) (string, error) {
 		}
 	}
 	return "", missing
+}
+
+func ompInstallationPaths(home, platform, localAppData, installDir string) []string {
+	name := "omp"
+	if platform == "windows" {
+		name += ".exe"
+	}
+	var paths []string
+	if filepath.IsAbs(installDir) {
+		paths = append(paths, filepath.Join(installDir, name))
+	}
+	if platform == "windows" && filepath.IsAbs(localAppData) {
+		paths = append(paths, filepath.Join(localAppData, "omp", name))
+	}
+	return append(paths, filepath.Join(home, ".local", "bin", name), filepath.Join(home, ".bun", "bin", name))
 }
 
 func resolveOpenDesignLaunchClient(platform, home, localAppData string) (string, error) {

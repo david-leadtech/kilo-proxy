@@ -293,7 +293,7 @@ func (u *nativeUI) modelsPanel() layout.Widget {
 		widgets = append(widgets, u.pills(u.button("models.import.toggle", u.tr("Import an existing agent selection", "Importar la selección de un agente"), func() { u.expanded["library.import"] = !u.expanded["library.import"] })))
 		if u.expanded["library.import"] {
 			imports := []layout.Widget{u.note(u.tr("Choose which saved profile to import. You can review before replacing your shared models.", "Elige un perfil guardado para importar. Puedes revisarlo antes de sustituir los modelos compartidos."))}
-			for _, option := range []struct{ key, name string }{{"codex", "Codex Desktop"}, {"codex-cli", "Codex CLI"}, {"claude", "Claude Code"}, {"opencode", "OpenCode"}, {"zed", "Zed"}} {
+			for _, option := range []struct{ key, name string }{{"codex", "Codex Desktop"}, {"codex-cli", "Codex CLI"}, {"claude", "Claude Code"}, {"opencode", "OpenCode"}, {"omp", "Oh My Pi"}, {"zed", "Zed"}} {
 				key, name := option.key, option.name
 				imports = append(imports, u.button("models.import."+key, name, func() { u.importModelLibrary(key) }))
 			}

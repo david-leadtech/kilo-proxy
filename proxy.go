@@ -65,6 +65,7 @@ type app struct {
 	codexCLIProfileDir      string
 	xcodeTestRoot           string
 	claudeProfileDir        string
+	ompProfileDir           string
 	catalogRevision         uint64
 	modelStatsURL           string
 	modelStatsCache         modelStatsCache
@@ -87,6 +88,7 @@ type app struct {
 	transport               http.RoundTripper
 	proxyServer             *http.Server
 	proxyListener           net.Listener
+	listenProxy             func(string, string) (net.Listener, error)
 	started                 time.Time
 	requests                int
 	failures                int
@@ -385,7 +387,11 @@ func (a *app) startLocked() error {
 		return errMissingCredentials
 	}
 	host := net.JoinHostPort("127.0.0.1", strconv.Itoa(a.config.Port))
-	ln, err := net.Listen("tcp4", host)
+	listen := a.listenProxy
+	if listen == nil {
+		listen = net.Listen
+	}
+	ln, err := listen("tcp4", host)
 	if err != nil {
 		return err
 	}

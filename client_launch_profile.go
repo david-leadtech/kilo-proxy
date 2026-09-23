@@ -17,6 +17,9 @@ import (
 func (a *app) launchProfile(p *clientLaunchPlan, home string) error {
 	fail := profileLaunchError(p.Name)
 	id := p.Client
+	if id == "omp" {
+		return a.applyOMPLaunch(p)
+	}
 	if id == "open-design" {
 		return errors.New("Prepare the selected Open Design CLI engine before launching.")
 	}

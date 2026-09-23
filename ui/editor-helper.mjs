@@ -1,4 +1,5 @@
 import {validModelID,modelPriceDetails,filterModels,sortModels,configureModelSort,setModelSort,mergeModelSelection,filterModelLab,configureModelLab,setModelLab} from './model-helper.mjs';
+import {ompPayload,ompLaunch,ompConfig,ompEfforts} from './omp-helper.mjs';
 import {clientConfig} from './client-config.mjs';
 export function editorPayload(models,initial) {
  return {models:models.map(m=>({id:m.id,name:(m.displayName||m.name||m.id).slice(0,80),contextWindow:m.contextWindow==null?200000:Number(m.contextWindow),maxOutputTokens:m.maxOutputTokens==null?0:Number(m.maxOutputTokens)})),initial};
@@ -29,23 +30,25 @@ export function editorLaunch(path,model,shell='unix'){
  return `(\n  kilo_config=${quote(path)}\n  [ -f "$kilo_config" ] || { printf '%s\\n' 'Prepare OpenCode first.' >&2; exit 1; }\n  unset OPENCODE_CONFIG_CONTENT\n  OPENCODE_CONFIG="$kilo_config" opencode --model ${quote('kilo-local/'+model)}\n)`;
 }
 export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>{}}){
- const $=id=>document.getElementById(id),selections=Object.fromEntries(['opencode','zed'].map(id=>[id,{models:new Map(),initial:'',saved:null,path:''}]));
+ const $=id=>document.getElementById(id),selections=Object.fromEntries(['opencode','zed','omp'].map(id=>[id,{models:new Map(),initial:'',saved:null,path:'',profileDir:''}]));
  let ctx={client:'opencode',language:'en',catalog:[]},working=false,signature='',renderedClient='';
  const L=(en,es)=>ctx.language==='en'?en:es,s=()=>selections[ctx.client];
- const payload=()=>editorPayload([...s().models.values()],s().initial);
- const fingerprint=()=>JSON.stringify([ctx.client,payload(),ctx.state?.baseURL,ctx.state?.zedBaseURL,ctx.state?.localKey]);
+ const payload=()=>ctx.client==='omp'?ompPayload([...s().models.values()],s().initial):editorPayload([...s().models.values()],s().initial);
+ const endpoint=client=>client==='omp'?'omp/profile':'editors/'+client+'/profile';
+ const launch=()=>ctx.client==='omp'?ompLaunch(s().profileDir,s().initial,$('editor-shell').value):editorLaunch(s().path,s().initial,$('editor-shell').value);
+ const fingerprint=()=>JSON.stringify([ctx.client,payload(),ctx.state?.baseURL,ctx.state?.zedBaseURL,ctx.state?.localKey,ctx.client==='omp'?ctx.state?.imageGeneration:null]);
  const prepared=()=>s().saved===fingerprint();
  function controls(){
-  const zed=ctx.client==='zed',name=zed?'Zed':'OpenCode';
+  const zed=ctx.client==='zed',omp=ctx.client==='omp',name=zed?'Zed':omp?'Oh My Pi':'OpenCode';
   const labels={
    'editor-title':`${name} · `+L('select and prepare','selecciona y prepara'),
-   'editor-intro':zed?L('Save models and short names to Zed and configure its local key in the system credential store. Other providers and settings are retained.','Guarda modelos y nombres cortos en Zed y configura su clave local en el almacén de credenciales del sistema. Se conservan otros proveedores y ajustes.'):L('Prepare a dedicated OpenCode configuration with your models and local authentication.','Prepara una configuración propia de OpenCode con tus modelos y autenticación local.'),
+   'editor-intro':omp?L('Choose your Kilo models and open Oh My Pi in a dedicated profile. Friendly names, limits and reasoning preferences are saved together.','Elige tus modelos de Kilo y abre Oh My Pi en un perfil propio. Los nombres cortos, límites y preferencias de razonamiento se guardan juntos.'):zed?L('Save models and short names to Zed and configure its local key in the system credential store. Other providers and settings are retained.','Guarda modelos y nombres cortos en Zed y configura su clave local en el almacén de credenciales del sistema. Se conservan otros proveedores y ajustes.'):L('Prepare a dedicated OpenCode configuration with your models and local authentication.','Prepara una configuración propia de OpenCode con tus modelos y autenticación local.'),
    'editor-refresh':L('Refresh catalog','Actualizar catálogo'),'editor-load':L('Load saved selection','Cargar selección guardada'),'editor-save':working?L('Working…','Preparando…'):L('1. Prepare ','1. Preparar ')+name,
    'editor-add':L('Add model','Añadir modelo'),'editor-manual-title':L('Add by exact ID','Añadir por ID exacto'),'editor-selected-label':L('Selected only','Solo seleccionados'),
    'editor-copy':zed?L('Copy key for Zed (recovery)','Copiar clave para Zed (recuperación)'):L('Copy launch command (optional)','Copiar arranque (opcional)'),
    'editor-export':L('Copy configuration (optional)','Copiar configuración (opcional)'),
-   'editor-next':zed?L('Preparation saves the local key in the system credential store. Select a model in Zed’s Agent panel; existing projects stay open. Copy key is only for recovery in “agent: open settings” → kilo-local. Copying configuration alone does not save credentials. This configures Zed Agent, not edit prediction or external agents.','La preparación guarda la clave local en el almacén de credenciales del sistema. Elige modelo en el panel Agent de Zed; tus proyectos siguen abiertos. Copiar clave sirve solo para recuperarla en «agent: open settings» → kilo-local. Copiar solo la configuración no guarda las credenciales. Configura Zed Agent, no la predicción de código ni agentes externos.'):L('Open above to start a project terminal, or copy the optional command. Use /models to switch models. No /connect is needed: the protected profile stores only the local proxy key. Global and project settings still merge; project settings can override this profile.','Abre desde el botón superior para iniciar una terminal del proyecto, o copia el comando opcional. Cambia con /models. No hace falta /connect: el perfil protegido guarda solo la clave local del proxy. Se combinan los ajustes globales y del proyecto; los del proyecto pueden prevalecer.'),
-   'editor-limit-note':L('Uses Chat Completions. Model lists and saved settings do not verify generation or tool support. Context defaults to 200,000 for unknown models: review limits below. Changed files receive .bak backups.','Usa Chat Completions. La lista y los ajustes guardados no verifican generación ni herramientas. El contexto de modelos desconocidos se inicia en 200.000: revisa sus límites abajo. Los archivos modificados reciben copia .bak.')};
+   'editor-next':omp?L('Launch above to prepare ~/.omp-kilo and open a project terminal. No /login is needed. Use /model to switch models and thinking levels. Your regular Oh My Pi profile stays separate. The configured Kilo image tool is added when enabled.','Inicia desde el botón superior para preparar ~/.omp-kilo y abrir una terminal del proyecto. No hace falta /login. Usa /model para cambiar modelo y nivel de razonamiento. Tu perfil habitual de Oh My Pi queda separado. Se añade la herramienta de imágenes de Kilo cuando está activada.'):zed?L('Preparation saves the local key in the system credential store. Select a model in Zed’s Agent panel; existing projects stay open. Copy key is only for recovery in “agent: open settings” → kilo-local. Copying configuration alone does not save credentials. This configures Zed Agent, not edit prediction or external agents.','La preparación guarda la clave local en el almacén de credenciales del sistema. Elige modelo en el panel Agent de Zed; tus proyectos siguen abiertos. Copiar clave sirve solo para recuperarla en «agent: open settings» → kilo-local. Copiar solo la configuración no guarda las credenciales. Configura Zed Agent, no la predicción de código ni agentes externos.'):L('Open above to start a project terminal, or copy the optional command. Use /models to switch models. No /connect is needed: the protected profile stores only the local proxy key. Global and project settings still merge; project settings can override this profile.','Abre desde el botón superior para iniciar una terminal del proyecto, o copia el comando opcional. Cambia con /models. No hace falta /connect: el perfil protegido guarda solo la clave local del proxy. Se combinan los ajustes globales y del proyecto; los del proyecto pueden prevalecer.'),
+   'editor-limit-note':omp?L('Uses Responses over HTTP/SSE. Reasoning controls require declared model capabilities. Unknown limits default to 200,000 context and an 8,192 output cap: review them below. Modified files receive .bak backups.','Usa Responses por HTTP/SSE. Los controles de razonamiento requieren capacidades declaradas del modelo. Los límites desconocidos usan 200.000 de contexto y un máximo de 8.192 de salida: revísalos abajo. Los archivos modificados reciben copia .bak.'):L('Uses Chat Completions. Model lists and saved settings do not verify generation or tool support. Context defaults to 200,000 for unknown models: review limits below. Changed files receive .bak backups.','Usa Chat Completions. La lista y los ajustes guardados no verifican generación ni herramientas. El contexto de modelos desconocidos se inicia en 200.000: revisa sus límites abajo. Los archivos modificados reciben copia .bak.')};
   for(const [id,text]of Object.entries(labels))$(id).textContent=text;
   $('editor-search').placeholder=L('Search model, provider or saved name','Buscar modelo, proveedor o nombre guardado');
   $('editor-sort-label').textContent=L('Sort by','Ordenar por');
@@ -56,7 +59,7 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
   $('editor-copy').disabled=working||!prepared();$('editor-export').disabled=!s().models.size;
   $('editor-shell').hidden=zed;
   $('editor-status').textContent=prepared()?L('Configuration saved: ','Configuración guardada: ')+s().path:s().saved?L('Unsaved changes. Prepare this editor again.','Cambios sin guardar. Prepara este editor de nuevo.'):L('Select models and prepare the configuration.','Selecciona modelos y prepara la configuración.');
-  $('editor-preview').textContent=prepared()?(zed?L('Provider: kilo-local\nLocal key saved in the system credential store.','Proveedor: kilo-local\nClave local guardada en el almacén de credenciales del sistema.'):editorLaunch(s().path,s().initial,$('editor-shell').value)):'';
+  $('editor-preview').textContent=prepared()?(zed?L('Provider: kilo-local\nLocal key saved in the system credential store.','Proveedor: kilo-local\nClave local guardada en el almacén de credenciales del sistema.'):launch()):'';
   onChange();
  }
  function render(context,force=false){
@@ -68,6 +71,9 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
   const matches=sortModels(filterModels(filterModelLab([...all.values()],$('editor-lab').value),q,false).filter(m=>!only||selected.models.has(m.id)),$('editor-sort').value);
   const next=JSON.stringify([ctx.client,ctx.language,matches,payload(),working]);if(next===signature)return;
   if(!force&&renderedClient===ctx.client&&!working&&$('editor-picker').contains(document.activeElement)&&document.activeElement.matches('input[type=text],input[type=number]'))return;
+  // A background state refresh can render a changed name/reasoning preference
+  // before the next input gains focus. Keep the user's limit panels expanded.
+  const expandedLimits=renderedClient===ctx.client?new Set([...$('editor-picker').querySelectorAll('details[open]')].map(details=>details.dataset.editorLimits)):new Set();
   signature=next;renderedClient=ctx.client;
   const scroll=$('editor-picker').scrollTop;$('editor-picker').replaceChildren();
   for(const m of matches.slice(0,200)){
@@ -82,7 +88,13 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
     const name=document.createElement('input');name.type='text';name.value=value.name||value.id;name.maxLength=80;name.setAttribute('aria-label',L('Display name: ','Nombre visible: ')+m.id);name.dataset.editorName=m.id;name.disabled=working;
     name.addEventListener('input',()=>{value.name=name.value;title.textContent=name.value||m.id;controls()});row.append(name);
     const initial=document.createElement('button');initial.type='button';initial.className='codex-default-button';initial.textContent=selected.initial===m.id?L('★ Initial model','★ Modelo inicial'):L('Use on startup','Usar al iniciar');initial.setAttribute('aria-pressed',String(selected.initial===m.id));initial.dataset.editorInitial=m.id;initial.disabled=working;initial.addEventListener('click',()=>{selected.initial=m.id;render(ctx)});row.append(initial);
-    const limits=document.createElement('details'),summary=document.createElement('summary');summary.textContent=L('Context and output limits','Límites de contexto y salida');limits.append(summary);
+    if(ctx.client==='omp'){
+     const label=document.createElement('label'),effort=document.createElement('select');label.textContent=L('Reasoning','Razonamiento');effort.dataset.editorEffort=m.id;effort.setAttribute('aria-label',L('Reasoning: ','Razonamiento: ')+m.id);
+     const levels=ompEfforts(value),auto=document.createElement('option');auto.value='';auto.textContent=L('Automatic','Automático');effort.append(auto);
+     for(const level of levels){const option=document.createElement('option');option.value=level;option.textContent=level;effort.append(option)}
+     effort.value=levels.includes(value.effort)?value.effort:'';effort.disabled=working||!levels.length;effort.addEventListener('change',()=>{value.effort=effort.value;controls()});label.append(effort);row.append(label);
+    }
+    const limits=document.createElement('details'),summary=document.createElement('summary');limits.dataset.editorLimits=m.id;limits.open=expandedLimits.has(m.id);summary.textContent=L('Context and output limits','Límites de contexto y salida');limits.append(summary);
     for(const [field,title,fallback]of [['contextWindow',L('Context tokens','Tokens de contexto'),200000],['maxOutputTokens',L('Max output tokens (0 = unspecified)','Salida máxima (0 = sin especificar)'),0]]){
      const l=document.createElement('label'),input=document.createElement('input');l.textContent=title;input.type='number';input.min=field==='contextWindow'?'1024':'0';input.max='100000000';input.value=value[field]||fallback;input.setAttribute('aria-label',title+': '+m.id);input.disabled=working;input.addEventListener('input',()=>{value[field]=Number(input.value);controls()});l.append(input);limits.append(l)
     }row.append(limits);entry.append(row)
@@ -100,14 +112,14 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
  async function prepare(){
   if(working)throw new Error(L('This editor is already being prepared.','Este editor ya se está preparando.'));
   const client=ctx.client,selection=s(),fp=fingerprint(),body=payload();working=true;render(ctx);
-  try{const result=await api('editors/'+client+'/profile',body);selection.path=result.configPath;selection.saved=fp;notify(()=>L('Editor configuration saved.','Configuración del editor guardada.'))}finally{working=false;render(ctx)}
+  try{const result=await api(endpoint(client),body);selection.path=result.configPath;selection.profileDir=result.profileDir;selection.saved=fp;notify(()=>L('Editor configuration saved.','Configuración del editor guardada.'))}finally{working=false;render(ctx)}
  }
  $('editor-save').addEventListener('click',()=>prepare().catch(e=>notify(e.message,true)));
  $('editor-load').addEventListener('click',async()=>{
   const client=ctx.client,selection=s();working=true;render(ctx);
-  try{const result=await api('editors/'+client+'/profile');selection.models=new Map(result.selection.models.map(m=>[m.id,m]));selection.initial=result.selection.initial;selection.path=result.configPath;selection.saved=null;$('editor-selected').checked=true;$('editor-search').value='';notify(()=>L('Selection loaded. Prepare again to apply current connection settings.','Selección cargada. Prepara de nuevo para aplicar la conexión actual.'))}catch(e){notify(e.message,true)}finally{working=false;render(ctx)}
+  try{const result=await api(endpoint(client));selection.models=new Map(result.selection.models.map(m=>[m.id,m]));selection.initial=result.selection.initial;selection.path=result.configPath;selection.profileDir=result.profileDir;selection.saved=null;$('editor-selected').checked=true;$('editor-search').value='';notify(()=>L('Selection loaded. Prepare again to apply current connection settings.','Selección cargada. Prepara de nuevo para aplicar la conexión actual.'))}catch(e){notify(e.message,true)}finally{working=false;render(ctx)}
  });
- $('editor-copy').addEventListener('click',()=>prepared()&&copy(ctx.client==='zed'?ctx.state.localKey:editorLaunch(s().path,s().initial,$('editor-shell').value)));
- $('editor-export').addEventListener('click',()=>copy(clientConfig({client:ctx.client,language:ctx.language,baseURL:ctx.state?.baseURL,zedBaseURL:ctx.state?.zedBaseURL,key:ctx.state?.localKey,model:s().initial,selectedModels:payload().models})));
+ $('editor-copy').addEventListener('click',()=>prepared()&&copy(ctx.client==='zed'?ctx.state.localKey:launch()));
+ $('editor-export').addEventListener('click',()=>copy((ctx.client==='omp'?ompConfig:clientConfig)({client:ctx.client,language:ctx.language,baseURL:ctx.state?.baseURL,zedBaseURL:ctx.state?.zedBaseURL,key:ctx.state?.localKey,model:s().initial,selectedModels:payload().models})));
  return {render,launchState:()=>({id:ctx.client,count:s().models.size,ready:prepared(),fingerprint:fingerprint(),working,prepare})};
 }

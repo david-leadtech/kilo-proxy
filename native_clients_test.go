@@ -24,7 +24,7 @@ func nativeClientModelsForTest() []modelInfo {
 
 func TestNativeClientProfileSelectionIsolationAndValidation(t *testing.T) {
 	c := nativeClients{}
-	for _, key := range []string{"codex", "codex-cli", "claude", "opencode", "zed", "cursor", "xcode-chat", "xcode-codex", "xcode-claude"} {
+	for _, key := range []string{"codex", "codex-cli", "claude", "opencode", "omp", "zed", "cursor", "xcode-chat", "xcode-codex", "xcode-claude"} {
 		s := c.selection(key)
 		for _, m := range nativeClientModelsForTest() {
 			if err := s.add(m, 50); err != nil {
@@ -61,7 +61,7 @@ func TestNativeClientProfileSelectionIsolationAndValidation(t *testing.T) {
 }
 
 func TestNativeClientsPayloadAndLoadRoundTrips(t *testing.T) {
-	for _, key := range []string{"codex", "codex-cli", "claude", "opencode", "zed", "xcode-chat", "xcode-codex", "xcode-claude"} {
+	for _, key := range []string{"codex", "codex-cli", "claude", "opencode", "omp", "zed", "xcode-chat", "xcode-codex", "xcode-claude"} {
 		t.Run(key, func(t *testing.T) {
 			s := (&nativeClients{}).selection(key)
 			for _, m := range nativeClientModelsForTest() {
@@ -82,7 +82,7 @@ func TestNativeClientsPayloadAndLoadRoundTrips(t *testing.T) {
 				t.Fatal(err)
 			}
 			var response any = payload
-			if key == "opencode" || key == "zed" {
+			if key == "opencode" || key == "zed" || key == "omp" {
 				response = map[string]any{"selection": payload, "configPath": "temporary-profile"}
 			}
 			if key == "xcode-codex" {
@@ -105,7 +105,7 @@ func TestNativeClientsPayloadAndLoadRoundTrips(t *testing.T) {
 					t.Fatal("reasoning default lost")
 				}
 			}
-			if key == "opencode" || key == "zed" {
+			if key == "opencode" || key == "zed" || key == "omp" {
 				m := loaded.choice("vendor/one")
 				if m.Model.ContextWindow != 64000 || m.Model.MaxOutputTokens != 4000 {
 					t.Fatal("limits lost")
@@ -153,7 +153,7 @@ func TestNativeClientsFilteringAndDirtyState(t *testing.T) {
 // These invoke Gio's real programmatic Clickable action, then the production
 // asynchronous authenticated API. File effects happen only in the fixture root.
 func TestNativeClientsWidgetActionsPrepareEveryEditor(t *testing.T) {
-	for _, key := range []string{"codex", "codex-cli", "claude", "opencode", "zed", "xcode-chat", "xcode-codex", "xcode-claude"} {
+	for _, key := range []string{"codex", "codex-cli", "claude", "opencode", "omp", "zed", "xcode-chat", "xcode-codex", "xcode-claude"} {
 		t.Run(key, func(t *testing.T) {
 			u := nativeTestUI(t)
 			u.page = "models"
@@ -217,7 +217,7 @@ func TestNativeClientsWidgetActionsPrepareEveryEditor(t *testing.T) {
 				if !strings.Contains(string(config), "kilo-local") {
 					t.Fatal("native prepare did not configure provider")
 				}
-			} else if key == "opencode" || key == "zed" {
+			} else if key == "opencode" || key == "zed" || key == "omp" {
 				data, err := os.ReadFile(s.Path)
 				if err != nil {
 					t.Fatal(err)
@@ -225,7 +225,7 @@ func TestNativeClientsWidgetActionsPrepareEveryEditor(t *testing.T) {
 				if !strings.Contains(string(data), "Short Native") {
 					t.Fatal("native label did not reach editor settings")
 				}
-				if strings.Contains(string(data), "kl_local_") != (key == "opencode") {
+				if strings.Contains(string(data), "kl_local_") != (key == "opencode" || key == "omp") {
 					t.Fatal("incorrect editor credential storage")
 				}
 			} else if key == "xcode-chat" {
@@ -275,7 +275,7 @@ func TestNativeClientsExportMasksPreviewsAndCopiesRealLocalKey(t *testing.T) {
 	if copied != full {
 		t.Fatal("native Copy complete configuration did not use actual local credential")
 	}
-	for _, key := range []string{"codex", "codex-cli", "claude", "opencode", "zed"} {
+	for _, key := range []string{"codex", "codex-cli", "claude", "opencode", "omp", "zed"} {
 		if nativeClientEndpoint(key) == "" {
 			t.Fatal("missing route")
 		}
@@ -344,7 +344,7 @@ func TestNativeClientsManualModelsAreSharedAcrossAgents(t *testing.T) {
 	if len(s.Models) != 2 || s.Initial != "vendor/one" {
 		t.Fatal("adding another shared model discarded a choice or replaced the initial model")
 	}
-	for _, key := range []string{"generic", "codex-cli", "claude", "opencode"} {
+	for _, key := range []string{"generic", "codex-cli", "claude", "opencode", "omp"} {
 		u.page, u.client = "clients", key
 		nativeTestFrame(t, u)
 		if selected := u.sharedClientSelection(key); !reflect.DeepEqual(selected.ids(), s.ids()) || selected.Initial != s.Initial {

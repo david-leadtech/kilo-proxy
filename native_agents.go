@@ -176,6 +176,8 @@ func (u *nativeUI) agentCompatibility(key string) string {
 		return u.tr("Uses Anthropic Messages. Applies only reasoning levels supported by each model and installed Claude Code version. Gateway support is also required.", "Usa Anthropic Messages. Aplica solo niveles de razonamiento compatibles con cada modelo y la versión de Claude Code. También requiere compatibilidad del gateway.")
 	case "opencode":
 		return u.tr("Uses Chat Completions with shared names and default model; reasoning stays automatic. Opens a terminal in your project. Local OpenCode settings can override this profile.", "Usa Chat Completions con nombres y modelo inicial compartidos; el razonamiento sigue automático. Abre una terminal en tu proyecto. Los ajustes de OpenCode pueden prevalecer.")
+	case "omp":
+		return u.tr("Uses Responses with your shared models in an isolated Oh My Pi profile. Opens a terminal in your project; choose another model with /model. Reasoning follows each model's supported levels.", "Usa Responses con tus modelos compartidos en un perfil separado de Oh My Pi. Abre una terminal en tu proyecto; cambia de modelo con /model. El razonamiento sigue los niveles compatibles de cada modelo.")
 	case "zed":
 		return u.tr("Uses Chat Completions with shared names and default model; reasoning stays automatic. Open Zed saves the local key in the system credential store and updates its models.", "Usa Chat Completions con nombres y modelo inicial compartidos; el razonamiento sigue automático. Abrir Zed guarda la clave local en el almacén de credenciales del sistema y actualiza sus modelos.")
 	case "open-design":
@@ -251,7 +253,7 @@ func (u *nativeUI) agentOptions(key string) layout.Widget {
 		widgets = append(widgets, u.field("clients-launch-app-path", u.tr("Codex application path (optional)", "Ruta de la aplicación Codex (opcional)"), c.LaunchInfo.Clients[key].Path, false))
 		widgets = append(widgets, u.disabled(a.FolderBusy == "", u.button("agent:codex:locate-options", u.tr("Locate Codex", "Localizar Codex"), u.locateCodexApplication)))
 	}
-	if key == "codex-cli" || key == "claude" {
+	if terminalClientSupported(key) {
 		widgets = append(widgets, u.button("agent:"+key+":terminal-commands", u.tr("Terminal commands in Settings", "Comandos de terminal en Ajustes"), func() { u.page = "settings" }))
 	}
 	widgets = append(widgets, u.pills(u.button("agent:"+key+":setup", u.tr("Integration settings", "Ajustes de integración"), func() { u.agentSetup(key) }), u.button("agent:"+key+":detect", u.tr("Refresh detection", "Actualizar detección"), func() {
@@ -265,7 +267,7 @@ func (u *nativeUI) agentOptions(key string) layout.Widget {
 		if reason := c.LaunchInfo.Clients[key].Reason; reason != "" {
 			widgets = append(widgets, u.note(reason))
 		}
-		url := map[string]string{"codex": "https://openai.com/codex/", "codex-cli": "https://developers.openai.com/codex/cli/", "claude": "https://code.claude.com/docs/en/overview", "opencode": "https://opencode.ai/", "zed": "https://zed.dev/download", "cursor": "https://cursor.com/download"}[key]
+		url := map[string]string{"codex": "https://openai.com/codex/", "codex-cli": "https://developers.openai.com/codex/cli/", "claude": "https://code.claude.com/docs/en/overview", "opencode": "https://opencode.ai/", "omp": "https://omp.sh/", "zed": "https://zed.dev/download", "cursor": "https://cursor.com/download"}[key]
 		if url != "" {
 			widgets = append(widgets, u.button("agent:"+key+":install", u.tr("Installation instructions", "Instrucciones de instalación"), func() { u.open(url) }))
 		}
@@ -371,7 +373,7 @@ func (u *nativeUI) agentsPanel() layout.Widget {
 	if !c.OpenDesignDetectStarted {
 		u.detectOpenDesign()
 	}
-	widgets := []layout.Widget{u.agentModelSummary(), u.agentCard("codex", true), u.topRow(u.agentCard("claude", false), u.agentCard("opencode", false)), u.topRow(u.agentCard("codex-cli", false), u.agentCard("zed", false)), u.topRow(u.agentCard("open-design", false), u.agentCard("cursor", false))}
+	widgets := []layout.Widget{u.agentModelSummary(), u.agentCard("codex", true), u.topRow(u.agentCard("claude", false), u.agentCard("opencode", false)), u.topRow(u.agentCard("omp", false), u.agentCard("codex-cli", false)), u.topRow(u.agentCard("zed", false), u.agentCard("open-design", false)), u.agentCard("cursor", false)}
 	if a.Error != "" {
 		widgets = append([]layout.Widget{u.note(a.Error)}, widgets...)
 	}

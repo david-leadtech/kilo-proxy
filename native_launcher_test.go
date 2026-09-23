@@ -135,7 +135,7 @@ func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nat
 }
 
 func TestNativeLaunchPreparesEveryClientAndKeepsCommandsSeparate(t *testing.T) {
-	for _, key := range []string{"codex", "codex-cli", "claude", "opencode", "zed", "xcode-chat", "xcode-codex", "xcode-claude"} {
+	for _, key := range []string{"codex", "codex-cli", "claude", "opencode", "omp", "zed", "xcode-chat", "xcode-codex", "xcode-claude"} {
 		t.Run(key, func(t *testing.T) {
 			u, r := nativeLaunchTestUI(t, key, false, false)
 			u.setValue("clients-platform", "windows")

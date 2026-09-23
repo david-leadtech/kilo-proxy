@@ -7,6 +7,7 @@ require (
 	github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f
 	github.com/zalando/go-keyring v0.2.6
 	golang.org/x/image v0.26.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
