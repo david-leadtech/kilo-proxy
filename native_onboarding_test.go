@@ -226,12 +226,7 @@ func nativeOnboardingGatedUI(t *testing.T, path string) (*nativeUI, *atomic.Bool
 	a.config.Language, a.apiKey, a.config.OrgID = "en", "synthetic-kilo-personal-key", "e2e-team"
 	a.editorTestRoot, a.launcher = root, &clientLaunchRuntime{home: root}
 	a.desktop = &nativeRecordingBridge{}
-	port, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	a.config.Port = port.Addr().(*net.TCPAddr).Port
-	port.Close()
+	nativeReserveProxyPort(t, a)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/gateway/models" {
 			http.NotFound(w, r)
@@ -359,12 +354,21 @@ func TestNativeOnboardingRequiresSuccessfulModelSave(t *testing.T) {
 func TestNativeOnboardingFailedStartKeepsReadyStepAndVisibleError(t *testing.T) {
 	u := nativeTestUI(t)
 	nativeSeedSharedForTest(t, u, u.models[0])
-	u.beginSetup()
-	occupied, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", u.value("connection.port")))
+	occupied, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer occupied.Close()
+	// Use a separate occupied port; the fixture keeps its own socket reserved
+	// until first startup instead of exposing it to unrelated test listeners.
+	port := occupied.Addr().(*net.TCPAddr).Port
+	u.owner.mu.Lock()
+	u.owner.config.Port = port
+	u.owner.mu.Unlock()
+	u.setValue("connection.port", strconv.Itoa(port))
+	u.refreshState()
+	nativeTestWait(t, u, func() bool { return !u.busy["GET/api/state"] })
+	u.beginSetup()
 	u.finishSetup()
 	nativeTestWait(t, u, func() bool { return !u.busy["POST/api/start"] && u.notice != "" })
 	if u.page != "setup" || u.setupStep != setupReady || nativeBool(u.state, "running") {

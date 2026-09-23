@@ -64,12 +64,7 @@ func nativeTestUI(t *testing.T) *nativeUI {
 	a.apiKey = "synthetic-kilo-personal-key"
 	a.config.OrgID = "e2e-team"
 	a.desktop = &nativeRecordingBridge{}
-	port, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	a.config.Port = port.Addr().(*net.TCPAddr).Port
-	port.Close()
+	nativeReserveProxyPort(t, a)
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/gateway/models":
