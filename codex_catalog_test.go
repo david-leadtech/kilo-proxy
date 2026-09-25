@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 const testCatalog = `{"models":[{"slug":"anthropic/claude-fable-5.1","default_reasoning_level":"high","supported_reasoning_levels":[{"effort":"low"},{"effort":"high"}]}]}`
@@ -48,6 +50,36 @@ func TestCatalogSaveLoadAndBackup(t *testing.T) {
 	unchanged, _ := os.ReadFile(filepath.Join(a.codexProfileDir, "config.toml.bak"))
 	if !bytes.Equal(config, unchanged) {
 		t.Fatal("original config not backed up")
+	}
+}
+
+func TestCatalogSavesAndLoadsDesktopQueueMode(t *testing.T) {
+	a := testApp(t)
+	a.adminHost = "127.0.0.1:1234"
+	a.codexProfileDir = t.TempDir()
+	body := `{"catalog":` + testCatalog + `,"followUpQueueMode":"steer"}`
+	if w := catalogRequest(a, "POST", body, true); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	data, err := os.ReadFile(filepath.Join(a.codexProfileDir, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := toml.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	mode, _ := tomlAt(config, []string{"desktop", "followUpQueueMode"})
+	if mode != codexQueueModeSteer {
+		t.Fatal(mode, string(data))
+	}
+	w := catalogRequest(a, "GET", "", true)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"followUpQueueMode":"steer"`) {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	body = `{"catalog":` + testCatalog + `,"followUpQueueMode":"immediate"}`
+	if w := catalogRequest(a, "POST", body, true); w.Code != 409 {
+		t.Fatal(w.Code, w.Body.String())
 	}
 }
 func TestCatalogRejectsUnsafeWrites(t *testing.T) {

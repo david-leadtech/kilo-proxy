@@ -1,4 +1,7 @@
 export const translations = {
+"Mensajes durante una tarea":"Messages during a task",
+"Comportamiento de los mensajes enviados mientras Codex trabaja":"Behavior of messages sent while Codex is working",
+"Queue conserva los mensajes pendientes. Steer permite corregir o ampliar la tarea que se está ejecutando. Reinicia Codex después de preparar el perfil.":"Queue keeps messages pending. Steer lets you correct or extend the task currently running. Restart Codex after preparing the profile.",
 "Elige high, balanced o small para la compresión de imágenes.": "Choose high, balanced, or small for image compression.",
 "Elige off, compress o upload para las imágenes grandes.": "Choose off, compress, or upload for large images.",
 "No se pudo guardar la preferencia de imágenes. Revisa los permisos de la carpeta de configuración.": "Could not save the image preference. Check the configuration folder permissions.",

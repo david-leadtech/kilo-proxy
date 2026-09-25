@@ -11,6 +11,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 func nativeClientModelsForTest() []modelInfo {
@@ -20,6 +22,17 @@ func nativeClientModelsForTest() []modelInfo {
 		{ID: "vendor/one", Name: "Very Long First Model", ContextWindow: 64000, MaxOutputTokens: 4000, ReasoningEfforts: []string{"low", "high"}, Tools: &tools, OutputModalities: []string{"text"}, InputPrice: &one, OutputPrice: &two},
 		{ID: "anthropic/claude-sonnet-4.6", Name: "Claude Sonnet", ContextWindow: 128000, Tools: &tools, OutputModalities: []string{"text"}},
 	}
+}
+
+func nativeQueueModeFromTOML(t *testing.T, data []byte) (string, bool) {
+	t.Helper()
+	var config map[string]any
+	if err := toml.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	value, ok := tomlAt(config, []string{"desktop", "followUpQueueMode"})
+	mode, ok := value.(string)
+	return mode, ok
 }
 
 func TestNativeClientProfileSelectionIsolationAndValidation(t *testing.T) {
@@ -74,6 +87,9 @@ func TestNativeClientsPayloadAndLoadRoundTrips(t *testing.T) {
 			s.Models[0].DisplayName = "Short"
 			s.Models[0].DefaultReasoning = "high"
 			s.Mode = "modern"
+			if key == "codex" {
+				s.QueueMode = codexQueueModeSteer
+			}
 			if key == "claude" || key == "xcode-claude" {
 				s.Models[1].ClaudeEffort = "high"
 				s.Aliases["haiku"] = "vendor/one"
@@ -99,6 +115,9 @@ func TestNativeClientsPayloadAndLoadRoundTrips(t *testing.T) {
 			}
 			if loaded.Saved != "" {
 				t.Fatal("loaded profile incorrectly ready for current credentials")
+			}
+			if key == "codex" && loaded.QueueMode != codexQueueModeSteer {
+				t.Fatal("queue mode lost")
 			}
 			if strings.Contains(key, "codex") {
 				_, effort := nativeReasoningFor(*loaded.choice("vendor/one"))
@@ -141,6 +160,11 @@ func TestNativeClientsFilteringAndDirtyState(t *testing.T) {
 		t.Fatal("unknown pricing misrepresented")
 	}
 	before := nativeSelectionFingerprint("codex", s, "local", "key", claudeCapabilities{})
+	s.QueueMode = codexQueueModeSteer
+	if nativeSelectionFingerprint("codex", s, "local", "key", claudeCapabilities{}) == before {
+		t.Fatal("queue mode did not mark selection dirty")
+	}
+	before = nativeSelectionFingerprint("codex", s, "local", "key", claudeCapabilities{})
 	s.Models[0].DefaultReasoning = "high"
 	if nativeSelectionFingerprint("codex", s, "local", "key", claudeCapabilities{}) == before {
 		t.Fatal("reasoning did not mark selection dirty")
@@ -200,7 +224,27 @@ func TestNativeClientsWidgetActionsPrepareEveryEditor(t *testing.T) {
 			u.flushModelLibrary()
 			u.page = "clients"
 			nativeTestFrame(t, u)
+			if key == "codex" {
+				u.clickable("client:codex:queue-mode.toggle").Click()
+				nativeTestFrame(t, u)
+				u.clickable("client:codex:queue-mode.option.steer").Click()
+				nativeTestFrame(t, u)
+			}
 			s := u.sharedClientSelection(key)
+			u.syncClientSelection(key, s)
+			if key == "codex" || key == "codex-cli" {
+				exported, err := u.clientExport(key, s, false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				mode, hasMode := nativeQueueModeFromTOML(t, []byte(exported))
+				if key == "codex" && (!hasMode || mode != codexQueueModeSteer) {
+					t.Fatalf("native desktop export lost its selected queue mode (selection %q, control %q)", s.QueueMode, u.value("client:codex:queue-mode"))
+				}
+				if key == "codex-cli" && hasMode {
+					t.Fatal("Codex CLI export included desktop queue mode")
+				}
+			}
 			u.clickable("client:" + key + ":prepare").Click()
 			nativeTestFrame(t, u)
 			nativeTestWait(t, u, func() bool { return s.Saved != "" })
@@ -221,6 +265,13 @@ func TestNativeClientsWidgetActionsPrepareEveryEditor(t *testing.T) {
 				}
 				if !strings.Contains(string(config), "kilo-local") {
 					t.Fatal("native prepare did not configure provider")
+				}
+				mode, hasMode := nativeQueueModeFromTOML(t, config)
+				if key == "codex" && (!hasMode || mode != codexQueueModeSteer) {
+					t.Fatal("native prepare did not save the selected queue mode")
+				}
+				if key != "codex" && hasMode {
+					t.Fatal("non-desktop Codex profile included the queue mode")
 				}
 			} else if key == "opencode" || key == "zed" || key == "omp" {
 				data, err := os.ReadFile(s.Path)

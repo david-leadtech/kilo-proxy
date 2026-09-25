@@ -94,6 +94,10 @@ func mergeCodexImages(data []byte, images imageGenerationSettings, port int) ([]
 // up, and restored on an ordinary write failure. As with profile preparation,
 // this is not a crash-atomic transaction across multiple files.
 func (a *app) saveCodexImageProfile(dir string, catalog []byte, draft *imageGenerationSettings) (bool, bool, error) {
+	return a.saveCodexProfileSettings(dir, catalog, draft, nil)
+}
+
+func (a *app) saveCodexProfileSettings(dir string, catalog []byte, draft *imageGenerationSettings, queueMode *string) (bool, bool, error) {
 	images := a.config.ImageGeneration
 	if draft != nil {
 		images = *draft
@@ -122,7 +126,14 @@ func (a *app) saveCodexImageProfile(dir string, catalog []byte, draft *imageGene
 		}
 		extra = append(extra, file)
 	}
-	configChanged, catalogChanged, err := saveCodexProfileOptions(dir, catalog, a.config.Port, "", &images, extra)
+	var transforms []func([]byte) ([]byte, error)
+	if queueMode != nil {
+		if !validCodexQueueMode(*queueMode) {
+			return false, false, errors.New("Queue mode must be queue or steer")
+		}
+		transforms = append(transforms, codexQueueModeTransform(*queueMode))
+	}
+	configChanged, catalogChanged, err := saveCodexProfileOptions(dir, catalog, a.config.Port, "", &images, extra, transforms...)
 	if err == nil {
 		a.config = cfg
 	}
