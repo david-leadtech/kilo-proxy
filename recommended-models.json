@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "models": [
+    {
+      "id": "openai/gpt-6-sol",
+      "note": { "en": "OpenAI's current flagship for everyday coding.", "es": "El modelo principal actual de OpenAI para programar a diario." }
+    },
+    {
+      "id": "openai/gpt-6-astra",
+      "note": { "en": "OpenAI's most capable model for the hardest tasks. Expensive.", "es": "El modelo más potente de OpenAI para las tareas más difíciles. Caro." }
+    },
+    {
+      "id": "openai/gpt-6-luna",
+      "note": { "en": "Fast and very cheap for quick edits and subagents.", "es": "Rápido y muy barato para cambios pequeños y subagentes." }
+    },
+    {
+      "id": "openai/gpt-5.6-luna",
+      "note": { "en": "Previous fast model, kept for stable workflows.", "es": "El modelo rápido anterior, para flujos que ya funcionan." }
+    },
+    {
+      "id": "anthropic/claude-sonnet-5",
+      "default": true,
+      "note": { "en": "Anthropic's most used model. Balanced quality and price.", "es": "El Anthropic más usado. Buen equilibrio entre calidad y precio." }
+    },
+    {
+      "id": "anthropic/claude-opus-5.5",
+      "note": { "en": "Anthropic's strongest model for complex changes.", "es": "El Anthropic más potente para cambios complejos." }
+    },
+    {
+      "id": "anthropic/claude-fable-5.1",
+      "note": { "en": "Anthropic's top tier for the hardest problems. Expensive.", "es": "La gama más alta de Anthropic para los problemas más duros. Caro." }
+    },
+    {
+      "id": "deepseek/deepseek-v4.1-flash",
+      "note": { "en": "Among the most used coding models on Kilo. Very cheap.", "es": "De los modelos de código más usados en Kilo. Muy barato." }
+    },
+    {
+      "id": "z-ai/glm-5.3",
+      "note": { "en": "Z.ai's full GLM model, popular for coding.", "es": "El GLM completo de Z.ai, muy usado para programar." }
+    },
+    {
+      "id": "z-ai/glm-5.3-flash",
+      "note": { "en": "Popular, fast and very cheap.", "es": "Popular, rápido y muy barato." }
+    },
+    {
+      "id": "moonshotai/kimi-k3",
+      "note": { "en": "Moonshot's latest Kimi model.", "es": "El Kimi más reciente de Moonshot." }
+    },
+    {
+      "id": "qwen/qwen3.8-max-0902",
+      "note": { "en": "Alibaba's reference Qwen model.", "es": "El Qwen de referencia de Alibaba." }
+    },
+    {
+      "id": "minimax/minimax-m3",
+      "note": { "en": "MiniMax's current model. Cheap.", "es": "El modelo actual de MiniMax. Barato." }
+    }
+  ]
+}
