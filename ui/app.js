@@ -43,7 +43,7 @@ if (token && /^[a-f0-9]{64}$/.test(token)) {
 let state, client = 'generic', busy = false, stopped = false, initialized = false, toastTimer, imageTransportPending = null;
 let lastAuthStatus, teamSignature = '';
 const clientModels = {};
-const codexClients = Object.fromEntries(['codex','codex-cli'].map(id=>[id,{models:new Map(),initial:'',setup:null,preparing:false,imageGeneration:null,imageGenerationBaseline:null}]));
+const codexClients = Object.fromEntries(['codex','codex-cli'].map(id=>[id,{models:new Map(),initial:'',setup:null,preparing:false,imageGeneration:null,imageGenerationBaseline:null,queueMode:'queue'}]));
 const isCodexClient = () => ['codex','codex-cli'].includes(client);
 const codexSelection = () => codexClients[client] || codexClients.codex;
 const cursorModels = new Map();
@@ -52,7 +52,7 @@ let claudeInstalled=claudeCapabilities(), claudeChecked=false, claudeSetup=null,
 let launchInfo=null,launchDetecting=false,launchDetected=false,launchBusy=false,launchMessage='',launchError=false,launchDirectoryEdited=false;
 let cursorSignature = '';
 let desktopSignature = '';
-function codexSetupSignature(selection=codexSelection()) { return JSON.stringify([state?.baseURL,contextPreview(()=>codexCatalog([...selection.models.values()],selection.initial)),selection.imageGeneration]); }
+function codexSetupSignature(selection=codexSelection()) { return JSON.stringify([state?.baseURL,contextPreview(()=>codexCatalog([...selection.models.values()],selection.initial)),selection.imageGeneration,client==='codex'?selection.queueMode:'']); }
 function renderCodexSetup() {
   const cli=client==='codex-cli', setup=codexSelection().setup;
   $('save-codex-catalog').disabled=codexSelection().preparing||!!contextError(codexSelection().models)||!imageGenerationValid(codexSelection().imageGeneration,catalog);
@@ -91,6 +91,11 @@ function renderCodexImages() {
   $('codex-image-billing').textContent=L("Uses your configured Kilo organization. Provider or gateway charges depend on its billing setup. Editing currently supports images created with this tool.",'Usa tu organización de Kilo configurada. Los cargos del proveedor o gateway dependen de su facturación. La edición admite por ahora imágenes creadas con esta herramienta.');
   $('codex-image-save-help').textContent=L('Saved with Prepare or Launch. This setting is shared by Codex GUI and CLI. Restart Codex after preparing to load the tool.','Se guarda al Preparar o Abrir. El ajuste se comparte entre Codex GUI y CLI. Reinicia Codex después de preparar para cargar la herramienta.');
 }
+function renderCodexQueueMode() {
+  const desktop=client==='codex',selection=codexSelection();
+  $('codex-queue-mode-settings').hidden=!desktop;
+  if(desktop)$('codex-queue-mode').value=selection.queueMode==='steer'?'steer':'queue';
+}
 function acceptCodexImageSettings(saved) {
   if(!saved)return;
   for(const selection of Object.values(codexClients)){
@@ -105,6 +110,7 @@ $('codex-image-model').addEventListener('change',()=>{
   const selection=codexSelection();selection.imageGeneration={...(selection.imageGeneration||{enabled:false}),model:$('codex-image-model').value};renderSnippet();
 });
 $('codex-image-refresh').addEventListener('click',()=>{void loadModels();});
+$('codex-queue-mode').addEventListener('change',()=>{codexSelection().queueMode=$('codex-queue-mode').value==='steer'?'steer':'queue';renderSnippet();});
 function effectiveModel() { if(multiClients[client]?.models.size)return multiClients[client].initial; return isCodexClient() ? codexSelection().initial : $('model').value.trim(); }
 let catalog = [], catalogRevision, catalogLoading = false, catalogError = '', catalogFetchedAt = '', catalogRequest = 0;
 const descriptions = {
@@ -151,7 +157,7 @@ function snippet(reveal = false) {
   if (!state || !validModelID(effectiveModel())) return t('Selecciona un modelo para generar la configuración.');
   const model = effectiveModel();
   const key = reveal ? state.localKey : 'kl_local_••••••••••••••••';
-  const config=clientConfig({client,language,selectedModels:[...(multiClients[client]?.models.values() || [])],aliases:multiClients[client]?.aliases,catalogPath:isCodexClient() && codexSelection().models.size ? 'models.json' : '',baseURL:state.baseURL,zedBaseURL:state.zedBaseURL,key,model,contextWindow:Math.max(1024, Number($('context-window').value) || 200000)});
+  const config=clientConfig({client,language,selectedModels:[...(multiClients[client]?.models.values() || [])],aliases:multiClients[client]?.aliases,catalogPath:isCodexClient() && codexSelection().models.size ? 'models.json' : '',baseURL:state.baseURL,zedBaseURL:state.zedBaseURL,key,model,queueMode:codexSelection().queueMode,contextWindow:Math.max(1024, Number($('context-window').value) || 200000)});
   return isCodexClient()?codexImageMCPConfig(config,codexSelection().imageGeneration,state.baseURL):config;
 }
 function launch(key) {
@@ -548,6 +554,7 @@ $('copy-cursor-models').addEventListener('click',()=>cursorModels.size && copy([
 function renderDesktopModels() {
   renderCodexSetup();
   renderCodexImages();
+  renderCodexQueueMode();
   const active=['codex','codex-cli','claude'].includes(client);
   $('codex-models').hidden=!isCodexClient();
   $('codex-bulk-controls').hidden=!active;
@@ -641,6 +648,7 @@ $('load-codex-catalog').addEventListener('click',async()=>{
     selection.imageGeneration=imageGenerationSelection(data.imageGeneration)??imageGenerationSelection(state?.imageGeneration);
     selection.imageGenerationBaseline=imageGenerationSelection(selection.imageGeneration);
     acceptCodexImageSettings(selection.imageGeneration);
+    if(target==='codex')selection.queueMode=data.followUpQueueMode==='steer'?'steer':'queue';
     for(const model of data.catalog.models){selection.models.set(model.slug,{...catalog.find(entry=>entry.id===model.slug),id:model.slug,name:catalog.find(entry=>entry.id===model.slug)?.name || model.slug,displayName:model.display_name || '',contextPreset:'custom',contextTokens:model.context_window,contextMaximum:catalog.find(entry=>entry.id===model.slug)?.contextWindow||0,contextWindow:model.context_window,inputModalities:model.input_modalities,reasoningLevels:(model.supported_reasoning_levels || []).map(r=>r.effort),defaultReasoning:model.default_reasoning_level});}
     selection.initial=selection.models.has(data.defaultModel) ? data.defaultModel : selection.models.keys().next().value || '';
     if(client===target){$('codex-selected-only').checked=true;$('model-search').value='';}
@@ -657,7 +665,7 @@ async function prepareCodex(){
   const signature=codexSetupSignature(selection);
   const imagesSent=imageGenerationSelection(selection.imageGeneration);
   try {
-    const result=await api(target+'/catalog',{catalog:codexCatalog([...selection.models.values()],selection.initial),...(imagesSent?{imageGeneration:imagesSent}:{})});
+    const result=await api(target+'/catalog',{catalog:codexCatalog([...selection.models.values()],selection.initial),...(imagesSent?{imageGeneration:imagesSent}:{}),...(target==='codex'?{followUpQueueMode:selection.queueMode==='steer'?'steer':'queue'}:{})});
     acceptCodexImageSettings(imagesSent);
     selection.setup={signature,path:result.profileDir};renderCodexSetup();toast(target==='codex-cli' ? 'Perfil de Codex CLI preparado' : 'Perfil de Codex GUI preparado');
   }catch(error){selection.setup=null;throw error;}

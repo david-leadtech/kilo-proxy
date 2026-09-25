@@ -11,6 +11,9 @@ test('Codex uses HTTP Responses and a distinct environment variable',()=>{
  assert.match(text,/wire_api = "responses"/);assert.match(text,/supports_websockets = false/);
  assert.match(text,/env_key = "KILO_LOCAL_API_KEY"/);assert.ok(!text.includes(base.key));
  assert.match(text,/requires_openai_auth = false/);
+ assert.match(text,/\[desktop\]\nfollowUpQueueMode = "queue"/);
+ assert.match(clientConfig({...base,client:'codex',queueMode:'steer'}),/followUpQueueMode = "steer"/);
+ assert.doesNotMatch(clientConfig({...base,client:'codex-cli'}),/followUpQueueMode/);
 });
 test('Claude SDK base URL does not double v1 and bearer uses local key',()=>{
  const result=JSON.parse(clientConfig({...base,client:'claude',model:'anthropic/claude-sonnet-4.5'}));

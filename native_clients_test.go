@@ -74,6 +74,9 @@ func TestNativeClientsPayloadAndLoadRoundTrips(t *testing.T) {
 			s.Models[0].DisplayName = "Short"
 			s.Models[0].DefaultReasoning = "high"
 			s.Mode = "modern"
+			if key == "codex" {
+				s.QueueMode = codexQueueModeSteer
+			}
 			if key == "claude" || key == "xcode-claude" {
 				s.Models[1].ClaudeEffort = "high"
 				s.Aliases["haiku"] = "vendor/one"
@@ -99,6 +102,9 @@ func TestNativeClientsPayloadAndLoadRoundTrips(t *testing.T) {
 			}
 			if loaded.Saved != "" {
 				t.Fatal("loaded profile incorrectly ready for current credentials")
+			}
+			if key == "codex" && loaded.QueueMode != codexQueueModeSteer {
+				t.Fatal("queue mode lost")
 			}
 			if strings.Contains(key, "codex") {
 				_, effort := nativeReasoningFor(*loaded.choice("vendor/one"))
@@ -141,6 +147,11 @@ func TestNativeClientsFilteringAndDirtyState(t *testing.T) {
 		t.Fatal("unknown pricing misrepresented")
 	}
 	before := nativeSelectionFingerprint("codex", s, "local", "key", claudeCapabilities{})
+	s.QueueMode = codexQueueModeSteer
+	if nativeSelectionFingerprint("codex", s, "local", "key", claudeCapabilities{}) == before {
+		t.Fatal("queue mode did not mark selection dirty")
+	}
+	before = nativeSelectionFingerprint("codex", s, "local", "key", claudeCapabilities{})
 	s.Models[0].DefaultReasoning = "high"
 	if nativeSelectionFingerprint("codex", s, "local", "key", claudeCapabilities{}) == before {
 		t.Fatal("reasoning did not mark selection dirty")

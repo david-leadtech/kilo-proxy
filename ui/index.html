@@ -121,6 +121,12 @@
 </section><section id="codex-models" class="model-details" hidden>
 <p>Cambia «Nombre en Codex» para usar etiquetas cortas como Sol, GLM o Fable. Deja el campo vacío para recuperar el nombre original. Guarda y reinicia Codex Kilo para aplicarlo.</p>
 <button id="load-codex-catalog" type="button" class="secondary-button">Cargar catálogo guardado</button>
+<section id="codex-queue-mode-settings" class="image-generation-panel" aria-labelledby="codex-queue-mode-title">
+<div class="image-generation-heading"><div><span class="image-generation-eyebrow">CODEX DESKTOP</span><h4 id="codex-queue-mode-title">Mensajes durante una tarea</h4></div></div>
+<label for="codex-queue-mode">Comportamiento de los mensajes enviados mientras Codex trabaja</label>
+<select id="codex-queue-mode"><option value="queue">Queue · esperar al siguiente turno</option><option value="steer">Steer · incorporarlos al turno actual</option></select>
+<p id="codex-queue-mode-help" class="field-help">Queue conserva los mensajes pendientes. Steer permite corregir o ampliar la tarea que se está ejecutando. Reinicia Codex después de preparar el perfil.</p>
+</section>
 <details id="codex-manual-entry"><summary>Añadir por ID</summary><label for="codex-manual-id">ID del modelo</label><div class="codex-manual-row"><input id="codex-manual-id" type="text" spellcheck="false" placeholder="proveedor/modelo"><button id="add-codex-model" type="button" class="secondary-button">Añadir</button></div></details>
 <section id="codex-image-generation" class="image-generation-panel" aria-labelledby="codex-image-title">
 <div class="image-generation-heading"><div><span id="codex-image-eyebrow" class="image-generation-eyebrow"></span><h4 id="codex-image-title"></h4></div><label class="image-generation-switch"><input id="codex-image-enabled" type="checkbox"><span id="codex-image-enable-label"></span></label></div>

@@ -51,7 +51,11 @@ func (a *app) codexCatalog(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, 409, "The saved catalog is invalid or exceeds 50 models.")
 			return
 		}
-		jsonResponse(w, 200, map[string]any{"catalog": json.RawMessage(data), "defaultModel": first, "imageGeneration": a.config.ImageGeneration})
+		response := map[string]any{"catalog": json.RawMessage(data), "defaultModel": first, "imageGeneration": a.config.ImageGeneration}
+		if profileName == ".codex-kilo-desktop" {
+			response["followUpQueueMode"] = codexQueueModeFromConfig(dir)
+		}
+		jsonResponse(w, 200, response)
 		return
 	}
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
@@ -61,6 +65,7 @@ func (a *app) codexCatalog(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Catalog         json.RawMessage          `json:"catalog"`
 		ImageGeneration *imageGenerationSettings `json:"imageGeneration,omitempty"`
+		QueueMode       *string                  `json:"followUpQueueMode,omitempty"`
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, catalogLimit))
 	decoder.DisallowUnknownFields()
@@ -72,7 +77,11 @@ func (a *app) codexCatalog(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, 400, "Invalid catalog: use 1–50 unique models and valid reasoning levels.")
 		return
 	}
-	configChanged, catalogChanged, err := a.saveCodexImageProfile(dir, input.Catalog, input.ImageGeneration)
+	if profileName != ".codex-kilo-desktop" && input.QueueMode != nil {
+		jsonError(w, 400, "Queue mode is available only for Codex Desktop.")
+		return
+	}
+	configChanged, catalogChanged, err := a.saveCodexProfileSettings(dir, input.Catalog, input.ImageGeneration, input.QueueMode)
 	if err != nil {
 		jsonError(w, 409, err.Error())
 		return

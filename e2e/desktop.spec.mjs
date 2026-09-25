@@ -65,6 +65,12 @@ test('Codex Desktop and CLI prepare independent profiles with names and reasonin
     const dir=gateway.profiles[client], original='# Keep my preferences\napproval_policy = "on-request"\n';
     await seed(dir,'config.toml',original);
     await page.locator('#tab-'+client).click();
+    if(client==='codex') {
+      await expect(page.locator('#codex-queue-mode-settings')).toBeVisible();
+      await page.locator('#codex-queue-mode').selectOption('steer');
+    } else {
+      await expect(page.locator('#codex-queue-mode-settings')).toBeHidden();
+    }
     await expect(model(page,first)).toBeVisible();
     await model(page,first).check();await model(page,second).check();
     await page.locator(`[data-focus="name:${first}"]`).fill(client==='codex'?'Short GUI':'Short CLI');
@@ -76,6 +82,8 @@ test('Codex Desktop and CLI prepare independent profiles with names and reasonin
     expect(config).toContain('approval_policy = "on-request"');
     expect(config).toMatch(/env_key"?\s*=\s*['"]KILO_LOCAL_API_KEY['"]/);
     expect(config).toContain(gateway.baseURL);
+    if(client==='codex')expect(config).toMatch(/followUpQueueMode"?\s*=\s*['"]steer['"]/);
+    else expect(config).not.toContain('followUpQueueMode');
     expect(await readFile(path.join(dir,'config.toml.bak'),'utf8')).toBe(original);
     const catalog=await readJSON(path.join(dir,'models.json'));
     expect(catalog.models).toHaveLength(2);
@@ -100,6 +108,7 @@ test('Codex Desktop and CLI prepare independent profiles with names and reasonin
     await page.locator('#clear-codex-models').click();
     await page.locator('#load-codex-catalog').click();
     await expect(page.locator(`[data-focus="name:${first}"]`)).toHaveValue(client==='codex'?'Short GUI':'Short CLI');
+    if(client==='codex')await expect(page.locator('#codex-queue-mode')).toHaveValue('steer');
   }
 });
 

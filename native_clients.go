@@ -39,6 +39,7 @@ type nativeClients struct {
 type nativeClientSelection struct {
 	ImageGeneration         *imageGenerationSettings `json:"imageGeneration,omitempty"`
 	imageGenerationBaseline *imageGenerationSettings
+	QueueMode               string `json:"followUpQueueMode,omitempty"`
 	Models                  []nativeModelChoice
 	Initial                 string
 	Aliases                 map[string]string
@@ -53,6 +54,9 @@ func (c *nativeClients) selection(key string) *nativeClientSelection {
 	}
 	if c.Selections[key] == nil {
 		c.Selections[key] = &nativeClientSelection{Aliases: map[string]string{}, Mode: "installed"}
+		if key == "codex" {
+			c.Selections[key].QueueMode = codexQueueModeQueue
+		}
 	}
 	return c.Selections[key]
 }
@@ -160,6 +164,13 @@ func nativeClientPayload(key string, s *nativeClientSelection) (any, error) {
 			if images.Enabled && !catalogID.MatchString(images.Model) && err == nil {
 				err = errors.New("Choose an image model before enabling image generation.")
 			}
+		}
+		if key == "codex" {
+			mode := s.QueueMode
+			if !validCodexQueueMode(mode) {
+				mode = codexQueueModeQueue
+			}
+			payload["followUpQueueMode"] = mode
 		}
 		return payload, err
 	}
@@ -369,6 +380,12 @@ func (u *nativeUI) syncClientSelection(key string, s *nativeClientSelection) {
 			s.Mode = "installed"
 		}
 	}
+	if key == "codex" {
+		s.QueueMode = u.value("client:codex:queue-mode")
+		if !validCodexQueueMode(s.QueueMode) {
+			s.QueueMode = codexQueueModeQueue
+		}
+	}
 	for _, alias := range []string{"sonnet", "opus", "haiku"} {
 		s.Aliases[alias] = u.value("client:" + key + ":alias:" + alias)
 	}
@@ -498,6 +515,18 @@ func (u *nativeUI) clientsPanel() layout.Widget {
 	widgets = append(widgets, u.actionRow(u.note(modelSummary), u.button("agents.models.edit", u.tr("Edit shared models", "Editar modelos compartidos"), func() { u.page = "models" })))
 	if key == "codex" || key == "codex-cli" {
 		widgets = append(widgets, u.button("agents.images.edit", u.tr("Image generation settings", "Ajustes de generación de imágenes"), func() { u.page = "models"; u.expanded["library.images"] = true }))
+	}
+	if key == "codex" {
+		if !validCodexQueueMode(s.QueueMode) {
+			s.QueueMode = codexQueueModeQueue
+		}
+		if u.value("client:codex:queue-mode") == "" {
+			u.setValue("client:codex:queue-mode", s.QueueMode)
+		}
+		widgets = append(widgets,
+			u.selectField("client:codex:queue-mode", u.tr("Messages sent while Codex is working", "Mensajes enviados mientras Codex trabaja"), []string{codexQueueModeQueue, codexQueueModeSteer}),
+			u.note(u.tr("queue waits for the next turn. steer adds the message to the task currently running. Restart Codex after preparing the profile.", "queue espera al siguiente turno. steer añade el mensaje a la tarea que se está ejecutando. Reinicia Codex después de preparar el perfil.")),
+		)
 	}
 	if key == "cursor" {
 		widgets = append(widgets, u.cursorClientPanel(s))
@@ -975,6 +1004,9 @@ func (u *nativeUI) loadClient(key string) {
 			return
 		}
 		u.clientState().Selections[key] = s
+		if key == "codex" {
+			u.setValue("client:codex:queue-mode", s.QueueMode)
+		}
 		if key == "codex" || key == "codex-cli" {
 			u.acceptClientImages(s.ImageGeneration)
 		}
@@ -1010,6 +1042,7 @@ func decodeNativeClientSelection(key string, data []byte, catalog []modelInfo) (
 		var envelope struct {
 			Catalog         json.RawMessage          `json:"catalog"`
 			ImageGeneration *imageGenerationSettings `json:"imageGeneration"`
+			QueueMode       string                   `json:"followUpQueueMode"`
 		}
 		if err := json.Unmarshal(data, &envelope); err != nil {
 			return nil, err
@@ -1018,6 +1051,12 @@ func decodeNativeClientSelection(key string, data []byte, catalog []modelInfo) (
 			images := *envelope.ImageGeneration
 			s.ImageGeneration = cloneClientImageSettings(&images)
 			s.imageGenerationBaseline = cloneClientImageSettings(&images)
+		}
+		if key == "codex" {
+			s.QueueMode = envelope.QueueMode
+			if !validCodexQueueMode(s.QueueMode) {
+				s.QueueMode = codexQueueModeQueue
+			}
 		}
 		if len(envelope.Catalog) > 0 {
 			data = envelope.Catalog
@@ -1156,6 +1195,13 @@ func (u *nativeUI) clientExport(key string, s *nativeClientSelection, reveal boo
 		data, err := mergeCodexConfig(nil, catalog, port)
 		if err == nil && s.ImageGeneration != nil {
 			data, err = mergeCodexImages(data, *s.ImageGeneration, port)
+		}
+		if err == nil && key == "codex" {
+			mode := s.QueueMode
+			if !validCodexQueueMode(mode) {
+				mode = codexQueueModeQueue
+			}
+			data, err = mergeCodexQueueMode(data, mode)
 		}
 		return string(data), err
 	}
