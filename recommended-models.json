@@ -11,7 +11,9 @@
     },
     {
       "id": "openai/gpt-6-luna",
-      "note": { "en": "Fast and very cheap for quick edits and subagents.", "es": "Rápido y muy barato para cambios pequeños y subagentes." }
+      "default": true,
+      "reasoning": "max",
+      "note": { "en": "Fast and very cheap. Starts at max reasoning.", "es": "Rápido y muy barato. Empieza con razonamiento máximo." }
     },
     {
       "id": "openai/gpt-5.6-luna",
@@ -19,7 +21,6 @@
     },
     {
       "id": "anthropic/claude-sonnet-5",
-      "default": true,
       "note": { "en": "Anthropic's most used model. Balanced quality and price.", "es": "El Anthropic más usado. Buen equilibrio entre calidad y precio." }
     },
     {
