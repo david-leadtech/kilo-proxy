@@ -54,6 +54,10 @@
     {
       "id": "minimax/minimax-m3",
       "note": { "en": "MiniMax's current model. Cheap.", "es": "El modelo actual de MiniMax. Barato." }
+    },
+    {
+      "id": "xiaomi/mimo-v2.6-pro",
+      "note": { "en": "Xiaomi's strongest MiMo model.", "es": "El MiMo más potente de Xiaomi." }
     }
   ]
 }
