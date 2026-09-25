@@ -67,6 +67,12 @@ test('Codex Desktop and CLI prepare independent profiles with names and reasonin
     await page.locator('#tab-'+client).click();
     if(client==='codex') {
       await expect(page.locator('#codex-queue-mode-settings')).toBeVisible();
+      await expect(page.locator('#codex-queue-mode option[value="queue"]')).toHaveText('Queue · wait for the next turn');
+      await expect(page.locator('#codex-queue-mode option[value="steer"]')).toHaveText('Steer · add them to the current turn');
+      await page.locator('#language').selectOption('es');
+      await expect(page.locator('#codex-queue-mode option[value="queue"]')).toHaveText('Queue · esperar al siguiente turno');
+      await expect(page.locator('#codex-queue-mode option[value="steer"]')).toHaveText('Steer · incorporarlos al turno actual');
+      await page.locator('#language').selectOption('en');
       await page.locator('#codex-queue-mode').selectOption('steer');
     } else {
       await expect(page.locator('#codex-queue-mode-settings')).toBeHidden();
@@ -106,7 +112,27 @@ test('Codex Desktop and CLI prepare independent profiles with names and reasonin
     await expect(page.locator(`[data-focus="default:${first}"]`)).toHaveAttribute('aria-pressed','true');
     expect(await readJSON(path.join(dir,'models.json'))).toEqual(catalog);
     await page.locator('#clear-codex-models').click();
-    await page.locator('#load-codex-catalog').click();
+    if(client==='codex') {
+      let release, requestStarted;
+      const waiting=new Promise(resolve=>release=resolve), started=new Promise(resolve=>requestStarted=resolve);
+      const endpoint='**/api/codex/catalog';
+      const handler=async route=>{
+        if(route.request().method()==='GET') { requestStarted(); await waiting; }
+        await route.continue();
+      };
+      await page.route(endpoint,handler);
+      const response=page.waitForResponse(item=>item.request().method()==='GET'&&item.url().includes('/api/codex/catalog'));
+      try {
+        await page.locator('#load-codex-catalog').click();
+        await started;
+        await page.locator('#tab-codex-cli').click();
+      } finally { release(); }
+      await response;
+      await page.unroute(endpoint,handler);
+      await page.locator('#tab-codex').click();
+    } else {
+      await page.locator('#load-codex-catalog').click();
+    }
     await expect(page.locator(`[data-focus="name:${first}"]`)).toHaveValue(client==='codex'?'Short GUI':'Short CLI');
     if(client==='codex')await expect(page.locator('#codex-queue-mode')).toHaveValue('steer');
   }

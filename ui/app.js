@@ -52,7 +52,7 @@ let claudeInstalled=claudeCapabilities(), claudeChecked=false, claudeSetup=null,
 let launchInfo=null,launchDetecting=false,launchDetected=false,launchBusy=false,launchMessage='',launchError=false,launchDirectoryEdited=false;
 let cursorSignature = '';
 let desktopSignature = '';
-function codexSetupSignature(selection=codexSelection()) { return JSON.stringify([state?.baseURL,contextPreview(()=>codexCatalog([...selection.models.values()],selection.initial)),selection.imageGeneration,client==='codex'?selection.queueMode:'']); }
+function codexSetupSignature(selection=codexSelection()) { return JSON.stringify([state?.baseURL,contextPreview(()=>codexCatalog([...selection.models.values()],selection.initial)),selection.imageGeneration,selection===codexClients.codex?selection.queueMode:'']); }
 function renderCodexSetup() {
   const cli=client==='codex-cli', setup=codexSelection().setup;
   $('save-codex-catalog').disabled=codexSelection().preparing||!!contextError(codexSelection().models)||!imageGenerationValid(codexSelection().imageGeneration,catalog);
@@ -92,9 +92,13 @@ function renderCodexImages() {
   $('codex-image-save-help').textContent=L('Saved with Prepare or Launch. This setting is shared by Codex GUI and CLI. Restart Codex after preparing to load the tool.','Se guarda al Preparar o Abrir. El ajuste se comparte entre Codex GUI y CLI. Reinicia Codex después de preparar para cargar la herramienta.');
 }
 function renderCodexQueueMode() {
-  const desktop=client==='codex',selection=codexSelection();
+  const L=(en,es)=>language==='en'?en:es,desktop=client==='codex',selection=codexSelection();
   $('codex-queue-mode-settings').hidden=!desktop;
-  if(desktop)$('codex-queue-mode').value=selection.queueMode==='steer'?'steer':'queue';
+  if(!desktop)return;
+  const select=$('codex-queue-mode');
+  select.querySelector('option[value="queue"]').textContent=L('Queue · wait for the next turn','Queue · esperar al siguiente turno');
+  select.querySelector('option[value="steer"]').textContent=L('Steer · add them to the current turn','Steer · incorporarlos al turno actual');
+  select.value=selection.queueMode==='steer'?'steer':'queue';
 }
 function acceptCodexImageSettings(saved) {
   if(!saved)return;

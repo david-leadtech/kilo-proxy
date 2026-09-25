@@ -531,7 +531,7 @@ func (u *nativeUI) clientsPanel() layout.Widget {
 			u.setValue("client:codex:queue-mode", s.QueueMode)
 		}
 		modelWidgets = append(modelWidgets,
-			u.selectField("client:codex:queue-mode", u.tr("Messages sent while Codex is working", "Mensajes enviados mientras Codex trabaja"), []string{codexQueueModeQueue, codexQueueModeSteer}),
+			u.selectField("client:codex:queue-mode", u.tr("Messages sent while Codex is working", "Mensajes enviados mientras Codex trabaja"), nativeChoices([]string{codexQueueModeQueue, codexQueueModeSteer})),
 			u.note(u.tr("queue waits for the next turn. steer adds the message to the task currently running. Restart Codex after preparing the profile.", "queue espera al siguiente turno. steer añade el mensaje a la tarea que se está ejecutando. Reinicia Codex después de preparar el perfil.")),
 		)
 	}
