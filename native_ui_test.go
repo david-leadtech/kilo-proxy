@@ -144,6 +144,11 @@ func TestNativeConnectionSaveStartStopAndEditPreservation(t *testing.T) {
 	u.setValue("connection.org", "e2e-team")
 	u.setValue("connection.key", "synthetic-kilo-personal-key")
 	nativeTestFrame(t, u)
+	u.clickable("connection.advanced").Click()
+	nativeTestFrame(t, u)
+	if !u.expanded["connection.advanced"] {
+		t.Fatal("advanced connection settings did not open")
+	}
 	u.clickable("connection.save-start").Click()
 	nativeTestFrame(t, u)
 	nativeTestWait(t, u, func() bool { return nativeBool(u.state, "running") })
@@ -169,11 +174,14 @@ func TestNativeConnectionSaveStartStopAndEditPreservation(t *testing.T) {
 	if !strings.Contains(u.notice, "1024") || nativeBool(u.state, "running") {
 		t.Fatal("invalid port was not rejected")
 	}
+	u.clickable("connection.forget").Click()
+	nativeTestFrame(t, u)
+	nativeTestWait(t, u, func() bool { return !u.busy["POST/api/forget"] && !nativeBool(u.state, "hasKey") })
 }
 func TestNativeLanguageClipboardTeamsAndLoginCancel(t *testing.T) {
 	u := nativeTestUI(t)
 	nativeTestFrame(t, u)
-	u.clickable("language").Click()
+	u.clickable("language.es").Click()
 	nativeTestFrame(t, u)
 	nativeTestWait(t, u, func() bool { return u.language == "es" && u.SmokeSnapshot()["language-saving"] == "false" })
 	saved, err := readSettings(u.owner.dir)
@@ -294,6 +302,31 @@ func TestNativeMoneyAndUnknownCache(t *testing.T) {
 	}
 	if nativeCacheRatio(usageSummary{}) != "—" {
 		t.Fatal("unknown cache shown as zero")
+	}
+}
+
+func TestNativeMoneyShort(t *testing.T) {
+	tests := []struct {
+		value string
+		want  string
+	}{
+		{"248.623145", "$248.62"},
+		{"9.995", "$10.00"},
+		{"99.999", "$100.00"},
+		{"1.234", "$1.23"},
+		{"1.235", "$1.24"},
+		{"0.01", "$0.01"},
+		{"0.0099", "<$0.01"},
+		{"0.000000", "$0"},
+		{"-1.235", "$-1.24"},
+		{"", "-"},
+		{"not-money", "-"},
+		{"1e3", "-"},
+	}
+	for _, tc := range tests {
+		if got := nativeMoneyShort(tc.value); got != tc.want {
+			t.Errorf("nativeMoneyShort(%q) = %q, want %q", tc.value, got, tc.want)
+		}
 	}
 }
 

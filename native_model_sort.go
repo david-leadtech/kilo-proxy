@@ -9,6 +9,7 @@ import (
 	gioevent "gioui.org/io/event"
 	"gioui.org/io/key"
 	"gioui.org/io/pointer"
+	"gioui.org/io/semantic"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -40,10 +41,45 @@ func (u *nativeUI) modelSortButton(gtx layout.Context) layout.Dimensions {
 	return u.modelMenu(gtx, "models.sort", modelSortOrder(u.value("models.sort")), options, false)
 }
 
+func (u *nativeUI) modelSearchField(id, placeholder string) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		e := u.editor(id)
+		e.SingleLine, e.ReadOnly = true, false
+		border, width, background := nativeBorderStrong, nativeLine, nativeSurface
+		if gtx.Focused(e) {
+			border, width = nativeInk, nativeLineHeavy
+		}
+		if !gtx.Enabled() {
+			background = nativeSurfaceAlt
+		}
+		return nativeBox(gtx, background, func(gtx layout.Context) layout.Dimensions {
+			return widget.Border{Color: border, Width: width}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min.X = gtx.Constraints.Max.X
+				gtx.Constraints.Min.Y = max(gtx.Constraints.Min.Y, gtx.Dp(36))
+				return layout.Inset{Top: 8, Bottom: 8, Left: 10, Right: 10}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							gtx.Constraints.Min = image.Pt(gtx.Dp(16), gtx.Dp(16))
+							return nativeIconSearch.Layout(gtx, nativeTextMuted)
+						}),
+						layout.Rigid(layout.Spacer{Width: 8}.Layout),
+						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+							semantic.LabelOp(placeholder).Add(gtx.Ops)
+							style := material.Editor(u.theme, e, placeholder)
+							style.Color, style.HintColor, style.TextSize = nativeText, nativeTextSubtle, 14
+							return style.Layout(gtx)
+						}),
+					)
+				})
+			})
+		})
+	}
+}
+
 func (u *nativeUI) modelPickerToolbar(prefix string, selection *nativeClientSelection) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		search := u.field(prefix+"search", u.tr("Search models or saved names", "Buscar modelos o nombres guardados"), "provider/model", false)
-		refresh := u.button(prefix+"refresh", u.tr("Refresh catalog", "Actualizar catálogo"), u.refreshModels)
+		search := u.modelSearchField(prefix+"search", u.tr("Search models", "Buscar modelos"))
+		refresh := u.iconButton(prefix+"refresh", u.tr("Refresh catalog", "Actualizar catálogo"), nativeButtonGhost, nativeIconRefresh, u.refreshModels)
 		labs := func(gtx layout.Context) layout.Dimensions {
 			models := append([]modelInfo(nil), u.models...)
 			for _, choice := range selection.Models {
@@ -57,10 +93,17 @@ func (u *nativeUI) modelPickerToolbar(prefix string, selection *nativeClientSele
 			}
 			return u.modelMenu(gtx, "models.lab", current, modelLabOptions(models, u.language), true)
 		}
-		if gtx.Constraints.Max.X < gtx.Dp(900) {
-			return u.column(u.actionRow(search, refresh), u.pills(labs, u.modelSortButton))(gtx)
+		filters := u.pills(
+			u.check(prefix+"selected", u.tr("Selected only", "Solo seleccionados"), func(bool) {}),
+			u.check(prefix+"coding", u.tr("Text models with tools only", "Solo texto con herramientas"), func(bool) {}),
+			labs,
+			u.modelSortButton,
+			u.disclosure(prefix+"advanced", u.tr("Advanced options", "Opciones avanzadas")),
+		)
+		if u.catalogCached {
+			return u.column(u.actionRow(search), u.actionRow(u.message(nativeToneInfo, u.tr("Using the saved catalog. Refresh to check current prices and availability.", "Usando el catálogo guardado. Actualiza para comprobar precios y disponibilidad.")), refresh), filters)(gtx)
 		}
-		return u.actionRow(search, labs, u.modelSortButton, refresh)(gtx)
+		return u.column(u.actionRow(search, refresh), filters)(gtx)
 	}
 }
 
@@ -109,7 +152,7 @@ func (u *nativeUI) modelMenu(gtx layout.Context, id, current string, options []m
 		}
 	}
 	drawing := op.Record(gtx.Ops)
-	dims := u.button(id+".toggle", label+"  ▾", func() {
+	dims := u.dropdownButton(id+".toggle", label, func() {
 		open := !u.expanded[id]
 		u.expanded["models.sort"], u.expanded["models.lab"] = false, false
 		u.expanded[id] = open
@@ -121,8 +164,6 @@ func (u *nativeUI) modelMenu(gtx layout.Context, id, current string, options []m
 			if len(history) > 0 {
 				u.modelMenuAnchors[id] = u.modelMenuPress.Sub(history[len(history)-1].Position)
 			} else if _, ok := u.modelMenuAnchors[id]; !ok {
-				// Keyboard/programmatic activation without a preceding pointer press
-				// still gets a bounded popup; later pointer activation records the anchor.
 				u.modelMenuAnchors[id] = image.Pt(u.modelMenuViewport.X/2, u.modelMenuViewport.Y/3)
 			}
 		}
@@ -185,17 +226,13 @@ func (u *nativeUI) layoutActiveModelMenu(gtx layout.Context) {
 		}),
 		layout.Stacked(func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min.X = gtx.Constraints.Max.X
-			return nativeSurface(gtx, nativeColor(0xffffff), 9, func(gtx layout.Context) layout.Dimensions {
-				return widget.Border{Color: nativeColor(0xc6d0ba), Width: 1, CornerRadius: 9}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return nativeBox(gtx, nativeSurface, func(gtx layout.Context) layout.Dimensions {
+				return widget.Border{Color: nativeInk, Width: nativeLine}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return layout.UniformInset(6).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 						gtx.Constraints.Min.X = gtx.Constraints.Max.X
 						return material.List(u.theme, u.list(menu.id+".options")).Layout(gtx, len(menu.options), func(gtx layout.Context, index int) layout.Dimensions {
 							option := menu.options[index]
-							label := option.Label
-							if option.Value == menu.current {
-								label = "● " + label
-							}
-							return layout.Inset{Bottom: 6}.Layout(gtx, u.button(menu.id+".option."+option.Value, label, func() {
+							return layout.Inset{Bottom: 6}.Layout(gtx, u.menuItem(menu.id+".option."+option.Value, option.Label, option.Value == menu.current, func() {
 								u.setValue(menu.id, option.Value)
 								u.expanded[menu.id] = false
 							}))

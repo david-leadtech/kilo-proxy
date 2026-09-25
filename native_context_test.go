@@ -153,13 +153,26 @@ func TestNativeContextPresetControlsFitAndPointerApply(t *testing.T) {
 				nativeSeedSharedForTest(t, u, u.models...)
 				h := &nativePointerHarness{t: t, u: u, size: size, now: time.Now()}
 				h.frame()
-				for _, label := range []string{"● " + u.contextPresetLabel(contextPresetRecommended), u.contextPresetLabel(contextPresetLow), u.contextPresetLabel(contextPresetMaximum), u.contextPresetLabel(contextPresetCustom)} {
+				if !h.selected(u.contextPresetLabel(contextPresetRecommended), semantic.Button) {
+					t.Fatal("recommended context preset is not semantically selected")
+				}
+				for _, preset := range []string{contextPresetRecommended, contextPresetLow} {
+					tokens := contextRecommendedTokens
+					if preset == contextPresetLow {
+						tokens = contextLowTokens
+					}
+					h.target(u.contextPresetCaption(preset, tokens), semantic.Button)
+				}
+				for _, label := range []string{u.contextPresetLabel(contextPresetRecommended), u.contextPresetLabel(contextPresetLow), u.contextPresetLabel(contextPresetMaximum), u.contextPresetLabel(contextPresetCustom)} {
 					bounds := h.target(label, semantic.Button).Desc.Bounds
 					if !bounds.In(image.Rectangle{Max: size}) {
 						t.Fatalf("preset falls outside viewport: %s %v", label, bounds)
 					}
 				}
 				h.click(u.contextPresetLabel(contextPresetLow), semantic.Button)
+				if !h.selected(u.contextPresetLabel(contextPresetLow), semantic.Button) {
+					t.Fatal("Low context preset is not semantically selected")
+				}
 				u.flushModelLibrary()
 				if nativeSavedLibraryItem(t, u.owner.modelLibrary.snapshot().Library, "openai/large").ContextPreset != contextPresetLow {
 					t.Fatal("pointer action did not persist Low")
@@ -182,8 +195,8 @@ func TestNativeContextBulkCustomDraftAndMaximumPersistPolicies(t *testing.T) {
 	u.setValue("models.context.tokens", "unfinished")
 	u.clickable("models.context.apply").Click()
 	nativeTestFrame(t, u)
-	if !reflect.DeepEqual(before, u.modelLibraryValue()) || !strings.Contains(u.notice, "whole numbers") {
-		t.Fatal("incomplete bulk draft modified the saved model choices")
+	if !reflect.DeepEqual(before, u.modelLibraryValue()) || u.sharedContextDraftError(u.value("models.context.tokens")) == "" {
+		t.Fatal("invalid bulk token draft was accepted or changed the saved model choices")
 	}
 	u.setValue("models.context.tokens", "400000")
 	u.clickable("models.context.apply").Click()
@@ -212,5 +225,24 @@ func TestNativeContextBulkCustomDraftAndMaximumPersistPolicies(t *testing.T) {
 	large, err := contextPolicyForChoice(*u.library.selection.choice("openai/large"))
 	if err != nil || large.ContextWindow != 272000 {
 		t.Fatalf("Recommended did not reduce the previous Maximum budget: %#v %v", large, err)
+	}
+}
+
+func TestNativeModelReasoningOptionsTranslateKnownValues(t *testing.T) {
+	values := []string{"", "automatic", "low", "medium", "high", "minimal", "none", "xhigh", "experimental"}
+	wants := map[string][]string{
+		"en": {"Automatic", "Automatic", "Low", "Medium", "High", "Minimal", "None", "Extra high", "experimental"},
+		"es": {"Automático", "Automático", "Bajo", "Medio", "Alto", "Mínimo", "Ninguno", "Muy alto", "experimental"},
+	}
+	for language, labels := range wants {
+		choices := nativeModelReasoningChoices(&nativeUI{language: language}, values)
+		if len(choices) != len(values) {
+			t.Fatalf("%s: got %d choices, want %d", language, len(choices), len(values))
+		}
+		for i, choice := range choices {
+			if choice.Value != values[i] || choice.Label != labels[i] {
+				t.Errorf("%s option %q: got %+v, want value %q and label %q", language, values[i], choice, values[i], labels[i])
+			}
+		}
 	}
 }

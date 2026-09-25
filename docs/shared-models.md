@@ -11,14 +11,22 @@ The native app has one **Models** library for all agents. Add models once, set s
 
 Catalog sorting controls the discovery view. Library order is a separate saved preference. Changing either does not silently change your default model. The gateway ID stays exact: a short name is a display label, not a model substitution. Missing catalog entries retain their saved IDs and preferences; catalog availability does not prove protocol support or access to inference.
 
+## Recommended models
+
+Setup and **Models** show a short **Recommended models** list: frontier OpenAI and Anthropic models plus popular Chinese models. In setup it appears above the catalog on the models step and lists every recommended model without an inner scroll. In **Models** it replaces the empty-library card; once you have models it sits under the **Recommended models** disclosure. Tick individual cards or choose **Add all**. Adding recommendations to an empty library makes the model marked **Suggested default** your default; an existing default is never replaced. Change the default with **Use by default** on an added card, or in setup with the **Default model** menu, which lists every selected model, including ones picked from the full catalog.
+
+The list is [`recommended-models.json`](../recommended-models.json) in this repository. Kilo Proxy downloads it from `https://raw.githubusercontent.com/rosseca/kilo-proxy/main/recommended-models.json` when it loads the Kilo catalog, so editing the file on `main` updates installed apps without a release. The request sends no API key, organization header or cookies, uses a three-second timeout, does not follow redirects, and caches a valid list for one hour. If GitHub is unreachable or the file is invalid, the app uses the copy compiled into the binary. Custom gateways use only the compiled copy and make no GitHub request.
+
+The file only marks models by exact gateway ID; prices and availability always come from your team's Kilo catalog, and IDs your team cannot use are not shown. Format: `schemaVersion` 1, up to 50 `models` in display order, each with an `id`, optional `note` (`en`/`es`, 160 characters), optional `reasoning` (initial level, applied only when the catalog offers it for that model) and exactly one `"default": true`. `go test ./...` validates the committed file.
+
 ## Context window presets
 
 Choose a context preset in **Models** for the library, or override an individual model in its **Edit** controls:
 
 | Preset | Working context window |
 | --- | --- |
-| **Recommended · 272K** | Up to 272,000 tokens. The default for newly selected models. |
-| **Low · 128K** | Up to 128,000 tokens, with earlier compaction. |
+| **Recommended** (272K tokens) | Up to 272,000 tokens. The default for newly selected models. |
+| **Low** (128K tokens) | Up to 128,000 tokens, with earlier compaction. |
 | **Maximum** | The maximum published in the current or cached Kilo catalog. Unavailable when that maximum is unknown. |
 | **Custom** | Your chosen token count, bounded by the known model maximum. |
 

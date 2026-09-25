@@ -76,44 +76,79 @@ func (u *nativeUI) openDesignClientPanel(s *nativeClientSelection) layout.Widget
 		u.setValue("open-design-engine", "Codex CLI")
 	}
 	connectionReady := u.agentConnectionReady() && !u.setupConnectionNeeded() && !u.connectionWorking()
-	_, libraryReady := u.libraryStatus()
+	libraryStatus, libraryReady := u.libraryStatus()
 	_, validation := nativeClientPayload("open-design", s)
-	canLaunch := connectionReady && libraryReady && len(s.Models) > 0 && validation == nil && u.nativeLaunchAvailable("open-design") && u.openDesignEngineAvailable() && c.Launching == ""
+	appAvailable := u.nativeLaunchAvailable("open-design")
+	engine := u.openDesignEngine()
+	info := c.OpenDesign.Engines[engine]
+	engineAvailable := u.openDesignEngineAvailable()
+	canLaunch := connectionReady && libraryReady && len(s.Models) > 0 && validation == nil && appAvailable && engineAvailable && c.Launching == ""
+	appTone, appStatus := nativeToneInfo, u.tr("Checking installation…", "Comprobando instalación…")
+	if c.LaunchChecked {
+		if appAvailable {
+			appTone, appStatus = nativeToneSuccess, u.tr("Open Design installed", "Open Design instalado")
+		} else {
+			appTone, appStatus = nativeToneNeutral, u.tr("Open Design not found", "Open Design no encontrado")
+		}
+	}
+	engineTone, engineStatus := nativeToneInfo, u.tr("Checking CLI engine…", "Comprobando motor CLI…")
+	if c.OpenDesignChecked {
+		if info.Available {
+			engineTone, engineStatus = nativeToneSuccess, u.tr("CLI engine installed", "Motor CLI instalado")
+		} else {
+			engineTone, engineStatus = nativeToneWarning, u.tr("CLI engine not found", "Motor CLI no encontrado")
+		}
+	}
+	disabledReason := ""
+	switch {
+	case !c.LaunchChecked:
+		disabledReason = u.tr("Wait for Open Design installation detection to finish.", "Espera a que termine la detección de Open Design.")
+	case !appAvailable:
+		disabledReason = nativeMessage(c.LaunchInfo.Clients["open-design"].Reason, u.language)
+		if disabledReason == "" {
+			disabledReason = u.tr("Install Open Design, then refresh detection.", "Instala Open Design y actualiza la detección.")
+		}
+	case !connectionReady:
+		disabledReason = u.tr("Save your Kilo connection first.", "Guarda primero tu conexión de Kilo.")
+	case !libraryReady:
+		disabledReason = libraryStatus
+	case len(s.Models) == 0:
+		disabledReason = u.tr("Add at least one shared model before opening Open Design.", "Añade al menos un modelo compartido antes de abrir Open Design.")
+	case validation != nil:
+		disabledReason = nativeMessage(validation.Error(), u.language)
+	case !c.OpenDesignChecked:
+		disabledReason = u.tr("Wait for CLI engine detection to finish.", "Espera a que termine la detección del motor CLI.")
+	case !engineAvailable:
+		disabledReason = nativeMessage(info.Reason, u.language)
+		if disabledReason == "" {
+			disabledReason = u.tr("Install the selected CLI engine before opening Open Design.", "Instala el motor CLI seleccionado antes de abrir Open Design.")
+		}
+	case c.Launching != "":
+		disabledReason = u.tr("Wait for the current launch to finish.", "Espera a que termine el arranque actual.")
+	}
 	label := u.tr("Launch Open Design", "Abrir Open Design")
 	if c.Launching == "open-design" {
 		label = u.agentsState().Phase
 	}
-	engine := u.openDesignEngine()
-	info := c.OpenDesign.Engines[engine]
-	status := u.tr("Checking CLI installation…", "Comprobando instalación del CLI…")
-	if c.OpenDesignChecked {
-		status = u.tr("Installed · runs inside Open Design", "Instalado · se ejecuta dentro de Open Design")
-		if !info.Available {
-			status = info.Reason
-		}
+	launchWidgets := []layout.Widget{
+		u.selectField("open-design-engine", u.tr("CLI engine", "Motor CLI"), nativeChoices([]string{"Codex CLI", "Claude Code", "OpenCode"})),
+		u.pills(u.statusBadge(appTone, appStatus), u.statusBadge(engineTone, engineStatus)),
+		u.pills(
+			u.disabled(canLaunch, u.primaryButton("client:open-design:launch", label, func() { u.launchAgent("open-design") })),
+			u.iconButton("open-design:detect", u.tr("Refresh detection", "Actualizar detección"), nativeButtonGhost, nativeIconRefresh, func() { u.detectLaunchers(); u.detectOpenDesign() }),
+		),
 	}
-	widgets := []layout.Widget{
-		u.card(u.heading(u.tr("Choose the engine behind Open Design", "Elige el motor de Open Design")),
-			u.note(u.tr("Open Design provides the design workspace. Codex CLI, Claude Code or OpenCode does the work using your Kilo models and its file tools.", "Open Design pone el espacio de diseño. Codex CLI, Claude Code u OpenCode trabaja con tus modelos de Kilo y sus herramientas de archivos.")),
-			u.disabled(c.Launching == "", u.selectField("open-design-engine", u.tr("CLI engine", "Motor CLI"), []string{"Codex CLI", "Claude Code", "OpenCode"})),
-			u.note(status),
-			u.pills(u.disabled(canLaunch, u.button("client:open-design:launch", label, func() { u.launchAgent("open-design") })), u.button("open-design:detect", u.tr("Refresh detection", "Actualizar detección"), func() { u.detectLaunchers(); u.detectOpenDesign() })),
-			u.note(u.tr("Launch prepares a private Kilo profile, starts the proxy, then opens Open Design. No key or command to copy.", "Abrir prepara un perfil Kilo privado, arranca el proxy y abre Open Design. No hay que copiar claves ni comandos."))),
-		u.card(u.heading(u.tr("Your models, ready for the CLI", "Tus modelos, listos para el CLI")), u.label(u.sharedModelSummary()),
-			u.note(u.tr("Open Design's CLI default model uses the CLI profile's shared default. Its own picker depends on the selected engine; you can also enter an exact model ID there.", "El modelo CLI default de Open Design usa el predeterminado del perfil CLI. Su selector depende del motor elegido; también puedes introducir allí un ID exacto.")),
-			u.note(u.tr("The engine applies the reasoning settings it supports. Open Design may supply its own reasoning choice. Separate image or media providers remain Open Design settings.", "El motor aplica el razonamiento que admite. Open Design puede enviar su propio nivel. Los proveedores de imágenes o multimedia se configuran aparte en Open Design."))),
-		u.card(u.heading(u.tr("An Open Design workspace for Kilo", "Un espacio de Open Design para Kilo")),
-			u.note(u.tr("This opens a separate Kilo workspace and keeps your ordinary Open Design setup intact. Complete Open Design's welcome flow if shown. Use Models & providers → Local CLI if you changed its mode to API providers.", "Se abre un espacio Kilo separado y se conserva tu configuración habitual de Open Design. Completa su bienvenida si aparece. Usa Models & providers → Local CLI si cambiaste el modo a API providers.")),
-			u.note(u.tr("Quit the Open Design Kilo instance before applying a different engine, model library or connection. Update the installed Open Design app normally; this managed workspace does not run its own updater.", "Sal de la instancia Open Design Kilo antes de aplicar otro motor, biblioteca o conexión. Actualiza la aplicación Open Design instalada de forma habitual; este espacio gestionado no ejecuta su propio actualizador."))),
-	}
-	if !connectionReady {
-		widgets = append([]layout.Widget{u.actionRow(u.note(u.tr("Save your Kilo connection first.", "Guarda primero tu conexión de Kilo.")), u.button("open-design:connect", u.tr("Connect Kilo", "Conectar Kilo"), u.beginSetup))}, widgets...)
+	if disabledReason != "" {
+		launchWidgets = append(launchWidgets, u.hint(disabledReason))
 	}
 	if c.LaunchError != "" {
-		widgets = append([]layout.Widget{u.note(c.LaunchError)}, widgets...)
+		launchWidgets = append(launchWidgets, u.message(nativeToneError, c.LaunchError))
 	}
-	if c.LaunchChecked && !u.nativeLaunchAvailable("open-design") {
-		widgets = append([]layout.Widget{u.actionRow(u.note(c.LaunchInfo.Clients["open-design"].Reason), u.button("open-design:install", u.tr("Get Open Design", "Obtener Open Design"), func() { u.open(u.openDesignInstallURL()) }))}, widgets...)
+	if !connectionReady {
+		launchWidgets = append(launchWidgets, u.pills(u.button("open-design:connect", u.tr("Connect Kilo", "Conectar Kilo"), u.beginSetup)))
+	}
+	if c.LaunchChecked && !appAvailable {
+		launchWidgets = append(launchWidgets, u.pills(u.iconButton("open-design:install", u.tr("Get Open Design", "Obtener Open Design"), nativeButtonGhost, nativeIconOpenInNew, func() { u.open(u.openDesignInstallURL()) })))
 	}
 	if c.OpenDesignChecked && !info.Available {
 		url := "https://developers.openai.com/codex/cli/"
@@ -123,7 +158,18 @@ func (u *nativeUI) openDesignClientPanel(s *nativeClientSelection) layout.Widget
 		if engine == "opencode" {
 			url = "https://opencode.ai/"
 		}
-		widgets = append(widgets, u.button("open-design:install-engine", u.tr("Install CLI engine", "Instalar motor CLI"), func() { u.open(url) }))
+		launchWidgets = append(launchWidgets, u.pills(u.iconButton("open-design:install-engine", u.tr("Install CLI engine", "Instalar motor CLI"), nativeButtonGhost, nativeIconOpenInNew, func() { u.open(url) })))
 	}
-	return u.column(widgets...)
+	advancedWidgets := []layout.Widget{
+		u.disclosure("open-design:about", u.tr("How this works", "Cómo funciona")),
+	}
+	if u.expanded["open-design:about"] {
+		advancedWidgets = append(advancedWidgets,
+			u.note(u.tr("The managed Kilo workspace keeps your ordinary Open Design setup separate. Complete its welcome flow if shown; choose Models & providers → Local CLI if you use local CLI mode.", "El espacio Kilo gestionado mantiene aparte tu configuración habitual de Open Design. Completa la bienvenida si aparece; elige Models & providers → Local CLI si usas el modo CLI local.")),
+			u.note(u.tr("The selected engine applies its supported reasoning levels; media providers remain Open Design settings. Quit the Kilo workspace before changing its engine, models or connection, and update the installed app normally.", "El motor seleccionado aplica los niveles de razonamiento que admite; los proveedores multimedia se configuran en Open Design. Cierra el espacio Kilo antes de cambiar el motor, los modelos o la conexión y actualiza la aplicación instalada de forma habitual.")),
+		)
+	}
+	launch := u.section(u.tr("Launch", "Arranque"), u.tr("Open a managed workspace using the selected CLI engine.", "Abre un espacio gestionado con el motor CLI seleccionado."), launchWidgets...)
+	advanced := u.section(u.tr("Advanced", "Avanzado"), u.tr("Learn about the managed Open Design workspace.", "Más información sobre el espacio Open Design gestionado."), advancedWidgets...)
+	return u.column(launch, advanced)
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"gioui.org/font"
 	"gioui.org/layout"
 )
 
@@ -30,6 +31,52 @@ func nativeMoney(value string) string {
 	}
 	return "$" + clean
 }
+
+func nativeMoneyShort(value string) string {
+	if !accountMoneyPattern.MatchString(value) {
+		return "-"
+	}
+	negative := strings.HasPrefix(value, "-")
+	if negative {
+		value = value[1:]
+	}
+	whole, fraction, _ := strings.Cut(value, ".")
+	whole = strings.TrimLeft(whole, "0")
+	if whole == "" {
+		whole = "0"
+	}
+	if whole == "0" && strings.Trim(fraction, "0") == "" {
+		return "$0"
+	}
+	cents := fraction
+	if len(cents) > 2 {
+		cents = cents[:2]
+	}
+	if whole == "0" && strings.Trim(cents, "0") == "" {
+		return "<$0.01"
+	}
+	cents += strings.Repeat("0", 2-len(cents))
+	scaled := []byte(whole + cents)
+	if len(fraction) > 2 && fraction[2] >= '5' {
+		carry := true
+		for i := len(scaled) - 1; i >= 0; i-- {
+			if scaled[i] == '9' {
+				scaled[i] = '0'
+				continue
+			}
+			scaled[i]++
+			carry = false
+			break
+		}
+		if carry {
+			scaled = append([]byte{'1'}, scaled...)
+		}
+	}
+	if negative {
+		scaled = append([]byte{'-'}, scaled...)
+	}
+	return "$" + string(scaled[:len(scaled)-2]) + "." + string(scaled[len(scaled)-2:])
+}
 func nativeCount(n int64) string {
 	raw := fmt.Sprint(n)
 	for i := len(raw) - 3; i > 0; i -= 3 {
@@ -42,6 +89,34 @@ func nativeReportedCount(value, reported, requests int64) string {
 		return "—"
 	}
 	return nativeCount(value)
+}
+
+func nativeReportedMoneyShort(value string, reported int64) string {
+	if reported == 0 {
+		return "—"
+	}
+	short := nativeMoneyShort(value)
+	if short == "-" {
+		return "—"
+	}
+	return short
+}
+
+func (u *nativeUI) activityMetricTile(label, value, caption string) layout.Widget {
+	valueColor := nativeText
+	if value == "—" {
+		valueColor = nativeTextDisabled
+	}
+	return func(gtx layout.Context) layout.Dimensions {
+		width := gtx.Constraints.Min.X
+		return nativeBox(gtx, nativeSurfaceAlt, func(gtx layout.Context) layout.Dimensions {
+			// Stack children start with a zero minimum; fill the grid cell so tiles in a row share one width.
+			gtx.Constraints.Min.X = width
+			return layout.UniformInset(12).Layout(gtx, u.column(
+				u.eyebrow(label), u.textStyle(28, value, valueColor, font.Medium), u.note(caption),
+			))
+		})
+	}
 }
 func nativeCacheRatio(s usageSummary) string {
 	if s.CacheRatioRequests == 0 || s.CacheRatioInput <= 0 {
@@ -104,12 +179,39 @@ func (u *nativeUI) activityPanel() layout.Widget {
 	var events []event
 	nativeDecode(u.state["events"], &events)
 	total := usage.Total
-	costLabel, cost := u.reportedSpend(total)
-	panels := []layout.Widget{
-		u.accountUsagePanel(),
-		u.card(u.topRow(u.metric(costLabel, cost, u.coverage(total)), u.metric(u.tr("Requests", "Peticiones"), fmt.Sprintf("%.0f", nativeNumber(u.state, "requests")), fmt.Sprintf(u.tr("%.0f active · %.0f errors", "%.0f activas · %.0f errores"), nativeNumber(u.state, "active"), nativeNumber(u.state, "failures"))), u.metric(u.tr("Tokens", "Tokens"), nativeReportedCount(total.Input+total.Output, total.WithTokens, total.Requests), fmt.Sprintf(u.tr("%s input · %s output", "%s entrada · %s salida"), nativeCount(total.Input), nativeCount(total.Output)))), u.note(u.responseStats(total)), u.note(u.inferenceCostNote())),
-		u.card(u.heading(u.tr("Cache reuse", "Reutilización de caché")), u.topRow(u.metric(u.tr("Read from cache", "Leído de caché"), nativeReportedCount(total.Cached, total.WithCacheRead, total.Requests), u.cacheCaption(total, true)), u.metric(u.tr("Written to cache", "Escrito en caché"), nativeReportedCount(total.CacheWrite, total.WithCacheWrite, total.Requests), u.cacheCaption(total, false)), u.metric(u.tr("Prompt reused", "Prompt reutilizado"), nativeCacheRatio(total), fmt.Sprintf(u.tr("Ratio available for %d requests", "Ratio disponible en %d peticiones"), total.CacheRatioRequests))), u.note(u.tr("Missing usage is not counted as zero. Totals cover this Kilo Proxy process and use values returned by the gateway.", "Los datos ausentes no se cuentan como cero. Los totales cubren este proceso de Kilo Proxy y usan los valores devueltos por el gateway."))),
+	costLabel, _ := u.reportedSpend(total)
+	costValue := nativeReportedMoneyShort(total.CostUSD, total.Priced)
+	costCaption := u.coverage(total)
+	if costValue != "—" {
+		costCaption = nativeMoney(total.CostUSD) + " · " + costCaption
 	}
+	costMetrics := []layout.Widget{
+		u.topRow(
+			u.activityMetricTile(costLabel, costValue, costCaption),
+			u.activityMetricTile(u.tr("Requests", "Peticiones"), fmt.Sprintf("%.0f", nativeNumber(u.state, "requests")), fmt.Sprintf(u.tr("%.0f active · %.0f errors", "%.0f activas · %.0f errores"), nativeNumber(u.state, "active"), nativeNumber(u.state, "failures"))),
+			u.activityMetricTile(u.tr("Tokens", "Tokens"), nativeReportedCount(total.Input+total.Output, total.WithTokens, total.Requests), fmt.Sprintf(u.tr("%s input · %s output", "%s entrada · %s salida"), nativeCount(total.Input), nativeCount(total.Output))),
+		),
+		u.note(u.responseStats(total)),
+		u.note(u.tr("Reported cost is not the same as Kilo charges.", "El coste informado no es lo mismo que los cargos de Kilo.")),
+		u.disclosure("activity.costs", u.tr("What's included", "Qué incluye")),
+	}
+	if u.expanded["activity.costs"] {
+		costMetrics = append(costMetrics, u.note(u.inferenceCostNote()))
+	}
+	cacheMetrics := []layout.Widget{
+		u.heading(u.tr("Cache reuse", "Reutilización de caché")),
+		u.topRow(
+			u.activityMetricTile(u.tr("Read from cache", "Leído de caché"), nativeReportedCount(total.Cached, total.WithCacheRead, total.Requests), u.cacheCaption(total, true)),
+			u.activityMetricTile(u.tr("Written to cache", "Escrito en caché"), nativeReportedCount(total.CacheWrite, total.WithCacheWrite, total.Requests), u.cacheCaption(total, false)),
+			u.activityMetricTile(u.tr("Prompt reused", "Prompt reutilizado"), nativeCacheRatio(total), fmt.Sprintf(u.tr("Ratio available for %d requests", "Ratio disponible en %d peticiones"), total.CacheRatioRequests)),
+		),
+		u.note(u.tr("Missing usage is not counted as zero.", "Los datos de uso ausentes no se cuentan como cero.")),
+		u.disclosure("activity.usage.about", u.tr("What's included", "Qué incluye")),
+	}
+	if u.expanded["activity.usage.about"] {
+		cacheMetrics = append(cacheMetrics, u.note(u.tr("Totals cover this Kilo Proxy process and use values returned by the gateway.", "Los totales cubren este proceso de Kilo Proxy y usan los valores devueltos por el gateway.")))
+	}
+	panels := []layout.Widget{u.accountUsagePanel(), u.card(costMetrics...), u.card(cacheMetrics...)}
 	sessions := []layout.Widget{u.heading(u.tr("Conversations", "Conversaciones")), u.note(u.tr("Grouped by client session headers. Requests without an identifier appear as unassigned.", "Agrupadas por cabeceras de sesión del cliente. Las peticiones sin identificador aparecen sin asignar."))}
 	if len(usage.Sessions) == 0 {
 		sessions = append(sessions, u.note(u.tr("Your first conversation will appear here.", "Tu primera conversación aparecerá aquí.")))
@@ -138,68 +240,101 @@ func (u *nativeUI) activityPanel() layout.Widget {
 	if !captureSaving {
 		u.setChecked("activity.capture", nativeBool(u.state, "captureEnabled"))
 	}
-	activity := []layout.Widget{u.heading(u.tr("Recent requests", "Peticiones recientes")), u.row(u.disabled(!captureSaving, u.check("activity.capture", u.tr("Capture request details", "Capturar detalles"), func(enabled bool) {
-		u.call("POST", "/api/activity/config", map[string]bool{"enabled": enabled}, func(json.RawMessage) {
-			u.state["captureEnabled"] = enabled
-			if !enabled {
+	activity := []layout.Widget{
+		u.actionRow(u.heading(u.tr("Recent requests", "Peticiones recientes")), u.pills(
+			u.disabled(!captureSaving, u.check("activity.capture", u.tr("Capture request details", "Capturar detalles"), func(enabled bool) {
+				u.call("POST", "/api/activity/config", map[string]bool{"enabled": enabled}, func(json.RawMessage) {
+					u.state["captureEnabled"] = enabled
+					if !enabled {
+						u.traceGeneration++
+						u.trace = nil
+						u.state["events"] = nil
+					}
+					u.refreshState()
+				})
+			})),
+			u.dangerButton("activity.clear", u.tr("Clear captures", "Borrar capturas"), func() {
 				u.traceGeneration++
-				u.trace = nil
-				u.state["events"] = nil
-			}
-			u.refreshState()
-		})
-	})), u.button("activity.clear", u.tr("Clear captures", "Borrar capturas"), func() {
-		u.traceGeneration++
-		u.call("POST", "/api/activity/clear", map[string]any{}, func(json.RawMessage) { u.trace = nil; u.refreshState() })
-	})), u.note(u.tr("Off by default. Enabling capture keeps the last 30 requests in memory, including message content and redacted headers. Your choice is saved. Turning it off erases captures immediately; cost and cache totals continue.", "Desactivado por defecto. Al activarlo se guardan las últimas 30 peticiones en memoria, con mensajes y cabeceras ocultando credenciales. La elección se guarda. Desactivarlo borra las capturas inmediatamente; los totales de coste y caché continúan."))}
+				u.call("POST", "/api/activity/clear", map[string]any{}, func(json.RawMessage) { u.trace = nil; u.refreshState() })
+			}),
+		)),
+		u.note(u.tr("Captures are off by default. Turning them off erases them; usage totals continue.", "Las capturas están desactivadas de forma predeterminada. Al desactivarlas se borran; los totales de uso continúan.")),
+		u.disclosure("activity.about", u.tr("What's included", "Qué incluye")),
+	}
+	if u.expanded["activity.about"] {
+		activity = append(activity, u.note(u.tr("Capture keeps up to 30 requests in memory, including message content and redacted headers. Your choice is saved. Turning capture off erases captured details immediately, while cost and cache totals continue.", "La captura guarda en memoria hasta 30 peticiones, incluido el contenido de los mensajes y las cabeceras con credenciales ocultas. Se guarda tu elección. Al desactivarla se borran de inmediato los detalles capturados, pero los totales de coste y caché continúan.")))
+	}
 	if len(events) == 0 {
 		if nativeBool(u.state, "captureEnabled") {
 			activity = append(activity, u.note(u.tr("Waiting for your first captured request…", "Esperando tu primera petición capturada…")))
 		} else {
-			activity = append(activity, u.note(u.tr("Request capture is off. Enable it only when you need to inspect requests for debugging.", "La captura está desactivada. Actívala cuando necesites inspeccionar peticiones para depurar.")))
-		}
-	}
-	for _, e := range events {
-		e := e
-		label := fmt.Sprintf("%s   %s %s   %d · %d ms", e.At, e.Method, e.Path, e.Status, e.Duration)
-		if e.Usage != nil && e.Usage.Model != "" {
-			label += " · " + e.Usage.Model
-		}
-		if e.HasDetails {
-			activity = append(activity, u.button("activity.event."+e.ID, label, func() {
-				u.traceGeneration++
-				generation := u.traceGeneration
-				u.call("GET", "/api/activity/"+e.ID, nil, func(raw json.RawMessage) { u.acceptTrace(generation, raw) })
-			}))
-		} else {
-			activity = append(activity, u.note(label+u.tr(" · No capture", " · Sin captura")))
-		}
-		if e.Usage != nil && e.Usage.CostUSD != nil {
-			cost := u.tr("Reported inference cost: ", "Coste de inferencia informado: ") + nativeMoney(*e.Usage.CostUSD)
-			if source := u.costSourceLabel(e.Usage.CostSource); source != "" {
-				cost += " · " + source
-			}
-			activity = append(activity, u.note(cost))
+			activity = append(activity, u.note(u.tr("Request capture is off. Enable it only when you need to inspect requests for debugging.", "La captura está desactivada. Actívala solo cuando necesites inspeccionar peticiones para depurar.")))
 		}
 	}
 	panels = append(panels, u.card(activity...))
+	for _, request := range events {
+		panels = append(panels, u.activityRequestRow(request))
+	}
 	if u.trace != nil {
 		panels = append(panels, u.tracePanel())
 	}
 	return u.column(panels...)
 }
+
+func (u *nativeUI) activityRequestRow(request event) layout.Widget {
+	tone := nativeToneError
+	if request.Status >= 200 && request.Status < 300 {
+		tone = nativeToneSuccess
+	}
+	model, tokens, cost := "—", "—", "—"
+	costSource := ""
+	if request.Usage != nil {
+		if request.Usage.Model != "" {
+			model = request.Usage.Model
+		}
+		input, output := "—", "—"
+		if request.Usage.Input != nil {
+			input = nativeCount(*request.Usage.Input)
+		}
+		if request.Usage.Output != nil {
+			output = nativeCount(*request.Usage.Output)
+		}
+		tokens = fmt.Sprintf(u.tr("%s input · %s output", "%s entrada · %s salida"), input, output)
+		if request.Usage.CostUSD != nil {
+			cost = nativeMoney(*request.Usage.CostUSD)
+			costSource = u.costSourceLabel(request.Usage.CostSource)
+		}
+	}
+	children := []layout.Widget{
+		u.topRow(
+			u.statusBadge(tone, fmt.Sprint(request.Status)),
+			u.subheading(model),
+			u.note(fmt.Sprintf("%s · %s %s · %d ms", request.At, request.Method, request.Path, request.Duration)),
+		),
+		u.topRow(u.note(tokens), u.note(u.tr("Reported cost: ", "Coste informado: ")+cost)),
+	}
+	if costSource != "" {
+		children = append(children, u.note(costSource))
+	}
+	if request.HasDetails {
+		children = append(children, u.ghostButton("activity.event."+request.ID, u.tr("Inspect request", "Inspeccionar petición"), func() {
+			u.traceGeneration++
+			generation := u.traceGeneration
+			u.call("GET", "/api/activity/"+request.ID, nil, func(raw json.RawMessage) { u.acceptTrace(generation, raw) })
+		}))
+	} else {
+		children = append(children, u.note(u.tr("No capture available", "No hay ninguna captura disponible")))
+	}
+	return u.card(children...)
+}
 func (u *nativeUI) tracePanel() layout.Widget {
 	trace := u.trace
-	stages := []struct{ id, en, es string }{{"request", "Client request", "Petición del cliente"}, {"upstreamRequest", "Gateway request", "Petición al gateway"}, {"upstreamResponse", "Gateway response", "Respuesta del gateway"}, {"response", "Client response", "Respuesta al cliente"}}
-	tabs := []layout.Widget{}
-	for _, s := range stages {
-		s := s
-		label := u.tr(s.en, s.es)
-		if u.traceStage == s.id {
-			label = "● " + label
-		}
-		tabs = append(tabs, u.button("activity.stage."+s.id, label, func() { u.traceStage = s.id }))
+	stages := []struct{ id, en, es string }{{"request", "Client request", "Petición del cliente"}, {"upstreamRequest", "Gateway request", "Petición al gateway"}, {"upstreamResponse", "Gateway response", "Respuesta al gateway"}, {"response", "Client response", "Respuesta al cliente"}}
+	stageChoices := make([]nativeChoice, 0, len(stages))
+	for _, stage := range stages {
+		stageChoices = append(stageChoices, nativeChoice{Value: stage.id, Label: u.tr(stage.en, stage.es)})
 	}
+	stageTabs := u.tabs("activity.stage.", stageChoices, u.traceStage, func(stage string) { u.traceStage = stage })
 	part := trace.Request
 	switch u.traceStage {
 	case "upstreamRequest":
@@ -210,9 +345,9 @@ func (u *nativeUI) tracePanel() layout.Widget {
 		part = trace.Response
 	}
 	headers, _ := json.MarshalIndent(part.Headers, "", "  ")
-	children := []layout.Widget{u.heading(u.tr("Request inspector", "Inspector de peticiones") + " · " + trace.ID), u.row(tabs...), u.check("activity.format", u.tr("Format JSON", "Formatear JSON"), nil)}
+	children := []layout.Widget{u.heading(u.tr("Request inspector", "Inspector de peticiones") + " · " + trace.ID), stageTabs, u.check("activity.format", u.tr("Format JSON", "Formatear JSON"), nil)}
 	if trace.Error != "" {
-		children = append(children, u.note(trace.Error))
+		children = append(children, u.message(nativeToneError, trace.Error))
 	}
 	if part.Truncated || part.HeadersTruncated {
 		children = append(children, u.note(u.tr("Capture truncated to the size limit. Byte count refers to the original stream.", "Captura truncada al límite de tamaño. El contador de bytes corresponde al flujo original.")))

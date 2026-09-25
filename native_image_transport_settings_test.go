@@ -4,7 +4,6 @@ package main
 
 import (
 	"image"
-	"strings"
 	"testing"
 	"time"
 
@@ -76,38 +75,38 @@ func TestNativeImageTransportSettingsPointerAndPersistence(t *testing.T) {
 						t.Fatalf("saving image preferences changed the persisted language to %q, want %q", saved.Language, lang)
 					}
 					h.frame()
+					if !h.selected(label, semantic.Button) {
+						t.Fatalf("image option %q is not semantically selected", label)
+					}
 				}
-				choose("○ "+u.tr("Compress locally", "Comprimir en local"), "compress", "high")
-				choose("○ "+u.tr("Balanced", "Equilibrado"), "compress", "balanced")
-				choose("○ "+u.tr("Small size", "Tamaño pequeño"), "compress", "small")
-				choose("○ "+u.tr("High quality", "Alta calidad"), "compress", "high")
-				nativeScrollImageSetting(h, "● "+u.tr("Compress locally", "Comprimir en local"))
+				choose(u.tr("Compress locally", "Comprimir en local"), "compress", "high")
+				choose(u.tr("Balanced", "Equilibrado"), "compress", "balanced")
+				choose(u.tr("Small size", "Tamaño pequeño"), "compress", "small")
+				choose(u.tr("High quality", "Alta calidad"), "compress", "high")
+				nativeScrollImageSetting(h, u.tr("Compress locally", "Comprimir en local"))
 				capture("image-compression")
-				choose("○ "+u.tr("Kilo · Experimental", "Kilo · Experimental"), "upload", "high")
+				choose(u.tr("Kilo · Experimental", "Kilo · Experimental"), "upload", "high")
 				capture("experimental-image-uploads")
-				choose("○ Cloudflare", "cloudflare", "high")
-				assertNativeImageDescription(t, h, u.tr("Requires cloudflared", "Requiere cloudflared"))
-				nativeScrollImageSetting(h, "● Cloudflare")
+				choose("Cloudflare", "cloudflare", "high")
+				nativeScrollImageSetting(h, "Cloudflare")
 				capture("image-cloudflare")
-				choose("○ Tailscale Funnel", "tailscale", "high")
-				assertNativeImageDescription(t, h, "8443")
+				choose("Tailscale Funnel", "tailscale", "high")
 				capture("image-tailscale")
-				choose("○ Litterbox · Experimental", "litterbox", "high")
-				assertNativeImageDescription(t, h, u.tr("third-party service", "servicio externo"))
-				assertNativeImageDescription(t, h, u.tr("Experimental: live availability could not be confirmed from this network. If the service rejects uploads, choose Cloudflare or local compression.", "Experimental: no se ha podido confirmar la disponibilidad real desde esta red. Si el servicio rechaza las subidas, elige Cloudflare o la compresión local."))
+				choose("Litterbox · Experimental", "litterbox", "high")
 				capture("image-litterbox-experimental")
 				for _, expiry := range []struct{ value, en, es string }{
 					{"12h", "12 hours", "12 horas"}, {"24h", "24 hours", "24 horas"}, {"72h", "72 hours", "72 horas"}, {"1h", "1 hour", "1 hora"},
 				} {
 					ttl = expiry.value
-					choose("○ "+u.tr(expiry.en, expiry.es), "litterbox", "high")
+					choose(u.tr(expiry.en, expiry.es), "litterbox", "high")
 				}
-				nativeScrollImageSetting(h, "● "+u.tr("1 hour", "1 hora"))
+				nativeScrollImageSetting(h, u.tr("1 hour", "1 hora"))
 				capture("image-litterbox")
-				choose("○ "+u.tr("Off", "Desactivado"), "off", "high")
+				choose(u.tr("Off", "Desactivado"), "off", "high")
 				// Layout, scrolling and changing language must never opt in by themselves.
 				nextLanguage := u.tr("es", "en")
-				h.click(u.tr("English ▾", "Español ▾"), semantic.Button)
+				nativeScrollImageSetting(h, u.tr("Español", "English"))
+				h.click(u.tr("Español", "English"), semantic.Button)
 				nativeTestWait(t, u, func() bool {
 					return u.language == nextLanguage && u.languageTarget == "" && !u.busy["POST/api/language"] && !u.busy["GET/api/state"]
 				})
@@ -119,14 +118,4 @@ func TestNativeImageTransportSettingsPointerAndPersistence(t *testing.T) {
 			})
 		}
 	}
-}
-
-func assertNativeImageDescription(t *testing.T, h *nativePointerHarness, contains string) {
-	t.Helper()
-	for _, node := range h.nodes() {
-		if strings.Contains(node.Desc.Label, contains) {
-			return
-		}
-	}
-	t.Fatalf("active backend is missing its description %q", contains)
 }

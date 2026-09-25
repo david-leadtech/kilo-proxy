@@ -5,12 +5,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"image"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 
+	"gioui.org/font"
 	"gioui.org/layout"
 )
 
@@ -258,43 +260,75 @@ func (u *nativeUI) modelsPanel() layout.Widget {
 	u.initModelLibrary()
 	s := u.library.selection
 	u.syncClientSelection(sharedModelKey, s)
-	status, _ := u.libraryStatus()
-	top := u.actionRow(u.column(u.heading(u.tr("Your models", "Tus modelos")), u.note(status)), u.button("primary.models.add", u.tr("Add models", "Añadir modelos"), func() {
-		u.expanded["library.catalog"] = true
-		if len(u.models) == 0 {
-			u.refreshModels()
-		}
-	}))
-	if u.expanded["library.catalog"] {
-		top = u.actionRow(u.column(u.heading(u.tr("Add models", "Añadir modelos")), u.note(u.tr("Select once. Every agent uses this library.", "Elige una vez. Todos los agentes usan esta biblioteca."))), u.button("models.done", u.tr("Done", "Listo"), func() { u.expanded["library.catalog"] = false }))
-	}
-	widgets := []layout.Widget{top}
-	if u.catalogCached {
-		widgets = append(widgets, u.note(u.tr("Using the saved catalog. Refresh to check current prices and availability.", "Usando el catálogo guardado. Actualiza para comprobar precios y disponibilidad.")))
-	}
+	status, saved := u.libraryStatus()
 	w := u.library.writer
 	w.mu.Lock()
 	recovery, failed, warning := w.recoveryRequired, w.err != nil, w.warning
 	w.mu.Unlock()
+	statusTone := nativeToneInfo
+	statusText := status
+	if saved {
+		statusTone, statusText = nativeToneSuccess, u.tr("Saved", "Guardado")
+	} else if recovery || failed || u.library.validation != "" {
+		statusTone = nativeToneWarning
+	}
+	modelCount := fmt.Sprintf(u.tr("%d models", "%d modelos"), len(s.Models))
+	if len(s.Models) == 1 {
+		modelCount = u.tr("1 model", "1 modelo")
+	}
+	recommended := u.recommendedModels()
+	addKind := nativeButtonPrimary
+	if u.page == "setup" || len(s.Models) == 0 && len(recommended) > 0 {
+		addKind = nativeButtonSecondary
+	}
+	add := u.iconButton("primary.models.add", u.tr("Add models", "Añadir modelos"), addKind, nativeIconAdd, func() {
+		u.expanded["library.catalog"] = true
+		if len(u.models) == 0 {
+			u.refreshModels()
+		}
+	})
+	top := u.actionRow(u.column(u.heading(u.tr("Your models", "Tus modelos")), u.note(modelCount), u.message(statusTone, statusText)), add)
+	if u.expanded["library.catalog"] {
+		done := u.primaryButton("models.done", u.tr("Done", "Listo"), func() { u.expanded["library.catalog"] = false })
+		if u.page == "setup" {
+			done = u.button("models.done", u.tr("Done", "Listo"), func() { u.expanded["library.catalog"] = false })
+		}
+		top = u.actionRow(u.column(u.heading(u.tr("Add models", "Añadir modelos")), u.note(u.tr("Select once. Every agent uses this library.", "Elige una vez. Todos los agentes usan esta biblioteca."))), done)
+	}
+	widgets := []layout.Widget{top}
 	if recovery || failed || u.library.validation != "" {
 		label := u.tr("Retry save", "Reintentar guardado")
 		if recovery {
 			label = u.tr("Recover this selection", "Recuperar esta selección")
 		}
-		widgets = append(widgets, u.card(u.note(status), u.note(warning), u.pills(u.disabled(u.library.validation == "", u.button("models.retry", label, func() { u.retryModelLibrary(recovery) })), u.button("models.review-saved", u.tr("Review saved version", "Revisar versión guardada"), func() { u.reviewSavedLibrary() }))))
+		widgets = append(widgets, u.card(u.note(warning), u.pills(u.disabled(u.library.validation == "", u.button("models.retry", label, func() { u.retryModelLibrary(recovery) })), u.button("models.review-saved", u.tr("Review saved version", "Revisar versión guardada"), func() { u.reviewSavedLibrary() }))))
 	}
 	if len(s.Models) == 0 && !u.expanded["library.catalog"] {
-		widgets = append(widgets, u.card(u.heading(u.tr("A model library for all your agents", "Una biblioteca para todos tus agentes")), u.note(u.tr("Add the models you use, give them short names and choose a default. Your selection stays here next time.", "Añade tus modelos, ponles nombres cortos y elige uno inicial. Tu selección seguirá aquí la próxima vez."))))
+		if len(recommended) > 0 {
+			widgets = append(widgets, u.card(u.recommendedPanel(recommended)))
+		} else {
+			widgets = append(widgets, u.card(u.heading(u.tr("A model library for all your agents", "Una biblioteca para todos tus agentes")), u.note(u.tr("Add the models you use, give them short names and choose a default. Your selection stays here next time.", "Añade tus modelos, ponles nombres cortos y elige uno inicial. Tu selección seguirá aquí la próxima vez."))))
+		}
 	} else {
 		if !u.expanded["library.catalog"] {
+			if len(recommended) > 0 {
+				widgets = append(widgets, u.pills(u.disclosure("models.recommended", u.tr("Recommended models", "Modelos recomendados"))))
+				if u.expanded["models.recommended"] {
+					widgets = append(widgets, u.card(u.recommendedPanel(recommended)))
+				}
+			}
 			widgets = append(widgets, u.sharedContextPanel())
+		} else if u.page == "setup" && len(recommended) > 0 {
+			// Setup opens the full catalog after the connection step; the short
+			// list stays above it so a first choice never needs a search.
+			widgets = append(widgets, u.card(u.recommendedPanel(recommended)))
 		}
 		widgets = append(widgets, u.clientPicker(sharedModelKey, s))
 	}
 	if !u.expanded["library.catalog"] {
 		widgets = append(widgets, u.note(u.tr("Changes apply the next time you open an agent. Already-open agents may need reopening.", "Los cambios se aplican al volver a abrir un agente. Los agentes abiertos pueden necesitar reiniciarse.")))
-		widgets = append(widgets, u.pills(u.button("models.import.toggle", u.tr("Import an existing agent selection", "Importar la selección de un agente"), func() { u.expanded["library.import"] = !u.expanded["library.import"] })))
-		if u.expanded["library.import"] {
+		widgets = append(widgets, u.disclosure("models.import.toggle", u.tr("Import an existing agent selection", "Importar la selección de un agente")))
+		if u.expanded["models.import.toggle"] {
 			imports := []layout.Widget{u.note(u.tr("Choose which saved profile to import. You can review before replacing your shared models.", "Elige un perfil guardado para importar. Puedes revisarlo antes de sustituir los modelos compartidos."))}
 			for _, option := range []struct{ key, name string }{{"codex", "Codex Desktop"}, {"codex-cli", "Codex CLI"}, {"claude", "Claude Code"}, {"opencode", "OpenCode"}, {"omp", "Oh My Pi"}, {"zed", "Zed"}} {
 				key, name := option.key, option.name
@@ -323,11 +357,11 @@ func (u *nativeUI) modelsPanel() layout.Widget {
 					u.seedClientChoice(sharedModelKey, m)
 				}
 				u.library.pendingImport = nil
-				u.expanded["library.import"] = false
+				u.expanded["models.import.toggle"] = false
 			}), u.button("models.import.cancel", u.tr("Cancel", "Cancelar"), func() { u.library.pendingImport = nil }))))
 		}
-		widgets = append(widgets, u.pills(u.button("models.images.toggle", u.tr("Image generation for Codex", "Generación de imágenes para Codex"), func() { u.expanded["library.images"] = !u.expanded["library.images"] })))
-		if u.expanded["library.images"] {
+		widgets = append(widgets, u.disclosure("models.images.toggle", u.tr("Image generation for Codex", "Generación de imágenes para Codex")))
+		if u.expanded["models.images.toggle"] {
 			widgets = append(widgets, u.clientImagesPanel("codex", u.sharedClientSelection("codex")))
 		}
 	}
@@ -336,12 +370,12 @@ func (u *nativeUI) modelsPanel() layout.Widget {
 func (u *nativeUI) importModelLibrary(key string) {
 	u.clientRequest("GET", nativeClientEndpoint(key), nil, func(raw json.RawMessage, err error) {
 		if err != nil {
-			u.notice = nativeMessage(err.Error(), u.language)
+			u.noticeError(err)
 			return
 		}
 		candidate, err := decodeNativeClientSelection(key, raw, u.models)
 		if err != nil {
-			u.notice = err.Error()
+			u.noticeError(err)
 			return
 		}
 		if key == "claude" {
@@ -401,21 +435,40 @@ func (u *nativeUI) shutdownModelLibrary() {
 	u.catalogCache.mu.Unlock()
 }
 
+func (u *nativeUI) libraryDefaultBadge() layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		// Inverted black keeps the badge visible on the grey selected card.
+		return nativeBox(gtx, nativeInk, func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: 4, Bottom: 4, Left: 8, Right: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						gtx.Constraints.Min = image.Pt(gtx.Dp(14), gtx.Dp(14))
+						return nativeIconStar.Layout(gtx, nativeSurface)
+					}),
+					layout.Rigid(layout.Spacer{Width: 6}.Layout),
+					layout.Rigid(u.monoStyle(11, strings.ToUpper(u.tr("Default", "Predeterminado")), nativeSurface, font.Bold)),
+				)
+			})
+		})
+	}
+}
+
 func (u *nativeUI) sharedModelControls(choice *nativeModelChoice) layout.Widget {
 	key, id := sharedModelKey, choice.Model.ID
 	prefix := "client:" + key + ":"
 	s := u.library.selection
-	label := u.tr("Use by default", "Usar por defecto")
-	if s.Initial == id {
-		label = u.tr("★ Default", "★ Predeterminado")
+	// The default card shows its badge in place of the action that would make it the default.
+	action := u.libraryDefaultBadge()
+	if s.Initial != id {
+		action = u.iconButton(prefix+"initial:"+id, u.tr("Use by default", "Usar por defecto"), nativeButtonGhost, nativeIconStarOutline, func() { s.Initial = id })
 	}
-	children := []layout.Widget{u.pills(u.button(prefix+"initial:"+id, label, func() { s.Initial = id }), u.button(prefix+"edit:"+id, u.tr("Edit", "Editar"), func() { u.expanded[prefix+"edit:"+id] = !u.expanded[prefix+"edit:"+id] }))}
+	children := []layout.Widget{u.pills(action, u.disclosure(prefix+"edit:"+id, u.tr("Edit", "Editar")))}
 	levels, _ := nativeReasoningFor(*choice)
 	if !choice.ReasoningCustom && choice.DefaultReasoning != "" && !helperContains(levels, choice.DefaultReasoning) {
 		levels = append(levels, choice.DefaultReasoning)
 	}
 	if len(levels) > 0 {
-		children = append(children, u.selectField(nativeClientField(key, id, "reasoning"), u.tr("Reasoning", "Razonamiento"), levels))
+		children = append(children, u.selectField(nativeClientField(key, id, "reasoning"), u.tr("Reasoning", "Razonamiento"), nativeModelReasoningChoices(u, levels)))
 	} else {
 		if choice.ReasoningCustom {
 			u.setValue(nativeClientField(key, id, "reasoning"), "")
@@ -428,7 +481,7 @@ func (u *nativeUI) sharedModelControls(choice *nativeModelChoice) layout.Widget 
 		children = append(children, u.contextChoiceControls(key, choice))
 		index := slices.Index(s.ids(), id)
 		children = append(children, u.pills(u.disabled(index > 0, u.button(prefix+"up:"+id, u.tr("Move up", "Subir"), func() { u.moveSharedModel(id, -1) })), u.disabled(index < len(s.Models)-1, u.button(prefix+"down:"+id, u.tr("Move down", "Bajar"), func() { u.moveSharedModel(id, 1) }))))
-		if u.checked(prefix + "advanced") {
+		if u.expanded[prefix+"advanced"] {
 			children = append(children, u.check(nativeClientField(key, id, "custom"), u.tr("Custom reasoning levels", "Niveles de razonamiento personalizados"), func(bool) {}))
 			if u.checked(nativeClientField(key, id, "custom")) {
 				children = append(children, u.field(nativeClientField(key, id, "levels"), u.tr("Levels separated by commas", "Niveles separados por comas"), "low,medium,high", false))

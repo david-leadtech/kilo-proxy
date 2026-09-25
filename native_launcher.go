@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"gioui.org/layout"
@@ -79,33 +80,53 @@ func (u *nativeUI) clientLauncherPanel(key string, s *nativeClientSelection, can
 	c := u.clientState()
 	info := c.LaunchInfo.Clients[key]
 	working := c.Launching != "" || u.busy["POST"+nativeClientEndpoint(key)] || u.busy["GET"+nativeClientEndpoint(key)]
-	enabled := u.nativeLaunchAvailable(key) && canPrepare && !working
-	label := u.tr("Launch", "Abrir")
+	launchable := u.nativeLaunchAvailable(key)
+	connectionReady := u.agentConnectionReady() && !u.setupConnectionNeeded()
+	connectionWorking := u.connectionWorking()
+	enabled := launchable && canPrepare && connectionReady && !connectionWorking && !working
+	label := u.tr("Open", "Abrir")
 	if c.Launching == key {
-		label = u.tr("Launching…", "Abriendo…")
+		label = u.tr("Opening…", "Abriendo…")
 	}
 	widgets := []layout.Widget{}
 	if key == "codex" {
-		widgets = append(widgets, u.field("clients-launch-app-path", u.tr("Codex application (optional custom path)", "Aplicación Codex (ruta personalizada opcional)"), info.Path, false))
+		widgets = append(widgets, u.field("clients-launch-app-path", u.tr("Codex application path (optional)", "Ruta de la aplicación Codex (opcional)"), info.Path, false))
 	}
-	widgets = append(widgets, u.actionRow(u.field("clients-project-directory", u.tr("Project folder (optional)", "Carpeta del proyecto (opcional)"), c.LaunchInfo.Directory, false), u.disabled(enabled, u.button("client:"+key+":launch", label, func() { u.launchClient(key) }))), u.pills(u.disabled(!u.busy["GET"+nativeLaunchEndpoint], u.button("clients-launch-detect", u.tr("Refresh installed apps", "Actualizar aplicaciones instaladas"), u.detectLaunchers))))
-	message := u.tr("Checking installed applications…", "Comprobando aplicaciones instaladas…")
-	if c.LaunchError != "" {
-		message = c.LaunchError
-	} else if c.LaunchChecked {
-		if !u.nativeLaunchAvailable(key) {
-			message = info.Reason
-			if message == "" {
-				message = u.tr("This client was not found on this computer.", "No se encontró este cliente en este equipo.")
-			}
+	widgets = append(widgets,
+		u.actionRow(u.field("clients-project-directory", u.tr("Project folder", "Carpeta del proyecto"), c.LaunchInfo.Directory, false), u.disabled(enabled, u.primaryButton("client:"+key+":launch", label, func() { u.launchClient(key) }))),
+		u.pills(u.disabled(!u.busy["GET"+nativeLaunchEndpoint], u.iconButton("clients-launch-detect", u.tr("Refresh installed apps", "Actualizar aplicaciones instaladas"), nativeButtonGhost, nativeIconRefresh, u.detectLaunchers))),
+	)
+	installTone, installStatus := nativeToneInfo, u.tr("Checking installation…", "Comprobando instalación…")
+	if c.LaunchChecked {
+		if launchable {
+			installTone, installStatus = nativeToneSuccess, u.tr("Installed", "Instalado")
 		} else {
-			message = u.tr("Launch prepares unsaved changes and starts the saved proxy on this computer.", "Abrir prepara los cambios pendientes e inicia el proxy guardado en este equipo.")
-			if key == "cursor" {
-				message = u.tr("Launch opens Cursor using the existing HTTPS tunnel.", "Abrir inicia Cursor con el túnel HTTPS existente.")
-			}
+			installTone, installStatus = nativeToneNeutral, u.tr("Not found", "No encontrado")
 		}
 	}
-	widgets = append(widgets, u.note(message))
+	widgets = append(widgets, u.statusBadge(installTone, installStatus))
+	switch {
+	case !c.LaunchChecked:
+		widgets = append(widgets, u.hint(u.tr("Wait for installed-app detection to finish.", "Espera a que termine la detección de aplicaciones instaladas.")))
+	case !launchable:
+		reason := nativeMessage(info.Reason, u.language)
+		if reason == "" {
+			name, _ := launchClientIdentity(key)
+			reason = fmt.Sprintf(u.tr("Install %s, then refresh installed apps.", "Instala %s y actualiza las aplicaciones instaladas."), name)
+		}
+		widgets = append(widgets, u.hint(reason))
+	case !connectionReady:
+		widgets = append(widgets, u.hint(u.tr("Save your Kilo connection before opening this app.", "Guarda tu conexión de Kilo antes de abrir esta aplicación.")))
+	case connectionWorking:
+		widgets = append(widgets, u.hint(u.tr("Wait for the Kilo connection update to finish.", "Espera a que termine la actualización de la conexión de Kilo.")))
+	case key == "cursor" && !canPrepare:
+		widgets = append(widgets, u.hint(u.tr("Connect the HTTPS tunnel before opening Cursor.", "Conecta el túnel HTTPS antes de abrir Cursor.")))
+	case working:
+		widgets = append(widgets, u.hint(u.tr("Wait for the current profile operation to finish.", "Espera a que termine la operación actual del perfil.")))
+	}
+	if c.LaunchError != "" {
+		widgets = append(widgets, u.message(nativeToneError, c.LaunchError))
+	}
 	return u.column(widgets...)
 }
 
@@ -182,19 +203,19 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 				u.enqueue(func() {
 					c.Launching, a.Phase = "", ""
 					if pending != u.launchSettingsFingerprint(key, directoryField) {
-						u.notice = u.launchSettingsChangedMessage()
+						u.setNotice(nativeToneWarning, u.launchSettingsChangedMessage())
 						return
 					}
 					u.launchClientFrom(key, directoryField)
 				})
 			}()
 		} else {
-			u.notice = status
+			u.setNotice(nativeToneWarning, status)
 		}
 		return
 	}
 	if !u.nativeLaunchAvailable(key) {
-		u.notice = u.tr("Refresh installed apps or set a valid Codex application path.", "Actualiza las aplicaciones instaladas o indica una ruta válida de Codex.")
+		u.setNotice(nativeToneWarning, u.tr("Refresh installed apps or set a valid Codex application path.", "Actualiza las aplicaciones instaladas o indica una ruta válida de Codex."))
 		return
 	}
 	s := u.sharedClientSelection(key)
@@ -204,13 +225,13 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 		data, _ := json.Marshal(u.state["cursor"])
 		_ = json.Unmarshal(data, &session)
 		if session.Status != "running" {
-			u.notice = u.tr("Connect the Cursor HTTPS tunnel first.", "Conecta primero el túnel HTTPS de Cursor.")
+			u.setNotice(nativeToneWarning, u.tr("Connect the Cursor HTTPS tunnel first.", "Conecta primero el túnel HTTPS de Cursor."))
 			return
 		}
 	} else if _, err := nativeClientPayload(key, s); err != nil || len(s.Models) == 0 {
-		u.notice = u.tr("Choose valid models before launching.", "Elige modelos válidos antes de abrir.")
+		u.setNotice(nativeToneWarning, u.tr("Choose valid models before launching.", "Elige modelos válidos antes de abrir."))
 		if err != nil {
-			u.notice = err.Error()
+			u.noticeError(err)
 		}
 		return
 	}
@@ -220,7 +241,7 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 	}
 	resolvedDirectory, err := launchPath(directory, c.LaunchInfo.Directory)
 	if err != nil {
-		u.notice = nativeMessage(err.Error(), u.language)
+		u.noticeError(err)
 		return
 	}
 	prepared := u.launchSettingsFingerprint(key, directoryField)
@@ -230,7 +251,7 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 		c.Launching = ""
 		a.Phase = ""
 		if err != nil {
-			u.notice = nativeMessage(err.Error(), u.language)
+			u.noticeError(err)
 		}
 	}
 	launch := func(err error) {
@@ -272,9 +293,9 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 			if key != "open-design" {
 				u.rememberAgentProject(key, resolvedDirectory)
 			}
-			u.notice = result.Message
+			u.setNotice(nativeToneWarning, result.Message)
 			if u.notice == "" {
-				u.notice = u.tr("Editor launched.", "Editor abierto.")
+				u.setNotice(nativeToneSuccess, u.tr("Editor launched.", "Editor abierto."))
 			}
 			u.refreshState()
 		})

@@ -115,15 +115,16 @@ func (u *nativeUI) clientImagesPanel(key string, s *nativeClientSelection) layou
 		if images.Model != "" && !selected {
 			label = images.Model + u.tr(" · not in current catalog", " · fuera del catálogo actual")
 		}
-		children = append(children, u.note(u.tr("Image model", "Modelo de imágenes")), u.button(prefix+":model.toggle", label+"  ▾", func() { u.expanded[prefix] = !u.expanded[prefix] }))
+		children = append(children, u.note(u.tr("Image model", "Modelo de imágenes")), u.dropdownButton(prefix+":model.toggle", label, func() { u.expanded[prefix] = !u.expanded[prefix] }))
 		if u.expanded[prefix] {
 			choices := make([]layout.Widget, 0, len(models))
 			for _, model := range models {
+				model := model
 				name := model.Name
 				if name == "" {
 					name = model.ID
 				}
-				choices = append(choices, u.button(prefix+":model:"+model.ID, name, func() {
+				choices = append(choices, u.menuItem(prefix+":model:"+model.ID, name, model.ID == images.Model, func() {
 					nativeEditClientImages(s, func(value *imageGenerationSettings) { value.Model = model.ID })
 					u.expanded[prefix] = false
 				}))

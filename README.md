@@ -12,9 +12,9 @@ Connect with your personal Kilo account, choose your organization, add models on
 
 1. Download the archive for your operating system and architecture from **Releases**, then extract it.
 2. Open **Kilo Proxy.app** on macOS, **Kilo Proxy.exe** on Windows, or run `./kilo-proxy` on Linux.
-3. The first-run guide opens automatically. Click **Sign in with Kilo / SSO** and approve the device code on Kilo’s website using your usual login or SSO. Choose your team and click **Save & choose models**. **Use an API key or enter a team ID** provides manual entry.
+3. The first-run guide opens automatically. Click **Sign in with Kilo / SSO** and approve the device code on Kilo’s website using your usual login or SSO. Choose your team and click **Save & choose models**. **Use an API key or team ID instead** provides manual entry.
 4. Choose at least one model, then **Continue**. Names, order, default and supported reasoning preferences save automatically to the shared library.
-5. Click **Start proxy & go to agents**, choose a project folder, and click **Open Codex** or another installed agent. Supported profiles are prepared automatically from the shared library. Zed also receives its local credential automatically. Cursor and Xcode retain their one-time provider setup under **Options**; choose Open Design's local CLI under **Engine settings** on its card.
+5. Click **Start proxy and go to agents**, choose a project folder, and click **Open Codex** or another installed agent. Supported profiles are prepared automatically from the shared library. Zed also receives its local credential automatically. Cursor and Xcode retain their one-time provider setup under **Options**; choose Open Design's local CLI under **Engine settings** on its card.
 
 Configured installations open **Agents** directly. **Start proxy** sits beside the stopped status; opening an agent also starts the proxy before launching it. If startup fails, the agent stays closed and the error appears in Kilo Proxy. Incomplete setup can be resumed with **Continue setup**.
 
@@ -58,7 +58,7 @@ macOS bundles have an **ad-hoc signature** covering the executable, bundle metad
 
 The model helpers support catalog search, manual IDs, context metadata, and input/output prices in USD per million tokens. Prices come from Kilo’s catalog, not your invoice. Explicitly free prices show zero; variable or missing prices remain unavailable. Refreshing models does not run inference. The native **Models** library is shared by all agents and saved across restarts in the application configuration directory, separately from generated profiles. It contains model preferences and no API keys. See [shared-model storage and compatibility](docs/shared-models.md). The optional browser helper retains its independent per-client selections.
 
-Choose **Recommended · 272K**, **Low · 128K**, **Maximum**, or **Custom** context in Models. Presets save automatically and apply on the next agent preparation or launch, bounded by the model's published capacity. Existing numeric limits remain Custom until you change them. [Context presets and agent compatibility](docs/shared-models.md#context-window-presets).
+Choose **Recommended** (272K tokens), **Low** (128K tokens), **Maximum**, or **Custom** context in Models. Presets save automatically and apply on the next agent preparation or launch, bounded by the model's published capacity. Existing numeric limits remain Custom until you change them. [Context presets and agent compatibility](docs/shared-models.md#context-window-presets).
 
 Browse models in a responsive **card grid**, with names, IDs and input/output prices together. In **Models → Add models**, filter by **lab**, using publishers from your catalog and saved manual models, then sort by **Code Mode Rank**, **Coding Index**, **Speed**, **Price**, or **Name**. The default is Kilo's seven-day Code mode usage rank; price ordering uses input cost. Missing metrics appear last, and filtering and sorting preserve your selections and initial model. [Sources and sorting behavior](docs/clients.md#sort-the-model-catalog).
 
