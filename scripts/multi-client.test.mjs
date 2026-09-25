@@ -9,7 +9,7 @@ test('OpenCode registers all exact IDs, selects the default and includes only kn
  assert.equal(provider.npm,'@ai-sdk/openai-compatible');
  assert.deepEqual(Object.keys(provider.models),['anthropic/model-a','anthropic/model-b']);
  assert.deepEqual(provider.models['anthropic/model-a'].limit,{context:200000,output:32000});
- assert.equal(provider.models['anthropic/model-b'].limit,undefined);
+ assert.deepEqual(provider.models['anthropic/model-b'].limit,{context:272000,output:8192});
  assert.equal(provider.options.apiKey,'local-fixture');
  assert.equal(provider.options.apiKey,base.key); // The export now includes the local proxy credential.
 });

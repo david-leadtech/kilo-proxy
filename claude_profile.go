@@ -21,6 +21,8 @@ type claudeModel struct {
 	ID          string `json:"id"`
 	DisplayName string `json:"displayName,omitempty"`
 	Effort      string `json:"effort,omitempty"`
+	Context     int    `json:"contextWindow,omitempty"`
+	Output      int    `json:"maxOutputTokens,omitempty"`
 }
 type claudeSelection struct {
 	Models  []claudeModel     `json:"models"`
@@ -108,6 +110,9 @@ func validateClaudeSelection(s claudeSelection) error {
 	ids := map[string]bool{}
 	nativeIDs := map[string]bool{}
 	for _, m := range s.Models {
+		if m.Context < 0 || m.Context > 100000000 || m.Context > 0 && m.Context < 1024 || m.Output < 0 || m.Output > 100000000 || m.Context > 0 && m.Output > m.Context {
+			return errors.New("Invalid Claude context or output limit")
+		}
 		if !catalogID.MatchString(m.ID) || ids[m.ID] || len([]rune(m.DisplayName)) > 80 || strings.IndexFunc(m.DisplayName, func(r rune) bool { return r < 32 || r == 127 }) >= 0 || !validClaudeEffort(m.ID, m.Effort) {
 			return errors.New("Invalid Claude model, display name or effort")
 		}
@@ -129,6 +134,22 @@ func validateClaudeSelection(s claudeSelection) error {
 	}
 	return nil
 }
+
+// Claude exposes one compaction window for the session, including model
+// switches. Use the smallest selected budget, within its supported 100K–1M
+// range, rather than pretending the setting follows each picker entry.
+func claudeContextBudget(s claudeSelection) (context, output int) {
+	for _, model := range s.Models {
+		if model.Context > 0 && (context == 0 || model.Context < context) {
+			context = model.Context
+		}
+		if model.Output > 0 && (output == 0 || model.Output < output) {
+			output = model.Output
+		}
+	}
+	return min(context, 1000000), output
+}
+
 func claudeManagedSettings(s claudeSelection, caps claudeCapabilities, port int, key string) map[string]any {
 	nativeID := func(id string) string {
 		if caps.Picker {
@@ -140,6 +161,16 @@ func claudeManagedSettings(s claudeSelection, caps claudeCapabilities, port int,
 	}
 	env := map[string]any{"ANTHROPIC_BASE_URL": "http://127.0.0.1:" + strconv.Itoa(port), "ANTHROPIC_AUTH_TOKEN": key, "ANTHROPIC_MODEL": nativeID(s.Initial)}
 	result := map[string]any{"env": env, "model": nativeID(s.Initial)}
+	if window, output := claudeContextBudget(s); window >= 100000 {
+		result["autoCompactWindow"] = window
+		result["autoCompactEnabled"] = true
+		env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] = strconv.Itoa(window)
+		env["DISABLE_COMPACT"] = "0"
+		env["DISABLE_AUTO_COMPACT"] = "0"
+		if output > 0 {
+			env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = strconv.Itoa(output)
+		}
+	}
 	byID := map[string]claudeModel{}
 	for _, m := range s.Models {
 		byID[m.ID] = m
@@ -232,6 +263,15 @@ func mergeClaudeSettings(data []byte, s claudeSelection, caps claudeCapabilities
 		delete(result, name)
 	}
 	managed := claudeManagedSettings(s, caps, port, key)
+	if window, _ := claudeContextBudget(s); window > 0 {
+		if window < 100000 {
+			return nil, errors.New("Claude Code supports context presets from 100K to 1M tokens. Choose at least 100K for every selected Claude model")
+		}
+		// These overrides can disable compaction or replace the managed budget.
+		for _, name := range []string{"CLAUDE_CODE_DISABLE_1M_CONTEXT", "CLAUDE_CODE_MAX_CONTEXT_TOKENS", "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "CLAUDE_CODE_MAX_OUTPUT_TOKENS"} {
+			delete(env, name)
+		}
+	}
 	if caps.PerModelEffort {
 		perModel := map[string]json.RawMessage{}
 		if raw, ok := result["modelSettings"]; ok {

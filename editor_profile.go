@@ -117,9 +117,11 @@ func mergeEditorSettings(old []byte, client string, s editorSelection, baseURL, 
 		models := map[string]any{}
 		for _, m := range s.Models {
 			entry := map[string]any{"name": m.Name}
+			limits := map[string]int{"context": m.Context}
 			if m.Output > 0 {
-				entry["limit"] = map[string]int{"context": m.Context, "output": m.Output}
+				limits["output"] = m.Output
 			}
+			entry["limit"] = limits
 			models[m.ID] = entry
 		}
 		fields = []struct {

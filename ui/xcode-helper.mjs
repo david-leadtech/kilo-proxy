@@ -1,3 +1,4 @@
+import {contextControls,contextModel,syncContextModels,contextError,contextPreview} from './context-policy.mjs';
 import {codexCatalog,reasoningFor,codexDisplayName} from './codex-catalog.mjs';
 import {writeClipboard} from './desktop-helper.mjs';
 import {claudeCapabilities,claudeEfforts,claudeSelection} from './claude-helper.mjs';
@@ -23,13 +24,13 @@ export function createXcodeHelper({api,notify,refreshCatalog,onChange=()=>{}}) {
  const L=(en,es)=>context.language==='en'?en:es;
  const selection=()=>states[variant];
  const payload=(v=variant,s=selection())=>xcodeSelectionPayload(v,[...s.models.values()],s.initial,s.aliases);
- const fingerprint=(v=variant,s=selection())=>JSON.stringify([context.state?.baseURL,context.state?.localKey,v,payload(v,s),v==='claude'?installation?.claude:null]);
+ const fingerprint=(v=variant,s=selection())=>JSON.stringify([context.state?.baseURL,context.state?.localKey,v,contextPreview(()=>payload(v,s)),v==='claude'?installation?.claude:null]);
  const caps=()=>installation?.claude || claudeCapabilities();
  function status(){
   const s=selection(),ready=s.saved?.signature===fingerprint();
-  $('xcode-save').disabled=saving||!s.models.size||(variant!=='chat'&&!installation?.available);
+  $('xcode-save').disabled=saving||!!contextError(s.models)||!s.models.size||(variant!=='chat'&&!installation?.available);
   $('xcode-save').textContent=saving?L('Preparing…','Preparando…'):L('1. Prepare ','1. Preparar ')+{chat:'Xcode Chat',codex:L('Codex in Xcode','Codex en Xcode'),claude:L('Claude in Xcode','Claude en Xcode')}[variant];
-  $('xcode-status').textContent=ready?L('Saved: ','Guardado: ')+s.saved.path: s.saved?L('Unsaved changes. Prepare this variant again.','Hay cambios sin guardar. Prepara esta variante de nuevo.'):L('Choose models and prepare this variant.','Elige modelos y prepara esta variante.');
+  $('xcode-status').textContent=contextError(s.models)|| (ready?L('Saved: ','Guardado: ')+s.saved.path: s.saved?L('Unsaved changes. Prepare this variant again.','Hay cambios sin guardar. Prepara esta variante de nuevo.'):L('Choose models and prepare this variant.','Elige modelos y prepara esta variante.'));
   $('xcode-guide').textContent=variant==='chat'?xcodeChatGuide(context.state?.baseURL||'http://127.0.0.1:8877/v1','kl_local_••••••••••••••••',context.language):L('Close Xcode before preparing its agent profile. Then reopen Xcode, enable/install the agent in Settings → Intelligence and start a new conversation. Keep Kilo Proxy running.\n\nThe profile contains only the local proxy key; no terminal environment is required. These settings affect the agent inside Xcode. Existing unrelated settings are kept, with .bak backups.\n\nXcode may override the active model or restrict its picker. A saved profile is not proof of a successful gateway request.','Cierra Xcode antes de preparar el perfil del agente. Después abre Xcode, activa/instala el agente en Settings → Intelligence e inicia una conversación nueva. Mantén Kilo Proxy abierto.\n\nEl perfil contiene solo la clave local del proxy; no requiere variables de terminal. Estos ajustes afectan al agente dentro de Xcode. Conservamos los demás ajustes con copias .bak.\n\nXcode puede imponer el modelo activo o limitar su selector. Un perfil guardado no verifica una petición al gateway.')+'\n\n'+(variant==='codex'?'~/Library/Developer/Xcode/CodingAssistant/codex/config.toml\n~/Library/Developer/Xcode/CodingAssistant/codex/models.json':'~/Library/Developer/Xcode/CodingAssistant/ClaudeAgentConfig/settings.json');
   $('xcode-copy').hidden=variant!=='chat';$('xcode-copy').disabled=!s.models.size;
   onChange();
@@ -41,7 +42,7 @@ export function createXcodeHelper({api,notify,refreshCatalog,onChange=()=>{}}) {
   configureModelLab($('xcode-lab'),[...available.values()],context.language);
   if(!detected){detected=true;queueMicrotask(detect);}
   status();
-  const sig=JSON.stringify([context.catalog,context.language,variant,payload(),installation,loading,$('xcode-search').value,$('xcode-sort').value,$('xcode-selected').checked,$('xcode-lab').value]);
+  const sig=JSON.stringify([context.catalog,context.language,variant,contextPreview(payload),installation,loading,$('xcode-search').value,$('xcode-sort').value,$('xcode-selected').checked,$('xcode-lab').value]);
   if(sig===signature)return;signature=sig;
   $('xcode-title').textContent=L('Xcode: chat and coding agents','Xcode: chat y agentes de programación');
   $('xcode-intro').textContent=L('Chat Completions is the message API used by Xcode Chat. Codex uses Responses, and Claude uses Messages. Each variant has its own model selection.','Chat Completions es la API de mensajes que usa Xcode Chat. Codex usa Responses y Claude usa Messages. Cada variante tiene su propia selección de modelos.');
@@ -71,9 +72,10 @@ export function createXcodeHelper({api,notify,refreshCatalog,onChange=()=>{}}) {
    if(chosen){
     const m=s.models.get(model.id),controls=document.createElement('div');controls.className='codex-row-controls';
     const label=document.createElement('label');label.className='codex-name-label';label.textContent=L('Short name','Nombre corto');const input=document.createElement('input');input.type='text';input.value=m.displayName||'';input.maxLength=80;input.dataset.xcodeFocus='name:'+m.id;input.className='codex-name-input';label.append(input);controls.append(label);
-    input.addEventListener('input',()=>{m.displayName=input.value;strong.textContent=codexDisplayName(m);signature=JSON.stringify([context.catalog,context.language,variant,payload(),installation,loading,$('xcode-search').value,$('xcode-sort').value,$('xcode-selected').checked,$('xcode-lab').value]);status()});
+    input.addEventListener('input',()=>{m.displayName=input.value;strong.textContent=codexDisplayName(m);signature=JSON.stringify([context.catalog,context.language,variant,contextPreview(payload),installation,loading,$('xcode-search').value,$('xcode-sort').value,$('xcode-selected').checked,$('xcode-lab').value]);status()});
     const initial=document.createElement('button');initial.type='button';initial.className='codex-default-button';initial.setAttribute('aria-pressed',String(s.initial===m.id));initial.textContent=s.initial===m.id?L('★ Initial model','★ Modelo inicial'):L('Use first','Usar al iniciar');initial.dataset.xcodeFocus='initial:'+m.id;initial.addEventListener('click',()=>{s.initial=m.id;if(variant==='claude'&&!caps().perModelEffort)for(const other of s.models.values())if(other.id!==m.id)delete other.effort;render()});controls.append(initial);
     if(variant!=='chat'){
+     controls.append(contextControls(m,{language:context.language,catalogModel:context.catalog.find(entry=>entry.id===m.id),disabled:saving,onChange:status}));
      const label=document.createElement('label');label.textContent=L('Reasoning','Razonamiento');const select=document.createElement('select');select.dataset.xcodeFocus='effort:'+m.id;
      const values=variant==='codex'?xcodeReasoning(m).levels:claudeEfforts(m.id,caps());const initialValue=variant==='codex'?xcodeReasoning(m).initial:m.effort||'';
      for(const value of ['',...values]){const o=document.createElement('option');o.value=value;o.textContent=value||L('Automatic','Automático');select.append(o)}select.value=initialValue||'';select.disabled=!values.length||(variant==='claude'&&!caps().perModelEffort&&s.initial!==m.id);
@@ -86,7 +88,7 @@ export function createXcodeHelper({api,notify,refreshCatalog,onChange=()=>{}}) {
   if(!matches.length){const p=document.createElement('p');p.textContent=L('No models. Refresh the catalog or add an exact ID below.','Sin modelos. Actualiza el catálogo o añade un ID exacto abajo.');list.append(p)}
   list.scrollTop=scroll;if(focus)[...list.querySelectorAll('[data-xcode-focus]')].find(e=>e.dataset.xcodeFocus===focus)?.focus({preventScroll:true});
   const aliases=$('xcode-aliases');aliases.hidden=variant!=='claude';aliases.replaceChildren();
-  if(variant==='claude')for(const alias of ['sonnet','opus','haiku']){const label=document.createElement('label');label.textContent=alias;const select=document.createElement('select');select.dataset.alias=alias;for(const m of s.models.values()){const option=document.createElement('option');option.value=m.id;option.textContent=m.displayName||m.id;select.append(option)}select.value=payload().aliases[alias]||s.initial;select.addEventListener('change',()=>{s.aliases[alias]=select.value;status()});label.append(select);aliases.append(label)}
+  if(variant==='claude')for(const alias of ['sonnet','opus','haiku']){const label=document.createElement('label');label.textContent=alias;const select=document.createElement('select');select.dataset.alias=alias;for(const m of s.models.values()){const option=document.createElement('option');option.value=m.id;option.textContent=m.displayName||m.id;select.append(option)}select.value=contextPreview(payload).aliases?.[alias]||s.initial;select.addEventListener('change',()=>{s.aliases[alias]=select.value;status()});label.append(select);aliases.append(label)}
  }
  document.querySelectorAll('[data-xcode-variant]').forEach(b=>b.addEventListener('click',()=>{variant=b.dataset.xcodeVariant;$('xcode-search').value='';$('xcode-selected').checked=false;render()}));
  $('xcode-search').addEventListener('input',()=>render());
@@ -103,7 +105,7 @@ export function createXcodeHelper({api,notify,refreshCatalog,onChange=()=>{}}) {
   try{const result=await api('xcode/'+target,payload(target,s));s.saved={signature:sent,path:result.profileDir}}finally{saving=false;render()}
  }
  $('xcode-save').addEventListener('click',()=>prepare().catch(e=>notify(e.message,true)));
- $('xcode-load').addEventListener('click',async()=>{const target=variant,s=selection();try{const data=await api('xcode/'+target);s.models.clear();if(target==='codex'){for(const m of data.models)s.models.set(m.slug,{id:m.slug,displayName:m.display_name,contextWindow:m.context_window,inputModalities:m.input_modalities,reasoningLevels:(m.supported_reasoning_levels||[]).map(r=>r.effort),defaultReasoning:m.default_reasoning_level});s.initial=data.models[0]?.slug||''}else{for(const m of data.models)s.models.set(m.id,m);s.initial=data.initial;s.aliases=data.aliases||{}}s.saved=null;render()}catch(e){notify(e.message,true)}});
+ $('xcode-load').addEventListener('click',async()=>{const target=variant,s=selection();try{const data=await api('xcode/'+target);s.models.clear();if(target==='codex'){for(const m of data.models)s.models.set(m.slug,{id:m.slug,displayName:m.display_name,contextPreset:'custom',contextTokens:m.context_window,contextMaximum:context.catalog.find(entry=>entry.id===m.slug)?.contextWindow||0,contextWindow:m.context_window,inputModalities:m.input_modalities,reasoningLevels:(m.supported_reasoning_levels||[]).map(r=>r.effort),defaultReasoning:m.default_reasoning_level});s.initial=data.models[0]?.slug||''}else{for(const m of data.models)s.models.set(m.id,contextModel(m,context.catalog.find(entry=>entry.id===m.id),true));s.initial=data.initial;s.aliases=data.aliases||{}}s.saved=null;render()}catch(e){notify(e.message,true)}});
  $('xcode-copy').addEventListener('click',async()=>{try{await writeClipboard(xcodeChatGuide(context.state?.baseURL||'',context.state?.localKey||'',context.language));notify(L('Connection copied with the local key','Conexión copiada con la clave local'))}catch(e){notify(L('Clipboard unavailable','Portapapeles no disponible'),true)}});
- return {render,launchState:()=>({id:'xcode-'+variant,count:selection().models.size,ready:selection().saved?.signature===fingerprint(),fingerprint:fingerprint(),working:saving||loading,prepare})};
+ return {render,setCatalog:catalog=>{for(const selection of Object.values(states))syncContextModels(selection.models,catalog);},launchState:()=>({id:'xcode-'+variant,count:selection().models.size,valid:!contextError(selection().models),reason:contextError(selection().models),ready:selection().saved?.signature===fingerprint(),fingerprint:fingerprint(),working:saving||loading,prepare})};
 }

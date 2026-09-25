@@ -136,14 +136,7 @@ func terminalLibraryChoices(library modelLibrary, catalog []modelInfo) []nativeM
 	}
 	choices := make([]nativeModelChoice, 0, len(library.Models))
 	for _, item := range library.Models {
-		model := metadata[item.ID]
-		model.ID = item.ID
-		if model.Name == "" {
-			model.Name = item.ID
-		}
-		model.ContextWindow = item.ContextWindow
-		model.MaxOutputTokens = item.MaxOutputTokens
-		choices = append(choices, nativeModelChoice{Model: model, DisplayName: item.DisplayName, DefaultReasoning: item.ReasoningEffort, ReasoningCustom: item.ReasoningCustom, ReasoningLevels: append([]string{}, item.ReasoningLevels...)})
+		choices = append(choices, contextChoiceFromLibrary(item, metadata[item.ID]))
 	}
 	return choices
 }
@@ -154,8 +147,11 @@ func (a *app) prepareTerminalProfile(client, home string, library modelLibrary, 
 		return err
 	}
 	if client == "omp" {
-		selection := ompSelectionFromChoices(terminalLibraryChoices(library, readNativeCatalogCache(a.dir, a.config.OrgID)), library.DefaultModel)
-		_, err := a.saveOMPProfile(selection)
+		selection, err := ompSelectionFromChoices(terminalLibraryChoices(library, readNativeCatalogCache(a.dir, a.config.OrgID)), library.DefaultModel)
+		if err != nil {
+			return err
+		}
+		_, err = a.saveOMPProfile(selection)
 		return err
 	}
 	if client == "codex-cli" {
@@ -179,12 +175,17 @@ func (a *app) prepareTerminalProfile(client, home string, library modelLibrary, 
 	}
 	selection := claudeSelection{Initial: library.DefaultModel, Mode: "installed", Aliases: map[string]string{}}
 	ids := map[string]bool{}
-	for _, model := range library.Models {
+	choices := terminalLibraryChoices(library, readNativeCatalogCache(a.dir, a.config.OrgID))
+	for i, model := range library.Models {
+		context, err := contextPolicyForChoice(choices[i])
+		if err != nil {
+			return err
+		}
 		effort := model.ReasoningEffort
 		if !validClaudeEffort(model.ID, effort) || !caps.PerModelEffort && (model.ID != library.DefaultModel || effort == "xhigh") {
 			effort = ""
 		}
-		selection.Models = append(selection.Models, claudeModel{ID: model.ID, DisplayName: model.DisplayName, Effort: effort})
+		selection.Models = append(selection.Models, claudeModel{ID: model.ID, DisplayName: model.DisplayName, Effort: effort, Context: context.ContextWindow, Output: context.MaxOutputTokens})
 		ids[model.ID] = true
 	}
 	if old, err := readCatalogFile(filepath.Join(dir, "kilo-models.json")); err == nil {

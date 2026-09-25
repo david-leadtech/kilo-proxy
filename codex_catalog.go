@@ -130,6 +130,8 @@ func validateCatalog(data []byte) (string, error) {
 		Models []struct {
 			Slug    string  `json:"slug"`
 			Default *string `json:"default_reasoning_level"`
+			Context *int    `json:"context_window"`
+			Compact *int    `json:"auto_compact_token_limit"`
 			Levels  []struct {
 				Effort string `json:"effort"`
 			} `json:"supported_reasoning_levels"`
@@ -141,6 +143,12 @@ func validateCatalog(data []byte) (string, error) {
 	}
 	seen := map[string]bool{}
 	for _, model := range catalog.Models {
+		if model.Context != nil && (*model.Context < 1024 || *model.Context > 100000000) {
+			return "", invalid
+		}
+		if model.Compact != nil && (*model.Compact < 1 || model.Context == nil || *model.Compact > *model.Context*9/10) {
+			return "", invalid
+		}
 		if !catalogID.MatchString(model.Slug) || seen[model.Slug] {
 			return "", invalid
 		}

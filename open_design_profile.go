@@ -22,8 +22,9 @@ func prepareOpenDesignEngineProfile(dir, engine string, library modelLibrary, ca
 	if len(library.Models) == 0 {
 		return errors.New("Choose shared models before preparing Open Design.")
 	}
+	choices := terminalLibraryChoices(library, catalog)
 	if engine == "codex-cli" {
-		models, err := buildCodexCatalog(terminalLibraryChoices(library, catalog), library.DefaultModel, false)
+		models, err := buildCodexCatalog(choices, library.DefaultModel, false)
 		if err != nil {
 			return err
 		}
@@ -36,23 +37,16 @@ func prepareOpenDesignEngineProfile(dir, engine string, library modelLibrary, ca
 	}
 	if engine == "opencode" {
 		selection := editorSelection{Initial: library.DefaultModel}
-		metadata := map[string]modelInfo{}
-		for _, model := range catalog {
-			metadata[model.ID] = model
-		}
-		for _, model := range library.Models {
+		for i, model := range library.Models {
 			name := model.DisplayName
 			if name == "" {
 				name = model.ID
 			}
-			context := model.ContextWindow
-			if context == 0 {
-				context = metadata[model.ID].ContextWindow
+			context, err := contextPolicyForChoice(choices[i])
+			if err != nil {
+				return err
 			}
-			if context < 1024 || context > 100000000 {
-				context = 200000
-			}
-			selection.Models = append(selection.Models, editorModel{ID: model.ID, Name: name, Context: context, Output: model.MaxOutputTokens})
+			selection.Models = append(selection.Models, editorModel{ID: model.ID, Name: name, Context: context.ContextWindow, Output: context.MaxOutputTokens})
 		}
 		if err := validateEditorSelection(selection); err != nil {
 			return err
@@ -91,12 +85,16 @@ func prepareOpenDesignEngineProfile(dir, engine string, library modelLibrary, ca
 
 	selection := claudeSelection{Initial: library.DefaultModel, Mode: "installed", Aliases: map[string]string{}}
 	ids := make(map[string]bool, len(library.Models))
-	for _, model := range library.Models {
+	for i, model := range library.Models {
+		context, err := contextPolicyForChoice(choices[i])
+		if err != nil {
+			return err
+		}
 		effort := model.ReasoningEffort
 		if !validClaudeEffort(model.ID, effort) || !caps.PerModelEffort && (model.ID != library.DefaultModel || effort == "xhigh") {
 			effort = ""
 		}
-		selection.Models = append(selection.Models, claudeModel{ID: model.ID, DisplayName: model.DisplayName, Effort: effort})
+		selection.Models = append(selection.Models, claudeModel{ID: model.ID, DisplayName: model.DisplayName, Effort: effort, Context: context.ContextWindow, Output: context.MaxOutputTokens})
 		ids[model.ID] = true
 	}
 	if old, err := readCatalogFile(filepath.Join(dir, "kilo-models.json")); err == nil {

@@ -15,7 +15,7 @@ test('Oh My Pi keeps exact IDs, names and limits with only declared supported re
  assert.equal(payload.initial,'openai/unknown');
  assert.deepEqual(payload.models[0],{id:'vendor/one',name:'Short One',contextWindow:64000,maxOutputTokens:4096,reasoning:true,reasoningEfforts:['low','high'],effort:'high',inputModalities:['text','image'],inputPrice:1.25,outputPrice:4});
  for(const m of payload.models.slice(1)){assert.equal(m.reasoning,false);assert.equal(m.effort,undefined);assert.equal(m.reasoningEfforts,undefined)}
- assert.equal(payload.models[1].contextWindow,200000);
+ assert.equal(payload.models[1].contextWindow,272000);
  assert.deepEqual(ompEfforts({reasoningEfforts:['max','ultra','minimal','xhigh']}),['minimal','xhigh','max']);
 });
 

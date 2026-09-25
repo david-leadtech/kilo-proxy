@@ -1,8 +1,9 @@
+import {contextLimits,contextControls,contextModel,syncContextModels,contextError,contextPreview} from './context-policy.mjs';
 import {validModelID,modelPriceDetails,filterModels,sortModels,configureModelSort,setModelSort,mergeModelSelection,filterModelLab,configureModelLab,setModelLab} from './model-helper.mjs';
 import {ompPayload,ompLaunch,ompConfig,ompEfforts} from './omp-helper.mjs';
 import {clientConfig} from './client-config.mjs';
 export function editorPayload(models,initial) {
- return {models:models.map(m=>({id:m.id,name:(m.displayName||m.name||m.id).slice(0,80),contextWindow:m.contextWindow==null?200000:Number(m.contextWindow),maxOutputTokens:m.maxOutputTokens==null?0:Number(m.maxOutputTokens)})),initial};
+ return {models:models.map(m=>({id:m.id,name:(m.displayName||m.name||m.id).slice(0,80),contextWindow:contextLimits(m).contextWindow,maxOutputTokens:contextLimits(m).maxOutputTokens})),initial};
 }
 const quote=s=>"'"+s.replaceAll("'","'\\''")+"'";
 const ps=s=>"'"+s.replaceAll("'","''")+"'";
@@ -36,9 +37,10 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
  const payload=()=>ctx.client==='omp'?ompPayload([...s().models.values()],s().initial):editorPayload([...s().models.values()],s().initial);
  const endpoint=client=>client==='omp'?'omp/profile':'editors/'+client+'/profile';
  const launch=()=>ctx.client==='omp'?ompLaunch(s().profileDir,s().initial,$('editor-shell').value):editorLaunch(s().path,s().initial,$('editor-shell').value);
- const fingerprint=()=>JSON.stringify([ctx.client,payload(),ctx.state?.baseURL,ctx.state?.zedBaseURL,ctx.state?.localKey,ctx.client==='omp'?ctx.state?.imageGeneration:null]);
+ const fingerprint=()=>JSON.stringify([ctx.client,contextPreview(payload),ctx.state?.baseURL,ctx.state?.zedBaseURL,ctx.state?.localKey,ctx.client==='omp'?ctx.state?.imageGeneration:null]);
  const prepared=()=>s().saved===fingerprint();
  function controls(){
+  const invalid=contextError(s().models);
   const zed=ctx.client==='zed',omp=ctx.client==='omp',name=zed?'Zed':omp?'Oh My Pi':'OpenCode';
   const labels={
    'editor-title':`${name} · `+L('select and prepare','selecciona y prepara'),
@@ -48,17 +50,17 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
    'editor-copy':zed?L('Copy key for Zed (recovery)','Copiar clave para Zed (recuperación)'):L('Copy launch command (optional)','Copiar arranque (opcional)'),
    'editor-export':L('Copy configuration (optional)','Copiar configuración (opcional)'),
    'editor-next':omp?L('Launch above to prepare ~/.omp-kilo and open a project terminal. No /login is needed. Use /model to switch models and thinking levels. Your regular Oh My Pi profile stays separate. The configured Kilo image tool is added when enabled.','Inicia desde el botón superior para preparar ~/.omp-kilo y abrir una terminal del proyecto. No hace falta /login. Usa /model para cambiar modelo y nivel de razonamiento. Tu perfil habitual de Oh My Pi queda separado. Se añade la herramienta de imágenes de Kilo cuando está activada.'):zed?L('Preparation saves the local key in the system credential store. Select a model in Zed’s Agent panel; existing projects stay open. Copy key is only for recovery in “agent: open settings” → kilo-local. Copying configuration alone does not save credentials. This configures Zed Agent, not edit prediction or external agents.','La preparación guarda la clave local en el almacén de credenciales del sistema. Elige modelo en el panel Agent de Zed; tus proyectos siguen abiertos. Copiar clave sirve solo para recuperarla en «agent: open settings» → kilo-local. Copiar solo la configuración no guarda las credenciales. Configura Zed Agent, no la predicción de código ni agentes externos.'):L('Open above to start a project terminal, or copy the optional command. Use /models to switch models. No /connect is needed: the protected profile stores only the local proxy key. Global and project settings still merge; project settings can override this profile.','Abre desde el botón superior para iniciar una terminal del proyecto, o copia el comando opcional. Cambia con /models. No hace falta /connect: el perfil protegido guarda solo la clave local del proxy. Se combinan los ajustes globales y del proyecto; los del proyecto pueden prevalecer.'),
-   'editor-limit-note':omp?L('Uses Responses over HTTP/SSE. Reasoning controls require declared model capabilities. Unknown limits default to 200,000 context and an 8,192 output cap: review them below. Modified files receive .bak backups.','Usa Responses por HTTP/SSE. Los controles de razonamiento requieren capacidades declaradas del modelo. Los límites desconocidos usan 200.000 de contexto y un máximo de 8.192 de salida: revísalos abajo. Los archivos modificados reciben copia .bak.'):L('Uses Chat Completions. Model lists and saved settings do not verify generation or tool support. Context defaults to 200,000 for unknown models: review limits below. Changed files receive .bak backups.','Usa Chat Completions. La lista y los ajustes guardados no verifican generación ni herramientas. El contexto de modelos desconocidos se inicia en 200.000: revisa sus límites abajo. Los archivos modificados reciben copia .bak.')};
+   'editor-limit-note':omp?L('Uses Responses over HTTP/SSE. Reasoning controls require declared model capabilities. Recommended uses up to 272,000 context tokens. Output is capped at one quarter of the working window. Modified files receive .bak backups.','Usa Responses por HTTP/SSE. Los controles de razonamiento requieren capacidades declaradas del modelo. Recomendado usa hasta 272.000 tokens de contexto. La salida se limita a un cuarto de la ventana de trabajo. Los archivos modificados reciben copia .bak.'):L('Uses Chat Completions. Model lists and saved settings do not verify generation or tool support. Recommended uses up to 272,000 context tokens. Presets never exceed the known model maximum. Changed files receive .bak backups.','Usa Chat Completions. La lista y los ajustes guardados no verifican generación ni herramientas. Recomendado usa hasta 272.000 tokens de contexto. Los presets no superan el máximo conocido del modelo. Los archivos modificados reciben copia .bak.')};
   for(const [id,text]of Object.entries(labels))$(id).textContent=text;
   $('editor-search').placeholder=L('Search model, provider or saved name','Buscar modelo, proveedor o nombre guardado');
   $('editor-sort-label').textContent=L('Sort by','Ordenar por');
   $('editor-lab-label').textContent=L('Lab','Laboratorio');
   configureModelSort($('editor-sort'),ctx.language);
-  $('editor-save').disabled=working||!s().models.size||!ctx.state;
+  $('editor-save').disabled=working||!s().models.size||!ctx.state||!!invalid;
   $('editor-load').disabled=working;$('editor-refresh').disabled=working;$('editor-add').disabled=working;
-  $('editor-copy').disabled=working||!prepared();$('editor-export').disabled=!s().models.size;
+  $('editor-copy').disabled=working||!prepared();$('editor-export').disabled=!s().models.size||!!invalid;
   $('editor-shell').hidden=zed;
-  $('editor-status').textContent=prepared()?L('Configuration saved: ','Configuración guardada: ')+s().path:s().saved?L('Unsaved changes. Prepare this editor again.','Cambios sin guardar. Prepara este editor de nuevo.'):L('Select models and prepare the configuration.','Selecciona modelos y prepara la configuración.');
+  $('editor-status').textContent=invalid|| (prepared()?L('Configuration saved: ','Configuración guardada: ')+s().path:s().saved?L('Unsaved changes. Prepare this editor again.','Cambios sin guardar. Prepara este editor de nuevo.'):L('Select models and prepare the configuration.','Selecciona modelos y prepara la configuración.'));
   $('editor-preview').textContent=prepared()?(zed?L('Provider: kilo-local\nLocal key saved in the system credential store.','Proveedor: kilo-local\nClave local guardada en el almacén de credenciales del sistema.'):launch()):'';
   onChange();
  }
@@ -69,7 +71,7 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
   const all=new Map(ctx.catalog.map(m=>[m.id,m]));for(const [id,m]of selected.models)all.set(id,mergeModelSelection(all.get(id),m));
   configureModelLab($('editor-lab'),[...all.values()],ctx.language);
   const matches=sortModels(filterModels(filterModelLab([...all.values()],$('editor-lab').value),q,false).filter(m=>!only||selected.models.has(m.id)),$('editor-sort').value);
-  const next=JSON.stringify([ctx.client,ctx.language,matches,payload(),working]);if(next===signature)return;
+  const next=JSON.stringify([ctx.client,ctx.language,matches,contextPreview(payload),working]);if(next===signature)return;
   if(!force&&renderedClient===ctx.client&&!working&&$('editor-picker').contains(document.activeElement)&&document.activeElement.matches('input[type=text],input[type=number]'))return;
   // A background state refresh can render a changed name/reasoning preference
   // before the next input gains focus. Keep the user's limit panels expanded.
@@ -94,9 +96,10 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
      for(const level of levels){const option=document.createElement('option');option.value=level;option.textContent=level;effort.append(option)}
      effort.value=levels.includes(value.effort)?value.effort:'';effort.disabled=working||!levels.length;effort.addEventListener('change',()=>{value.effort=effort.value;controls()});label.append(effort);row.append(label);
     }
-    const limits=document.createElement('details'),summary=document.createElement('summary');limits.dataset.editorLimits=m.id;limits.open=expandedLimits.has(m.id);summary.textContent=L('Context and output limits','Límites de contexto y salida');limits.append(summary);
-    for(const [field,title,fallback]of [['contextWindow',L('Context tokens','Tokens de contexto'),200000],['maxOutputTokens',L('Max output tokens (0 = unspecified)','Salida máxima (0 = sin especificar)'),0]]){
-     const l=document.createElement('label'),input=document.createElement('input');l.textContent=title;input.type='number';input.min=field==='contextWindow'?'1024':'0';input.max='100000000';input.value=value[field]||fallback;input.setAttribute('aria-label',title+': '+m.id);input.disabled=working;input.addEventListener('input',()=>{value[field]=Number(input.value);controls()});l.append(input);limits.append(l)
+    row.append(contextControls(value,{language:ctx.language,catalogModel:ctx.catalog.find(model=>model.id===m.id),disabled:working,onChange:controls}));
+    const limits=document.createElement('details'),summary=document.createElement('summary');limits.dataset.editorLimits=m.id;limits.open=expandedLimits.has(m.id);summary.textContent=L('Output limit','Límite de salida');limits.append(summary);
+    for(const [field,title,fallback]of [['maxOutputTokens',L('Max output tokens (0 = automatic)','Salida máxima (0 = automática)'),0]]){
+     const l=document.createElement('label'),input=document.createElement('input');l.textContent=title;input.type='number';input.min=field==='contextWindow'?'1024':'0';input.max='100000000';input.value=value[field]||fallback;input.setAttribute('aria-label',title+': '+m.id);input.disabled=working;input.addEventListener('input',()=>{value[field]=Number(input.value);const policy=row.querySelector('.context-policy');policy.replaceWith(contextControls(value,{language:ctx.language,catalogModel:ctx.catalog.find(model=>model.id===m.id),disabled:working,onChange:controls}));controls()});l.append(input);limits.append(l)
     }row.append(limits);entry.append(row)
    }$('editor-picker').append(entry)
   }
@@ -117,9 +120,9 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
  $('editor-save').addEventListener('click',()=>prepare().catch(e=>notify(e.message,true)));
  $('editor-load').addEventListener('click',async()=>{
   const client=ctx.client,selection=s();working=true;render(ctx);
-  try{const result=await api(endpoint(client));selection.models=new Map(result.selection.models.map(m=>[m.id,m]));selection.initial=result.selection.initial;selection.path=result.configPath;selection.profileDir=result.profileDir;selection.saved=null;$('editor-selected').checked=true;$('editor-search').value='';notify(()=>L('Selection loaded. Prepare again to apply current connection settings.','Selección cargada. Prepara de nuevo para aplicar la conexión actual.'))}catch(e){notify(e.message,true)}finally{working=false;render(ctx)}
+  try{const result=await api(endpoint(client));selection.models=new Map(result.selection.models.map(m=>[m.id,contextModel(m,ctx.catalog.find(entry=>entry.id===m.id),true)]));selection.initial=result.selection.initial;selection.path=result.configPath;selection.profileDir=result.profileDir;selection.saved=null;$('editor-selected').checked=true;$('editor-search').value='';notify(()=>L('Selection loaded. Prepare again to apply current connection settings.','Selección cargada. Prepara de nuevo para aplicar la conexión actual.'))}catch(e){notify(e.message,true)}finally{working=false;render(ctx)}
  });
  $('editor-copy').addEventListener('click',()=>prepared()&&copy(ctx.client==='zed'?ctx.state.localKey:launch()));
- $('editor-export').addEventListener('click',()=>copy((ctx.client==='omp'?ompConfig:clientConfig)({client:ctx.client,language:ctx.language,baseURL:ctx.state?.baseURL,zedBaseURL:ctx.state?.zedBaseURL,key:ctx.state?.localKey,model:s().initial,selectedModels:payload().models})));
- return {render,launchState:()=>({id:ctx.client,count:s().models.size,ready:prepared(),fingerprint:fingerprint(),working,prepare})};
+ $('editor-export').addEventListener('click',()=>copy((ctx.client==='omp'?ompConfig:clientConfig)({client:ctx.client,language:ctx.language,baseURL:ctx.state?.baseURL,zedBaseURL:ctx.state?.zedBaseURL,key:ctx.state?.localKey,model:s().initial,selectedModels:ctx.client==='omp'?[...s().models.values()]:payload().models})));
+ return {render,setCatalog:catalog=>{for(const selection of Object.values(selections))syncContextModels(selection.models,catalog);},launchState:()=>({id:ctx.client,count:s().models.size,valid:!contextError(s().models),reason:contextError(s().models),ready:prepared(),fingerprint:fingerprint(),working,prepare})};
 }

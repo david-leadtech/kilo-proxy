@@ -1,3 +1,4 @@
+import {contextLimits} from './context-policy.mjs';
 import {validModelID} from './model-helper.mjs';
 // Conservative, original instructions for external models. Do not copy the
 // installed application's model prompts or claim provider-specific capabilities.
@@ -243,6 +244,7 @@ export function codexCatalog(models, defaultModel) {
     supports_parallel_tool_calls:false, experimental_supported_tools:[],
     truncation_policy:{mode:'tokens',limit:10000},
     input_modalities:m.inputModalities?.includes('image') ? ['text','image'] : ['text'],
-    ...(Number.isInteger(m.contextWindow) && m.contextWindow >= 1024 && m.contextWindow <= 100000000 ? {context_window:m.contextWindow} : {})
+    context_window:contextLimits(m).contextWindow,
+    auto_compact_token_limit:contextLimits(m).autoCompactTokenLimit
   }))};
 }

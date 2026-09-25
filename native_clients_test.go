@@ -55,8 +55,9 @@ func TestNativeClientProfileSelectionIsolationAndValidation(t *testing.T) {
 	if err := s.add(modelInfo{ID: "manual/other"}, 1); err == nil {
 		t.Fatal("model limit ignored")
 	}
-	if s.Models[0].Model.ContextWindow != 200000 {
-		t.Fatal("unknown model has no safe editable default")
+	limits, err := contextPolicyForChoice(s.Models[0])
+	if err != nil || limits.ContextWindow != 272000 || limits.MaximumKnown || s.Models[0].ContextPreset != contextPresetRecommended {
+		t.Fatal("unknown model should use Recommended without inventing catalog capacity")
 	}
 }
 
@@ -159,6 +160,10 @@ func TestNativeClientsWidgetActionsPrepareEveryEditor(t *testing.T) {
 			u.page = "models"
 			u.expanded["library.catalog"] = true
 			u.models = nativeClientModelsForTest()
+			if key == "claude" || key == "xcode-claude" {
+				// Claude's configurable compaction window starts at 100K.
+				u.models[0].ContextWindow = 128000
+			}
 			u.client = key
 			if strings.HasPrefix(key, "xcode-") {
 				u.client = "xcode"
@@ -379,8 +384,8 @@ func TestNativeClientsCatalogRefreshPreservesEditsAndUpdatesMetadata(t *testing.
 	nativeTestFrame(t, u)
 	s := u.library.selection
 	m := s.choice("vendor/one")
-	if m.DisplayName != "My short name" || m.Model.ContextWindow != 64000 {
-		t.Fatal("metadata refresh replaced profile edits")
+	if m.DisplayName != "My short name" || m.Model.ContextWindow != 99000 || m.ContextPreset != contextPresetRecommended {
+		t.Fatal("metadata refresh replaced choices or retained a stale capacity")
 	}
 	if *m.Model.InputPrice != 4 || !reflect.DeepEqual(m.Model.ReasoningEfforts, []string{"low"}) {
 		t.Fatal("selected model retained stale price/capabilities")

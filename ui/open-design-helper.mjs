@@ -1,3 +1,4 @@
+import {contextControls,contextModel,contextLibraryFields,syncContextModels,contextError} from './context-policy.mjs';
 import {validModelID, modelPriceDetails, filterModels, sortModels, configureModelSort, setModelSort, filterModelLab, configureModelLab, setModelLab} from './model-helper.mjs';
 
 export const openDesignEngines = ['codex-cli', 'claude', 'opencode'];
@@ -6,7 +7,8 @@ export function openDesignLibrary(models = [], initial = '') {
  for (const model of models) {
   if (typeof model?.id !== 'string' || !validModelID(model.id) || selected.has(model.id) || selected.size >= 50) continue;
   const entry = {id:model.id, displayName:Array.from(model.displayName || model.name || model.id).slice(0, 80).join('')};
-  for (const key of ['contextWindow', 'maxOutputTokens']) if (Number.isSafeInteger(model[key]) && model[key] > 0) entry[key] = model[key];
+  Object.assign(entry,contextLibraryFields(model));
+  for (const key of ['maxOutputTokens']) if (Number.isSafeInteger(model[key]) && model[key] > 0) entry[key] = model[key];
   for (const key of ['reasoningEffort', 'reasoningCustom']) if (model[key] !== undefined) entry[key] = model[key];
   if (Array.isArray(model.reasoningLevels)) entry.reasoningLevels = [...model.reasoningLevels];
   selected.set(model.id, entry);
@@ -63,7 +65,7 @@ export function createOpenDesignHelper({api, refreshCatalog, onChange = () => {}
    const result = await api('open-design/profile'); profile = result;
    if (!engineEdited && openDesignEngines.includes(result.engine)) engine = result.engine;
    if (!edited && !selected.size) {
-    for (const model of result.library?.models || []) selected.set(model.id, {...model});
+    for (const model of result.library?.models || []) selected.set(model.id, contextModel(model,ctx.catalog.find(entry=>entry.id===model.id),true));
     initial = result.library?.defaultModel || selected.keys().next().value || '';
    }
   } catch (failure) {profile = null; error = failure.message;}
@@ -97,7 +99,7 @@ export function createOpenDesignHelper({api, refreshCatalog, onChange = () => {}
    check.dataset.openDesignId = model.id; check.setAttribute('aria-label', model.name || model.id);
    check.addEventListener('change', () => {
     edited = true;
-    if (check.checked) {selected.set(model.id, model); if (!initial) initial = model.id;}
+    if (check.checked) {selected.set(model.id, {...model}); if (!initial) initial = model.id;}
     else {selected.delete(model.id); if (initial === model.id) initial = selected.keys().next().value || '';}
     render(ctx);
    });
@@ -108,7 +110,7 @@ export function createOpenDesignHelper({api, refreshCatalog, onChange = () => {}
     const row = document.createElement('div'), button = document.createElement('button'); row.className = 'codex-row-controls'; button.type = 'button'; button.className = 'codex-default-button';
     button.textContent = initial === model.id ? L('★ Initial model', '★ Modelo inicial') : L('Use as initial model', 'Usar como modelo inicial');
     button.setAttribute('aria-pressed', String(initial === model.id)); button.dataset.openDesignInitial = model.id;
-    button.disabled = working; button.addEventListener('click', () => {edited = true; initial = model.id; render(ctx);}); row.append(button); card.append(row);
+    button.disabled = working; button.addEventListener('click', () => {edited = true; initial = model.id; render(ctx);}); row.append(button); row.append(contextControls(selected.get(model.id),{language:ctx.language,catalogModel:ctx.catalog.find(entry=>entry.id===model.id),disabled:working,onChange:()=>{edited=true;controls();}}));card.append(row);
    }
    $('open-design-picker').append(card);
   }
@@ -124,11 +126,11 @@ export function createOpenDesignHelper({api, refreshCatalog, onChange = () => {}
  $('open-design-id').addEventListener('input', controls);
  $('open-design-add').addEventListener('click', () => {
   const id = $('open-design-id').value.trim(); if (!validModelID(id) || selected.size >= 50 || working) return;
-  edited = true; selected.set(id, ctx.catalog.find(model => model.id === id) || {id, name:id}); if (!initial) initial = id;
+  edited = true; selected.set(id, {...ctx.catalog.find(model => model.id === id),id,name:ctx.catalog.find(model=>model.id===id)?.name||id}); if (!initial) initial = id;
   $('open-design-id').value = ''; $('open-design-search').value = ''; $('open-design-selected').checked = true; render(ctx);
  });
- return {render, reload:load, launchState:() => ({id:'open-design', engine, count:selected.size, ready:false, working:working || loading, prepare,
-  valid:loaded && openDesignCanLaunch(ctx.state, engine, profile?.engines, library()),
-  reason:!ctx.state?.hasKey || !ctx.state?.orgId?.trim() ? L('Connect your Kilo account and team first.', 'Conecta primero tu cuenta y equipo de Kilo.') : error || (!loading && !profile?.engines?.[engine]?.available ? profile?.engines?.[engine]?.reason || L('Install the selected CLI and check again.', 'Instala el CLI elegido y vuelve a comprobar.') : ''),
+ return {render, setCatalog:catalog=>syncContextModels(selected,catalog), reload:load, launchState:() => ({id:'open-design', engine, count:selected.size, ready:false, working:working || loading, prepare,
+  valid:loaded && !contextError(selected) && openDesignCanLaunch(ctx.state, engine, profile?.engines, library()),
+  reason:!ctx.state?.hasKey || !ctx.state?.orgId?.trim() ? L('Connect your Kilo account and team first.', 'Conecta primero tu cuenta y equipo de Kilo.') : contextError(selected) || error || (!loading && !profile?.engines?.[engine]?.available ? profile?.engines?.[engine]?.reason || L('Install the selected CLI and check again.', 'Instala el CLI elegido y vuelve a comprobar.') : ''),
   fingerprint:fingerprint()})};
 }

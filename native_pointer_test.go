@@ -113,6 +113,9 @@ func TestNativePointerNavigationAndModelSelection(t *testing.T) {
 				t.Fatal("pointer did not select the searched shared model")
 			}
 			h.click("Done", semantic.Button)
+			// Bring the first model below the shared context controls into view.
+			h.u.list("page.models").Position.Offset = 220
+			h.frame()
 			h.click("Edit", semantic.Button)
 			h.click("Very Long First Model Name", semantic.Editor)
 			h.typeText("My shared model")

@@ -22,8 +22,9 @@ func mergeCodexConfig(data, catalog []byte, port int) ([]byte, error) {
 	}
 	var models struct {
 		Models []struct {
-			Slug   string  `json:"slug"`
-			Effort *string `json:"default_reasoning_level"`
+			Slug    string  `json:"slug"`
+			Effort  *string `json:"default_reasoning_level"`
+			Context int     `json:"context_window"`
 		} `json:"models"`
 	}
 	if _, err := validateCatalog(catalog); err != nil {
@@ -33,10 +34,20 @@ func mergeCodexConfig(data, catalog []byte, port int) ([]byte, error) {
 		return nil, err
 	}
 	selected := models.Models[0]
+	managedContext := true
+	for _, model := range models.Models {
+		managedContext = managedContext && model.Context >= 1024
+	}
 	updateModel := func(table map[string]any) {
 		table["model"] = selected.Slug
 		table["model_provider"] = "kilo-local"
 		table["model_catalog_json"] = "models.json"
+		if managedContext {
+			// A global override would mask the per-model budgets on every switch.
+			delete(table, "model_context_window")
+			delete(table, "model_auto_compact_token_limit")
+			delete(table, "model_auto_compact_token_limit_scope")
+		}
 		if selected.Effort != nil {
 			table["model_reasoning_effort"] = *selected.Effort
 		} else {

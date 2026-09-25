@@ -172,6 +172,7 @@ func TestNativeLibraryIncompleteTokenEditCannotReportSaved(t *testing.T) {
 	u.page = "models"
 	nativeSeedSharedForTest(t, u, u.models[0])
 	before := u.owner.modelLibrary.snapshot()
+	u.setContextChoice(sharedModelKey, u.library.selection.choice("vendor/one"), contextPresetCustom, 64000)
 	field := nativeClientField(sharedModelKey, "vendor/one", "context")
 	u.setValue(field, "not finished")
 	u.setValue(nativeClientField(sharedModelKey, "vendor/one", "name"), "Name edited with token limit")

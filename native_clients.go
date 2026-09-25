@@ -79,10 +79,7 @@ func (s *nativeClientSelection) add(model modelInfo, limit int) error {
 	if model.Name == "" {
 		model.Name = model.ID
 	}
-	if model.ContextWindow == 0 {
-		model.ContextWindow = 200000
-	}
-	s.Models = append(s.Models, nativeModelChoice{Model: model})
+	s.Models = append(s.Models, nativeModelChoice{Model: model, ContextPreset: contextPresetRecommended, MaximumOutputTokens: model.MaxOutputTokens})
 	if s.Initial == "" {
 		s.Initial = model.ID
 	}
@@ -137,13 +134,16 @@ func nativeClientEndpoint(key string) string {
 
 func nativeClientPayload(key string, s *nativeClientSelection) (any, error) {
 	if key == "omp" {
-		selection := nativeOMPSelection(s)
+		selection, err := nativeOMPSelection(s)
+		if err != nil {
+			return nil, err
+		}
 		return selection, validateOMPSelection(selection)
 	}
 	if key == "open-design" {
 		library := modelLibrary{SchemaVersion: 1, DefaultModel: s.Initial}
 		for _, m := range s.Models {
-			library.Models = append(library.Models, modelLibraryItem{ID: m.Model.ID, DisplayName: m.DisplayName, ReasoningEffort: m.DefaultReasoning, ReasoningLevels: m.ReasoningLevels, ReasoningCustom: m.ReasoningCustom, ContextWindow: m.Model.ContextWindow, MaxOutputTokens: m.Model.MaxOutputTokens})
+			library.Models = append(library.Models, nativeLibraryItem(m))
 		}
 		engine := s.Mode
 		if !validOpenDesignEngine(engine) {
@@ -170,7 +170,11 @@ func nativeClientPayload(key string, s *nativeClientSelection) (any, error) {
 			if name == "" {
 				name = m.Model.Name
 			}
-			selection.Models = append(selection.Models, editorModel{ID: m.Model.ID, Name: name, Context: m.Model.ContextWindow, Output: m.Model.MaxOutputTokens})
+			limits, err := contextPolicyForChoice(m)
+			if err != nil {
+				return nil, err
+			}
+			selection.Models = append(selection.Models, editorModel{ID: m.Model.ID, Name: name, Context: limits.ContextWindow, Output: limits.MaxOutputTokens})
 		}
 		return selection, validateEditorSelection(selection)
 	}
@@ -183,7 +187,11 @@ func nativeClientPayload(key string, s *nativeClientSelection) (any, error) {
 		if key == "xcode-chat" {
 			effort = ""
 		}
-		selection.Models = append(selection.Models, claudeModel{ID: m.Model.ID, DisplayName: m.DisplayName, Effort: effort})
+		limits, err := contextPolicyForChoice(m)
+		if err != nil {
+			return nil, err
+		}
+		selection.Models = append(selection.Models, claudeModel{ID: m.Model.ID, DisplayName: m.DisplayName, Effort: effort, Context: limits.ContextWindow, Output: limits.MaxOutputTokens})
 	}
 	if strings.HasPrefix(key, "xcode-") {
 		selection.Mode = "installed"
@@ -267,12 +275,13 @@ func nativeVisibleModels(catalog []modelInfo, s *nativeClientSelection, query st
 	return out
 }
 
-// Refresh published metadata while keeping the profile's editable token limits.
+// Refresh published capacity while retaining the editable output preference.
+// Context policy lives on nativeModelChoice, independently of catalog metadata.
 func nativeCurrentModel(saved, current modelInfo) modelInfo {
 	if current.ID == "" {
 		return saved
 	}
-	current.ContextWindow, current.MaxOutputTokens = saved.ContextWindow, saved.MaxOutputTokens
+	current.MaxOutputTokens = saved.MaxOutputTokens
 	return current
 }
 
@@ -313,7 +322,7 @@ func (u *nativeUI) seedClientChoice(key string, m nativeModelChoice) {
 	}
 	u.setValue(nativeClientField(key, id, "reasoning"), initial)
 	u.setValue(nativeClientField(key, id, "claude-effort"), m.ClaudeEffort)
-	u.setValue(nativeClientField(key, id, "context"), strconv.Itoa(m.Model.ContextWindow))
+	u.setValue(nativeClientField(key, id, "context"), strconv.Itoa(m.ContextTokens))
 	u.setValue(nativeClientField(key, id, "output"), strconv.Itoa(m.Model.MaxOutputTokens))
 	u.setChecked(nativeClientField(key, id, "custom"), m.ReasoningCustom)
 	levels, _ := nativeReasoningFor(m)
@@ -329,10 +338,13 @@ func (u *nativeUI) syncClientSelection(key string, s *nativeClientSelection) {
 	for i := range s.Models {
 		m := &s.Models[i]
 		id := m.Model.ID
+		if current, exists := catalog[id]; exists {
+			m.MaximumOutputTokens = current.MaxOutputTokens
+		}
 		m.Model = nativeCurrentModel(m.Model, catalog[id])
 		m.DisplayName = u.value(nativeClientField(key, id, "name"))
 		if key == sharedModelKey || key == "opencode" || key == "zed" {
-			m.Model.ContextWindow, _ = strconv.Atoi(u.value(nativeClientField(key, id, "context")))
+			m.ContextTokens, _ = strconv.Atoi(u.value(nativeClientField(key, id, "context")))
 			m.Model.MaxOutputTokens, _ = strconv.Atoi(u.value(nativeClientField(key, id, "output")))
 		}
 		if key == sharedModelKey || key == "codex" || key == "codex-cli" || key == "xcode-codex" {
@@ -714,8 +726,8 @@ func (u *nativeUI) clientPicker(key string, s *nativeClientSelection) layout.Wid
 			}
 			row = append(row, u.row(primary...))
 			row = append(row, options...)
-			if (shared || key == "opencode" || key == "zed") && u.checked(prefix+"advanced") {
-				row = append(row, u.row(u.field(nativeClientField(key, id, "context"), u.tr("Context tokens", "Tokens de contexto"), "200000", false), u.field(nativeClientField(key, id, "output"), u.tr("Max output (0 = unspecified)", "Salida máxima (0 = sin especificar)"), "0", false)))
+			if (key == "opencode" || key == "zed") && u.checked(prefix+"advanced") {
+				row = append(row, u.contextChoiceControls(key, choice), u.note(u.contextChoiceSummary(*choice)), u.field(nativeClientField(key, id, "output"), u.tr("Max output (0 = automatic)", "Salida máxima (0 = automática)"), "0", false))
 			}
 		}
 		if shared && !catalog && choice != nil {
@@ -787,6 +799,12 @@ func (u *nativeUI) clientActions(key string, s *nativeClientSelection) layout.Wi
 		status = validation.Error()
 	}
 	widgets := []layout.Widget{u.clientLauncherPanel(key, s, canSave), u.row(u.disabled(canSave, u.button("client:"+key+":prepare", u.tr("Prepare without launching", "Preparar sin abrir"), func() { u.prepareClient(key) }))), u.note(status), u.note(u.tr("Existing preferences are preserved. Changed files receive .bak backups.", "Se conservan los ajustes existentes y se guardan copias .bak de los archivos modificados."))}
+	if key == "claude" || key == "xcode-claude" {
+		widgets = append(widgets, u.note(u.tr("Claude Code uses the smallest selected context window for the whole session (100K–1M). The active model may cap it further.", "Claude Code usa la menor ventana seleccionada para toda la sesión (100K–1M). El modelo activo puede limitarla aún más.")))
+	}
+	if key == "xcode-chat" {
+		widgets = append(widgets, u.note(u.tr("Xcode Chat manages its own context window; shared context presets do not change it.", "Xcode Chat gestiona su propia ventana de contexto; los presets compartidos no la cambian.")))
+	}
 	widgets = append(widgets, u.check("client:"+key+":show-command", u.tr("Show launch command (optional)", "Mostrar comando de arranque (opcional)"), func(bool) {}))
 	showCommand := u.checked("client:" + key + ":show-command")
 	if showCommand {
@@ -869,9 +887,16 @@ func (u *nativeUI) clientActions(key string, s *nativeClientSelection) layout.Wi
 			widgets = append(widgets, u.note(err.Error()))
 		}
 		if key == "omp" {
-			if data, err := buildOMPSettings(nativeOMPSelection(s)); err == nil {
+			settings := func() ([]byte, error) {
+				selection, err := nativeOMPSelection(s)
+				if err != nil {
+					return nil, err
+				}
+				return buildOMPSettings(selection)
+			}
+			if data, err := settings(); err == nil {
 				widgets = append(widgets, u.note(u.tr("config.yml · default model and reasoning", "config.yml · modelo inicial y razonamiento")), u.code("client:omp:settings", string(data)), u.button("client:omp:settings-copy", u.tr("Copy config.yml", "Copiar config.yml"), func() {
-					if data, err := buildOMPSettings(nativeOMPSelection(s)); err == nil {
+					if data, err := settings(); err == nil {
 						u.copy(string(data))
 					} else {
 						u.notice = err.Error()
@@ -979,7 +1004,7 @@ func decodeNativeClientSelection(key string, data []byte, catalog []modelInfo) (
 				return m
 			}
 		}
-		return modelInfo{ID: id, Name: id, ContextWindow: 200000}
+		return modelInfo{ID: id, Name: id}
 	}
 	if key == "codex" || key == "codex-cli" || key == "xcode-codex" {
 		var envelope struct {
@@ -1017,9 +1042,11 @@ func decodeNativeClientSelection(key string, data []byte, catalog []modelInfo) (
 		}
 		for _, m := range source.Models {
 			model := lookup(m.ID)
-			model.ContextWindow = m.Context
 			model.InputModalities = m.Input
-			choice := nativeModelChoice{Model: model, DisplayName: m.Name, ReasoningCustom: true, DefaultReasoning: m.Effort, ReasoningLevels: []string{}}
+			choice := nativeModelChoice{Model: model, DisplayName: m.Name, ReasoningCustom: true, DefaultReasoning: m.Effort, ReasoningLevels: []string{}, MaximumOutputTokens: model.MaxOutputTokens, ContextPreset: contextPresetCustom, ContextTokens: m.Context}
+			if m.Context == 0 {
+				choice.ContextPreset = contextPresetRecommended
+			}
 			for _, level := range m.Levels {
 				choice.ReasoningLevels = append(choice.ReasoningLevels, level.Effort)
 			}
@@ -1045,9 +1072,9 @@ func decodeNativeClientSelection(key string, data []byte, catalog []modelInfo) (
 		s.Path = source.ConfigPath
 		for _, m := range source.Selection.Models {
 			model := lookup(m.ID)
-			model.ContextWindow = m.Context
+			maximumOutput := model.MaxOutputTokens
 			model.MaxOutputTokens = m.Output
-			s.Models = append(s.Models, nativeModelChoice{Model: model, DisplayName: m.Name})
+			s.Models = append(s.Models, nativeModelChoice{Model: model, DisplayName: m.Name, ContextPreset: contextPresetCustom, ContextTokens: m.Context, MaximumOutputTokens: maximumOutput})
 		}
 		return s, nil
 	}
@@ -1063,7 +1090,15 @@ func decodeNativeClientSelection(key string, data []byte, catalog []modelInfo) (
 		s.Aliases[alias] = id
 	}
 	for _, m := range source.Models {
-		s.Models = append(s.Models, nativeModelChoice{Model: lookup(m.ID), DisplayName: m.DisplayName, ClaudeEffort: m.Effort})
+		choice := nativeModelChoice{Model: lookup(m.ID), DisplayName: m.DisplayName, ClaudeEffort: m.Effort, ContextPreset: contextPresetRecommended}
+		choice.MaximumOutputTokens = choice.Model.MaxOutputTokens
+		if m.Context > 0 {
+			choice.ContextPreset, choice.ContextTokens = contextPresetCustom, m.Context
+		}
+		if m.Output > 0 {
+			choice.Model.MaxOutputTokens = m.Output
+		}
+		s.Models = append(s.Models, choice)
 	}
 	return s, nil
 }

@@ -122,6 +122,10 @@ func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nat
 		u.clientState().ClaudeDetectStarted = true
 	}
 	u.models = nativeClientModelsForTest()
+	if key == "claude" || key == "xcode-claude" {
+		// The supported Claude compaction range is 100K–1M.
+		u.models[0].ContextWindow = 128000
+	}
 	nativeSeedSharedForTest(t, u, u.models[0])
 	u.sharedClientSelection(key)
 	u.detectLaunchers()

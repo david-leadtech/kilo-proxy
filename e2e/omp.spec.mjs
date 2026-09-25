@@ -26,13 +26,14 @@ test('Oh My Pi prepares multiple models with names, limits and supported reasoni
  await expect(page.locator(`[data-editor-effort="${second}"]`)).toBeDisabled();
  const row=page.locator('.codex-model-entry').filter({has:choose(page,first)});
  await row.locator('details > summary').click();
- await row.getByRole('spinbutton',{name:'Context tokens: '+first,exact:true}).fill('80000');
- await row.getByRole('spinbutton',{name:'Max output tokens (0 = unspecified): '+first,exact:true}).fill('5000');
+ await row.getByRole('button',{name:'Custom',exact:true}).click();
+  await row.getByRole('spinbutton',{name:'Context tokens: '+first,exact:true}).fill('80000');
+ await row.getByRole('spinbutton',{name:'Max output tokens (0 = automatic): '+first,exact:true}).fill('5000');
  await page.locator('#editor-save').click();
  await expect(page.locator('#editor-status')).toContainText('Configuration saved:');
  const result=await saved(request,gateway);
  expect(result.selection.initial).toBe(second);expect(result.selection.models).toHaveLength(2);
- expect(result.selection.models.find(m=>m.id===first)).toMatchObject({name:'Short One',contextWindow:80000,maxOutputTokens:5000,effort:'high',reasoningEfforts:['low','high']});
+ expect(result.selection.models.find(m=>m.id===first)).toMatchObject({name:'Short One',contextWindow:80000,maxOutputTokens:4000,effort:'high',reasoningEfforts:['low','high']});
  expect(result.configPath).toBe(path.join(result.profileDir,'models.yml'));
  const config=await readFile(result.configPath,'utf8');expect(config).toContain('Short One');expect(config).toContain('openai-responses');
  const command=await copied(page,'#editor-copy');
@@ -99,10 +100,11 @@ test('Oh My Pi keeps limit editors open when a state poll follows a reasoning ch
   // previous response. Waiting for it avoids racing the first render itself.
   await page.waitForResponse(isState);
   await expect(row.locator('details')).toHaveAttribute('open','');
+  await row.getByRole('button',{name:'Custom',exact:true}).click();
   await row.getByRole('spinbutton',{name:'Context tokens: '+first,exact:true}).fill('80000');
-  await row.getByRole('spinbutton',{name:'Max output tokens (0 = unspecified): '+first,exact:true}).fill('5000');
+  await row.getByRole('spinbutton',{name:'Max output tokens (0 = automatic): '+first,exact:true}).fill('5000');
   await page.locator('#editor-save').click();
   await expect(page.locator('#editor-status')).toContainText('Configuration saved:');
-  expect((await saved(request,gateway)).selection.models[0]).toMatchObject({contextWindow:80000,maxOutputTokens:5000,effort:'high'});
+  expect((await saved(request,gateway)).selection.models[0]).toMatchObject({contextWindow:80000,maxOutputTokens:4000,effort:'high'});
  }finally{release();}
 });

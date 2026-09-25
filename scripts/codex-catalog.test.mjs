@@ -7,7 +7,7 @@ test('Codex catalog preserves multiple IDs and contexts without inventing reason
  assert.deepEqual(catalog.models.map(m=>m.slug),['vendor/one','vendor/two']);
  assert.equal(catalog.models[0].context_window,123000);
  assert.deepEqual(catalog.models[0].input_modalities,['text','image']);
- assert.equal(catalog.models[1].context_window,undefined);
+ assert.equal(catalog.models[1].context_window,272000);
  for(const m of catalog.models){assert.equal(m.visibility,'list');assert.equal(m.supported_in_api,true);assert.deepEqual(m.supported_reasoning_levels,[]);assert.equal(m.prefer_websockets,false);assert.equal(m.use_responses_lite,false);}
 });
 test('GUI and CLI catalog references use their isolated profiles and require both files',()=>{

@@ -64,6 +64,13 @@ func TestNativeHelpersMatchBrowserCatalogsAndCommands(t *testing.T) {
 		{"metadata wins", []nativeModelChoice{{Model: modelInfo{ID: "openai/gpt-5.6-sol", ReasoningEfforts: []string{"none", "low", "max"}}}, {Model: modelInfo{ID: "vendor/new", ReasoningEfforts: []string{"high", "low", "invalid", "low"}}}}, "", false},
 		{"labels", []nativeModelChoice{{Model: modelInfo{ID: "v/a", Name: "Original"}, DisplayName: " A\nB "}, {Model: modelInfo{ID: "v/b", Name: "Fallback"}, DisplayName: "   "}, {Model: modelInfo{ID: "v/c"}, DisplayName: strings.Repeat("é", 90)}, {Model: modelInfo{ID: "v/d"}, DisplayName: strings.Repeat("x", 79) + "🔑"}}, "", false},
 		{"Xcode limits", []nativeModelChoice{choice("z-ai/glm-5.3"), choice("openai/gpt-6-astra"), choice("v/unknown")}, "z-ai/glm-5.3", true},
+		{"context policies", []nativeModelChoice{
+			{Model: modelInfo{ID: "v/recommended", ContextWindow: 1050000, MaxOutputTokens: 128000}, ContextPreset: contextPresetRecommended},
+			{Model: modelInfo{ID: "v/low", ContextWindow: 1050000, MaxOutputTokens: 128000}, ContextPreset: contextPresetLow},
+			{Model: modelInfo{ID: "v/maximum", ContextWindow: 1050000, MaxOutputTokens: 128000}, ContextPreset: contextPresetMaximum},
+			{Model: modelInfo{ID: "v/custom", ContextWindow: 1050000, MaxOutputTokens: 128000}, ContextPreset: contextPresetCustom, ContextTokens: 400000},
+			{Model: modelInfo{ID: "v/output-cap", ContextWindow: 1050000, MaxOutputTokens: 128000}, ContextPreset: contextPresetRecommended, MaximumOutputTokens: 4096},
+		}, "v/low", false},
 	}
 	browserCatalogs := []map[string]any{}
 	for _, c := range cases {
@@ -73,6 +80,12 @@ func TestNativeHelpersMatchBrowserCatalogsAndCommands(t *testing.T) {
 			var value map[string]any
 			_ = json.Unmarshal(data, &value)
 			value["displayName"] = m.DisplayName
+			if m.ContextPreset != "" {
+				value["contextPreset"], value["contextTokens"] = m.ContextPreset, m.ContextTokens
+			}
+			if m.MaximumOutputTokens > 0 {
+				value["maximumOutputTokens"] = m.MaximumOutputTokens
+			}
 			if m.ReasoningCustom {
 				levels := append([]string{}, m.ReasoningLevels...)
 				value["reasoningLevels"] = levels

@@ -30,6 +30,7 @@ type modelLibraryItem struct {
 	ReasoningEffort string   `json:"reasoningEffort,omitempty"`
 	ReasoningLevels []string `json:"reasoningLevels,omitempty"`
 	ReasoningCustom bool     `json:"reasoningCustom,omitempty"`
+	ContextPreset   string   `json:"contextPreset,omitempty"`
 	ContextWindow   int      `json:"contextWindow,omitempty"`
 	MaxOutputTokens int      `json:"maxOutputTokens,omitempty"`
 }
@@ -75,8 +76,22 @@ func validateModelLibrary(library modelLibrary) error {
 		if !utf8.ValidString(model.DisplayName) || utf8.RuneCountInString(model.DisplayName) > 80 || strings.IndexFunc(model.DisplayName, unicode.IsControl) >= 0 {
 			return errors.New("Model names must have at most 80 characters and no control characters.")
 		}
-		if (model.ContextWindow != 0 && (model.ContextWindow < 1024 || model.ContextWindow > 100000000)) || model.MaxOutputTokens < 0 || model.MaxOutputTokens > 100000000 || (model.ContextWindow > 0 && model.MaxOutputTokens > model.ContextWindow) {
+		if (model.ContextWindow != 0 && (model.ContextWindow < 1024 || model.ContextWindow > 100000000)) || model.MaxOutputTokens < 0 || model.MaxOutputTokens > 100000000 || (model.ContextPreset == "" && model.ContextWindow > 0 && model.MaxOutputTokens > model.ContextWindow) {
 			return errors.New("Use a context limit of 1,024–100,000,000 tokens and an output limit no greater than the context, or leave limits unset.")
+		}
+		if model.ContextPreset != "" {
+			switch model.ContextPreset {
+			case contextPresetRecommended, contextPresetLow, contextPresetMaximum:
+				if model.ContextWindow != 0 {
+					return errors.New("Only Custom context can save an explicit token budget.")
+				}
+			case contextPresetCustom:
+				if model.ContextWindow == 0 {
+					return errors.New("Set a token budget for Custom context.")
+				}
+			default:
+				return errors.New("Choose Recommended, Low, Maximum, or Custom context.")
+			}
 		}
 		if model.ReasoningEffort != "" && !effortNames[model.ReasoningEffort] {
 			return errors.New("Use a supported reasoning effort.")

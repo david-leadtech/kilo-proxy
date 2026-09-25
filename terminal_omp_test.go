@@ -54,7 +54,7 @@ func TestTerminalOMPRefreshesSharedModelsAndImageMCP(t *testing.T) {
 		t.Fatal("command did not pick up the new default model")
 	}
 	models = terminalInstallerRead(t, filepath.Join(a.ompProfileDir, "models.yml"))
-	if !bytes.Contains(models, []byte("Updated from Models")) || !bytes.Contains(models, []byte("contextWindow: 200000")) || bytes.Contains(terminalInstallerRead(t, mcpPath), []byte("kilo-images")) {
+	if !bytes.Contains(models, []byte("Updated from Models")) || !bytes.Contains(models, []byte("contextWindow: 272000")) || bytes.Contains(terminalInstallerRead(t, mcpPath), []byte("kilo-images")) {
 		t.Fatal("command reused stale models, missing limit fallback, or stale image configuration")
 	}
 }

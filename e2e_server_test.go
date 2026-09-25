@@ -159,7 +159,7 @@ func TestE2EServer(t *testing.T) {
 			})
 		case "/api/gateway/models":
 			models := []any{
-				map[string]any{"id": "vendor/one", "name": "Very Long First Model Name", "context_length": 64000, "top_provider": map[string]int{"max_completion_tokens": 4000}, "pricing": map[string]string{"prompt": "0.000001", "completion": "0.000002"}, "supported_parameters": []string{"tools", "reasoning"}, "architecture": map[string]any{"output_modalities": []string{"text"}}, "opencode": map[string]any{"variants": map[string]any{"low": map[string]any{"reasoning": map[string]string{"effort": "low"}}, "high": map[string]any{"reasoning": map[string]string{"effort": "high"}}}}},
+				map[string]any{"id": "vendor/one", "name": "Very Long First Model Name", "context_length": 128000, "top_provider": map[string]int{"max_completion_tokens": 4000}, "pricing": map[string]string{"prompt": "0.000001", "completion": "0.000002"}, "supported_parameters": []string{"tools", "reasoning"}, "architecture": map[string]any{"output_modalities": []string{"text"}}, "opencode": map[string]any{"variants": map[string]any{"low": map[string]any{"reasoning": map[string]string{"effort": "low"}}, "high": map[string]any{"reasoning": map[string]string{"effort": "high"}}}}},
 				map[string]any{"id": "anthropic/claude-sonnet-4.6", "name": "Claude Sonnet", "context_length": 128000, "pricing": map[string]string{"prompt": "0.000003", "completion": "0.000015"}, "supported_parameters": []string{"tools"}, "architecture": map[string]any{"output_modalities": []string{"text"}}},
 			}
 			if readLaunchControl()["imageModels"] == true {

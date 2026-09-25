@@ -17,6 +17,14 @@ python3 -m unittest discover -s scripts -p 'test_*.py'
 
 Run the Node glob from a shell that expands it, such as Bash or zsh. CI uses Bash on all three operating systems.
 
+When changing Codex context presets, also check the installed client's actual model switching and auto-compaction against a disposable synthetic gateway:
+
+```sh
+python3 scripts/check-codex-context.py /absolute/path/to/codex
+```
+
+This creates an isolated temporary profile, verifies Recommended/Low usable windows and an automatic compaction event, then removes the profile. It does not contact Kilo or use personal credentials. CI covers preset persistence, exported metadata and native/browser interactions without requiring an installed third-party agent.
+
 The desktop build additionally requires Xcode command line tools on macOS, and X11/Wayland, EGL and Vulkan development libraries on Linux. For Ubuntu 24.04:
 
 ```sh

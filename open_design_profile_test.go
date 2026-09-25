@@ -11,6 +11,63 @@ import (
 	"testing"
 )
 
+func TestOpenDesignContextPresetsReachEachPrivateEngine(t *testing.T) {
+	library := modelLibrary{SchemaVersion: 1, DefaultModel: "vendor/large", Models: []modelLibraryItem{
+		{ID: "vendor/large", ContextPreset: contextPresetLow, MaxOutputTokens: 128000},
+		{ID: "vendor/other", ContextPreset: contextPresetRecommended},
+	}}
+	catalog := []modelInfo{{ID: "vendor/large", ContextWindow: 1050000, MaxOutputTokens: 128000}, {ID: "vendor/other", ContextWindow: 200000, MaxOutputTokens: 4096}}
+	for _, engine := range []string{"codex-cli", "opencode", "claude"} {
+		t.Run(engine, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), engine)
+			if err := prepareOpenDesignEngineProfile(dir, engine, library, catalog, claudeCaps("2.1.263"), 8877, "synthetic-context-key", imageGenerationSettings{}); err != nil {
+				t.Fatal(err)
+			}
+			switch engine {
+			case "codex-cli":
+				data, err := os.ReadFile(filepath.Join(dir, "models.json"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				var saved struct {
+					Models []struct {
+						Context int `json:"context_window"`
+						Compact int `json:"auto_compact_token_limit"`
+					} `json:"models"`
+				}
+				if json.Unmarshal(data, &saved) != nil || len(saved.Models) != 2 || saved.Models[0].Context != 128000 || saved.Models[1].Context != 200000 || saved.Models[0].Compact >= 128000 {
+					t.Fatalf("Codex failed to export per-model working budgets: %s", data)
+				}
+			case "opencode":
+				data, err := os.ReadFile(filepath.Join(dir, "opencode.json"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				var saved map[string]any
+				if json.Unmarshal(data, &saved) != nil {
+					t.Fatal("invalid OpenCode config")
+				}
+				models := saved["provider"].(map[string]any)["kilo-local"].(map[string]any)["models"].(map[string]any)
+				for id, want := range map[string][2]float64{"vendor/large": {128000, 32000}, "vendor/other": {200000, 4096}} {
+					limit := models[id].(map[string]any)["limit"].(map[string]any)
+					if limit["context"] != want[0] || limit["output"] != want[1] {
+						t.Fatal("OpenCode limits lost", id, limit)
+					}
+				}
+			case "claude":
+				data, err := os.ReadFile(filepath.Join(dir, "settings.json"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				var saved map[string]any
+				if json.Unmarshal(data, &saved) != nil || saved["autoCompactWindow"] != float64(128000) {
+					t.Fatalf("Claude failed to select the smaller session budget: %s", data)
+				}
+			}
+		})
+	}
+}
+
 func TestOpenDesignCodexProfileUsesSharedModelsAndPrivateSettings(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

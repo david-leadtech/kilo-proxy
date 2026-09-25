@@ -139,6 +139,9 @@ func TestNativeModelGridPointerSettingsAndResize(t *testing.T) {
 				u.list("page.models").Position.Offset = 0
 				h.frame()
 				h.click(u.tr("Done", "Listo"), semantic.Button)
+				// Context presets precede the library; scroll to the selected card.
+				u.list("page.models").Position.Offset = 220
+				h.frame()
 				field := nativeClientField(sharedModelKey, "anthropic/claude-sonnet-4.6", "name")
 				h.click(u.tr("Edit", "Editar"), semantic.Button)
 				h.click("Claude Sonnet 4.6", semantic.Editor)

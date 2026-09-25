@@ -1,3 +1,4 @@
+import {contextLimits} from './context-policy.mjs';
 import {validModelID} from './model-helper.mjs';
 
 const levels=['minimal','low','medium','high','xhigh','max'];
@@ -11,8 +12,8 @@ export function ompPayload(models,initial) {
   const reasoningEfforts=ompEfforts(model);
   return {
    id:model.id,name:(model.displayName||model.name||model.id).slice(0,80),
-   contextWindow:model.contextWindow==null?200000:Number(model.contextWindow),
-   maxOutputTokens:model.maxOutputTokens==null?0:Number(model.maxOutputTokens),
+   contextWindow:contextLimits(model).contextWindow,
+   maxOutputTokens:contextLimits(model).maxOutputTokens,
    reasoning:reasoningEfforts.length>0,
    ...(reasoningEfforts.length?{reasoningEfforts}:{}),
    ...(reasoningEfforts.includes(model.effort)?{effort:model.effort}:{}),
