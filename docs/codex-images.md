@@ -9,7 +9,7 @@ Available in Kilo Proxy **v0.23.0 and later**.
 1. Connect Kilo Proxy with your Kilo credentials and organization.
 2. Choose coding models in the native **Models** library. Open **Models → Image generation for Codex**.
 3. Enable **Image generation** and choose an **Image model**. The image picker includes models whose catalog metadata advertises image output; image input alone does not qualify. The image model does not have to support coding tools.
-4. On **Agents**, use **Open Codex** for Desktop or **Open Codex CLI** for a terminal. This prepares the selected profile and saves the image settings. Manual **Prepare without launching** is under that agent's **Options → Integration settings**. Restart an already open Codex instance so it reloads the MCP configuration.
+4. On **Agents**, use **Open Codex** for Desktop or **Open Codex CLI** for a terminal. This prepares the selected profile and saves the image settings. Manual **Prepare without opening** is under that agent's **Options → Integration settings**. Restart an already open Codex instance so it reloads the MCP configuration.
 5. Ask Codex to use `generate_image`, for example: “Use the Kilo image tool to create a small illustration of a lighthouse at sunset.”
 
 Keep Kilo Proxy running while using the tool. Choosing a catalog model does not verify your organization's access, available balance, or that model's support for a particular generation request. Requests go through Kilo with the configured organization; charges depend on its gateway and provider billing setup, including BYOK. The tool does not call the OpenAI image API directly or require a separate OpenAI API key.

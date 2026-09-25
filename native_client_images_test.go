@@ -142,7 +142,7 @@ func TestNativeClientImagesPayloadLoadAndFingerprint(t *testing.T) {
 func TestNativeClientImagesExportAndPointer(t *testing.T) {
 	u := nativeTestUI(t)
 	u.page = "models"
-	u.expanded["library.images"] = true
+	u.expanded["models.images.toggle"] = true
 	u.models = append(nativeClientModelsForTest(), nativeImagesForTest()...)
 	nativeSeedSharedForTest(t, u, u.models[0])
 	s := u.sharedClientSelection("codex")
@@ -188,18 +188,18 @@ func TestNativeClientImagesResponsivePanel(t *testing.T) {
 			t.Run(fmtSize(size)+"/"+language, func(t *testing.T) {
 				u := nativeTestUI(t)
 				u.page, u.language = "models", language
-				u.expanded["library.images"] = true
+				u.expanded["models.images.toggle"] = true
 				u.models = append(nativeClientModelsForTest(), nativeImagesForTest()...)
 				s := u.clientState().selection("codex")
 				s.ImageGeneration = &imageGenerationSettings{Enabled: true, Model: "openai/gpt-5.4-image-2"}
 				h := &nativePointerHarness{t: t, u: u, size: size, now: time.Now()}
 				h.frame()
-				nativeScrollClientControlIntoView(h, "GPT Image 2  ▾", semantic.Button)
-				button := h.target("GPT Image 2  ▾", semantic.Button)
+				nativeScrollClientControlIntoView(h, "GPT Image 2", semantic.Button)
+				button := h.target("GPT Image 2", semantic.Button)
 				if !button.Desc.Bounds.In(image.Rectangle{Max: size}) {
 					t.Fatal("image model selector clipped")
 				}
-				h.click("GPT Image 2  ▾", semantic.Button)
+				h.click("GPT Image 2", semantic.Button)
 				h.click("Gemini 3 Pro Image", semantic.Button)
 				if s.ImageGeneration.Model != "google/gemini-3-pro-image" {
 					t.Fatal("pointer picked wrong image model")

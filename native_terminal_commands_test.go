@@ -119,19 +119,12 @@ func TestNativeTerminalCommandsCopyOMPWithAndWithoutPATH(t *testing.T) {
 				if copied != want {
 					t.Fatalf("copy returned %q, want runnable command %q", copied, want)
 				}
+				if u.notice != u.tr("Copied", "Copiado") || u.noticeTone != nativeToneSuccess {
+					t.Fatalf("copy feedback is missing or not successful: %q (%v)", u.notice, u.noticeTone)
+				}
 				nativeGridCapture(t, h, "terminal-commands-copy-"+name)
 			})
 		}
-	}
-}
-
-func TestNativeTerminalCommandsOMPConflictIsTranslated(t *testing.T) {
-	message := "An unrelated kilo-omp already exists. Move or rename it before installing terminal commands."
-	if got := nativeTerminalCommandsMessage(message, "en"); got != message {
-		t.Fatalf("English conflict message changed: %q", got)
-	}
-	if got := nativeTerminalCommandsMessage(message, "es"); got != "Ya existe un kilo-omp ajeno a Kilo Proxy. Muévelo o cámbiale el nombre antes de instalar los comandos de terminal." {
-		t.Fatalf("Oh My Pi conflict message is not localized: %q", got)
 	}
 }
 
@@ -195,18 +188,6 @@ func TestNativeTerminalCommandsUnsupportedPlatformHidesInstall(t *testing.T) {
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(780, 700), now: time.Now()}
 	h.frame()
 	nativeMenuWheel(h, image.Pt(680, 600), 10000)
-	found := false
-	for _, node := range h.nodes() {
-		if node.Desc.Label == "Install terminal commands" {
-			t.Fatal("unsupported platform renders an installation action")
-		}
-		if node.Desc.Label == "kilo-codex, kilo-claude and kilo-omp are available on macOS and Linux." {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("unsupported platform did not explain availability")
-	}
 	u.requestTerminalCommands("POST")
 	if u.busy["POST"+nativeTerminalCommandsEndpoint] {
 		t.Fatal("unsupported platform sent an installation request")

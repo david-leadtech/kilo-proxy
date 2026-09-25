@@ -34,18 +34,7 @@ func (u *nativeUI) appearancePanel() layout.Widget {
 		u.loadTraySettings()
 	}
 	selected := u.value("appearance.tray")
-	choices := []layout.Widget{}
-	for _, choice := range []struct{ value, en, es string }{
-		{trayDisplayIcon, "K icon", "Icono K"},
-		{trayDisplaySpend, "Session cost", "Coste de esta sesión"},
-		{trayDisplayBalance, "Account balance", "Saldo de la cuenta"},
-	} {
-		label := "○ " + u.tr(choice.en, choice.es)
-		if selected == choice.value {
-			label = "● " + u.tr(choice.en, choice.es)
-		}
-		choices = append(choices, u.disabled(!saving, u.button("appearance.tray."+choice.value, label, func() { u.saveTraySettings(choice.value) })))
-	}
+	choices := []nativeChoice{{Value: trayDisplayIcon, Label: u.tr("K icon", "Icono K")}, {Value: trayDisplaySpend, Label: u.tr("Session cost", "Coste de esta sesión")}, {Value: trayDisplayBalance, Label: u.tr("Account balance", "Saldo de la cuenta")}}
 	platformNote := u.tr("Cost and balance modes show the K icon with the amount beside it in the menu bar.", "Los modos de coste y saldo muestran el icono K con el importe a su lado en la barra de menús.")
 	switch runtime.GOOS {
 	case "windows":
@@ -53,17 +42,19 @@ func (u *nativeUI) appearancePanel() layout.Widget {
 	case "linux":
 		platformNote = u.tr("The K icon stays available. Your desktop may show the amount beside it; the tray menu always includes it.", "El icono K sigue disponible. Tu escritorio puede mostrar el importe a su lado; el menú de la bandeja siempre lo incluye.")
 	}
+	languageChoices := []nativeChoice{{Value: "en", Label: u.tr("English", "English")}, {Value: "es", Label: u.tr("Español", "Español")}}
 	children := []layout.Widget{
-		u.heading(u.tr("Appearance", "Apariencia")),
-		u.note(u.tr("Tray display", "Mostrar en la bandeja")),
-		u.row(choices...),
+		u.subheading(u.tr("Language", "Idioma")),
+		u.note(u.tr("Choose the language used throughout Kilo Proxy.", "Elige el idioma de Kilo Proxy.")),
+		u.segmented("language.", languageChoices, u.language, true, u.setLanguage),
+		u.subheading(u.tr("Tray display", "Mostrar en la bandeja")),
 		u.note(platformNote),
-		u.note(u.tr("Account balance comes from Kilo for the selected account or organization. A dash means it is unavailable or out of date; open Activity to refresh it. It does not include a separate BYOK provider's balance.", "El saldo se consulta en Kilo para la cuenta u organización seleccionada. Un guion indica que no está disponible o está desactualizado; puedes actualizarlo en Actividad. No incluye el saldo del proveedor BYOK externo.")),
-		u.note(u.tr("Session cost covers this Kilo Proxy process, including all connected clients and images. It resets when you quit and reopen the app; stopping the proxy or clearing captures keeps it.", "El coste de esta sesión incluye todos los clientes conectados y las imágenes de este proceso de Kilo Proxy. Se reinicia al salir y volver a abrir la app; detener el proxy o borrar capturas lo mantiene.")),
-		u.note(u.tr("An asterisk marks a reported subtotal when some requests have no cost. A dash means no cost has been reported. Reported inference costs can differ from your organization's Kilo charge.", "Un asterisco indica un subtotal informado cuando faltan costes de algunas peticiones. Un guion indica que no se ha informado ningún coste. El coste de inferencia informado puede diferir del cargo de tu organización en Kilo.")),
+		u.segmented("appearance.tray.", choices, selected, !saving, u.saveTraySettings),
+		u.note(u.tr("Account balance is provided by Kilo, not a separate BYOK provider. Session cost covers this app and resets when you quit; reported inference costs may differ from your organization's Kilo charge.", "Kilo proporciona el saldo de la cuenta; no incluye el de un proveedor BYOK externo. El coste de sesión corresponde a esta aplicación y se reinicia al salir; el coste de inferencia informado puede diferir del cargo de tu organización.")),
+		u.note(u.tr("Closing the window keeps your proxy running. Quit from the system tray.", "Cerrar la ventana mantiene el proxy activo. Sal desde la bandeja del sistema.")),
 	}
 	if saving {
 		children = append(children, u.note(u.tr("Saving appearance…", "Guardando apariencia…")))
 	}
-	return u.card(children...)
+	return nativeSettingsPanelWithGap(u.section(u.tr("Appearance", "Apariencia"), u.tr("Language and system-tray display.", "Idioma y apariencia de la bandeja del sistema."), children...))
 }

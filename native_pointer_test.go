@@ -71,6 +71,31 @@ func (h *nativePointerHarness) target(label string, class semantic.ClassOp) inpu
 	return input.SemanticNode{}
 }
 
+func (h *nativePointerHarness) selected(label string, class semantic.ClassOp) bool {
+	h.t.Helper()
+	return h.target(label, class).Desc.Selected
+}
+
+// reveal scrolls the current page so a control laid out outside the window becomes clickable.
+func (h *nativePointerHarness) reveal(label string, class semantic.ClassOp) {
+	h.t.Helper()
+	nodes := h.nodes()
+	for _, text := range nodes {
+		if text.Desc.Label != label {
+			continue
+		}
+		for _, node := range nodes {
+			if node.Desc.Class == class && text.Desc.Bounds.Min.In(node.Desc.Bounds) {
+				list := h.u.list("page." + h.u.page)
+				list.Position.Offset = max(0, list.Position.Offset+node.Desc.Bounds.Min.Y-h.size.Y/2)
+				h.frame()
+				return
+			}
+		}
+	}
+	h.t.Fatalf("no %v semantic target %q", class, label)
+}
+
 func (h *nativePointerHarness) click(label string, class semantic.ClassOp) {
 	h.t.Helper()
 	node := h.target(label, class)
@@ -100,7 +125,7 @@ func TestNativePointerNavigationAndModelSelection(t *testing.T) {
 				t.Fatal("pointer did not open Models")
 			}
 			h.click("Add models", semantic.Button)
-			h.click("provider/model", semantic.Editor)
+			h.click("Search models", semantic.Editor)
 			if !h.router.Source().Focused(h.u.editor("client:shared:search")) {
 				t.Fatal("real pointer did not focus shared catalog search")
 			}
@@ -117,6 +142,7 @@ func TestNativePointerNavigationAndModelSelection(t *testing.T) {
 			h.u.list("page.models").Position.Offset = 220
 			h.frame()
 			h.click("Edit", semantic.Button)
+			h.reveal("Very Long First Model Name", semantic.Editor)
 			h.click("Very Long First Model Name", semantic.Editor)
 			h.typeText("My shared model")
 			if h.u.library.selection.choice("vendor/one").DisplayName != "My shared model" {

@@ -33,6 +33,8 @@ func TestNativeLibraryModelActionsAutosaveAndRestore(t *testing.T) {
 	u.expanded["library.catalog"] = true
 	u.models = nativeClientModelsForTest()
 	nativeTestFrame(t, u)
+	u.clickable("client:shared:exact").Click()
+	nativeTestFrame(t, u)
 	for _, model := range u.models {
 		u.setValue("client:shared:manual", model.ID)
 		u.clickable("client:shared:add").Click()

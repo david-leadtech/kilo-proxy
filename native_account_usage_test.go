@@ -73,19 +73,30 @@ func TestNativeAccountUsageLayoutAndDailyDetails(t *testing.T) {
 				for _, amount := range []string{"$248.623145", "$1.203456", "$8.95678"} {
 					found := false
 					for _, node := range h.nodes() {
+						if strings.Contains(node.Desc.Label, amount) {
+							found = true
+						}
+					}
+					if !found {
+						t.Fatalf("precise account metric %q absent from layout", amount)
+					}
+				}
+				for _, amount := range []string{"$248.62", "$1.20", "$8.96"} {
+					found := false
+					for _, node := range h.nodes() {
 						if node.Desc.Label == amount {
 							found = true
 						}
 					}
 					if !found {
-						t.Fatalf("account metric %q absent from layout", amount)
+						t.Fatalf("short account metric %q absent from layout", amount)
 					}
 				}
 				// The expander must expose the authoritative daily records while
 				// keeping the daily local inference totals in a separate section.
 				nativeMenuWheel(h, image.Pt(size.X-100, size.Y-140), 330)
 				h.click(u.tr("Daily Kilo usage", "Uso diario en Kilo"), semantic.Button)
-				if !u.checked("billing.daily.open") {
+				if !u.expanded["billing.daily"] {
 					t.Fatal("daily history did not open")
 				}
 				found := false

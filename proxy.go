@@ -71,6 +71,8 @@ type app struct {
 	catalogRevision         uint64
 	modelStatsURL           string
 	modelStatsCache         modelStatsCache
+	recommendedModelsURL    string
+	recommendedModelsCache  recommendedModelsCache
 	accountURL              string
 	authPollInterval        time.Duration
 	login                   *loginSession

@@ -31,7 +31,7 @@ Zed associates saved keys with the exact provider URL and caches loaded credenti
 
 Settings locations are `~/.config/zed/settings.json` on macOS/Linux, `$XDG_CONFIG_HOME/zed/settings.json` when configured on Linux, and `%APPDATA%\Zed\settings.json` on Windows. A neighboring `kilo-models.json` stores the helper selection. This configures Zed Agent, not edit prediction or external agents.
 
-The optional **Copy configuration** export contains the same managed URL and models, without a key. Copying JSON alone does not provision credentials: use **Prepare without launching** first, or set the local key in Zed's `kilo-local` provider settings yourself. Older standalone exports using `/v1` still need a local key saved for that exact URL.
+The optional **Copy configuration** export contains the same managed URL and models, without a key. Copying JSON alone does not provision credentials: use **Prepare without opening** first, or set the local key in Zed's `kilo-local` provider settings yourself. Older standalone exports using `/v1` still need a local key saved for that exact URL.
 
 ### Recovering an older setup
 

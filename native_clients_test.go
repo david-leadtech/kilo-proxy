@@ -269,7 +269,7 @@ func TestNativeClientsExportMasksPreviewsAndCopiesRealLocalKey(t *testing.T) {
 	if local == "" || strings.Contains(preview, local) || !strings.Contains(full, local) {
 		t.Fatal("masked preview / full configuration boundary broken")
 	}
-	u.setChecked("client:opencode:show-config", true)
+	u.expanded["client:opencode:show-config"] = true
 	nativeTestFrame(t, u)
 	u.clickable("client:opencode:config-copy").Click()
 	nativeTestFrame(t, u)
@@ -330,6 +330,8 @@ func TestNativeClientsManualModelsAreSharedAcrossAgents(t *testing.T) {
 	u.page = "models"
 	u.expanded["library.catalog"] = true
 	nativeTestFrame(t, u)
+	u.clickable("client:shared:exact").Click()
+	nativeTestFrame(t, u)
 	u.setValue("client:shared:manual", "vendor/one")
 	u.clickable("client:shared:add").Click()
 	nativeTestFrame(t, u)
@@ -369,6 +371,8 @@ func TestNativeClientsCatalogRefreshPreservesEditsAndUpdatesMetadata(t *testing.
 	u.expanded["library.catalog"] = true
 	u.client = "codex"
 	u.models = nativeClientModelsForTest()
+	nativeTestFrame(t, u)
+	u.clickable("client:shared:exact").Click()
 	nativeTestFrame(t, u)
 	u.setValue("client:shared:manual", "vendor/one")
 	u.clickable("client:shared:add").Click()

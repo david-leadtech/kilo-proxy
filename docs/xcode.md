@@ -5,7 +5,7 @@ Open **Agents → Set up Xcode** for Chat, Codex and Claude integration settings
 ## Xcode Chat
 
 1. Edit models and short names in **Models**, then open **Agents → Set up Xcode → Chat**. Shared-library edits save automatically; the generated Xcode list is updated by preparation.
-2. Click **Prepare without launching**. The selected list is saved in Kilo Proxy's configuration directory as `xcode-chat.json`. Changes receive a `.bak` backup.
+2. Click **Prepare without opening**. The selected list is saved in Kilo Proxy's configuration directory as `xcode-chat.json`. Changes receive a `.bak` backup.
 3. Click **Copy Xcode connection (one-time setup)**. In Xcode, open **Settings → Intelligence → Add a Chat Provider** (or **Add a Model Provider** in older versions). Choose **Internet Hosted** so you can enter an authentication header, even though this provider is local.
 4. Use the copied URL, for example `http://127.0.0.1:8877/xcode`, header `Authorization`, and value `Bearer <local-key>`. Do not append `/v1`: Xcode adds it. The preview hides the key; the copy button includes the real local key.
 5. Keep Kilo Proxy running, choose a model in Xcode and start a conversation. Refresh or re-add the provider if Xcode retains an older model list.
@@ -18,7 +18,7 @@ Provider registration in Xcode remains manual. No undocumented preference or Key
 
 1. Close Xcode before changing an agent profile. Edit the shared library in **Models**, then open **Agents → Set up Xcode → Codex**.
 2. Review the shared models, names, default and supported reasoning preferences. The catalog uses the reasoning enum verified in Xcode's advertised Codex 0.106.0: `none`, `minimal`, `low`, `medium`, `high` and `xhigh`, intersected with each model's capabilities. `max` and `ultra` are omitted; if a model's default is unavailable, the helper chooses `high` when supported, otherwise the first supported level. Other Codex profiles keep their existing options.
-3. Click **Prepare without launching**. On the Mac running Kilo Proxy, it creates or updates:
+3. Click **Prepare without opening**. On the Mac running Kilo Proxy, it creates or updates:
    - `~/Library/Developer/Xcode/CodingAssistant/codex/config.toml`
    - `~/Library/Developer/Xcode/CodingAssistant/codex/models.json`
 4. Reopen Xcode, install or enable Codex in **Settings → Intelligence**, and start a new conversation. Keep the proxy running.
@@ -32,7 +32,7 @@ Xcode does not inherit the Kilo CLI launcher's environment. Its provider therefo
 1. Close Xcode, edit the shared library in **Models**, then select **Claude** in **Agents → Set up Xcode**.
 2. Review the shared models. The helper uses the Claude version advertised by the detected Xcode bundle, independently of the Claude Code installed in your terminal.
 3. Older versions support up to three selected models through Sonnet, Opus and Haiku aliases. Reduce the shared library to a compatible selection if preparation reports that limit. The initial model can have a global reasoning preference. Newer advertised versions can receive native picker names and per-model reasoning settings.
-4. Click **Prepare without launching** to update:
+4. Click **Prepare without opening** to update:
    - `~/Library/Developer/Xcode/CodingAssistant/ClaudeAgentConfig/settings.json`
    - `~/Library/Developer/Xcode/CodingAssistant/ClaudeAgentConfig/kilo-models.json`
 5. Reopen Xcode, install or enable Claude in **Settings → Intelligence**, and start a new conversation with Kilo Proxy running.
