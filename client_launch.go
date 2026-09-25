@@ -31,14 +31,20 @@ type clientLaunchRuntime struct {
 	start          func(clientLaunchPlan) error
 }
 type clientLaunchAvailability struct {
-	Available bool   `json:"available"`
-	Name      string `json:"name"`
-	Kind      string `json:"kind"`
-	Path      string `json:"path"`
-	Reason    string `json:"reason"`
+	Installed  bool   `json:"installed"`
+	Available  bool   `json:"available"`
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+	Path       string `json:"path"`
+	Reason     string `json:"reason"`
+	InstallURL string `json:"installURL,omitempty"`
 }
 
-var launchClients = []string{"codex", "codex-cli", "claude", "opencode", "omp", "open-design", "zed", "cursor", "xcode-chat", "xcode-codex", "xcode-claude"}
+var launchClients = []string{"codex", "claude-desktop", "codex-cli", "claude", "opencode", "omp", "open-design", "zed", "xcode-chat", "xcode-codex", "xcode-claude"}
+
+func clientLaunchUsesProject(client string) bool {
+	return client != "codex" && client != "claude-desktop" && client != "open-design"
+}
 
 func launchClientIdentity(id string) (string, string) {
 	switch id {
@@ -46,6 +52,8 @@ func launchClientIdentity(id string) (string, string) {
 		return "Codex Desktop", "desktop"
 	case "codex-cli":
 		return "Codex CLI", "terminal"
+	case "claude-desktop":
+		return "Claude Desktop", "desktop"
 	case "claude":
 		return "Claude Code", "terminal"
 	case "opencode":
@@ -56,8 +64,6 @@ func launchClientIdentity(id string) (string, string) {
 		return "Open Design", "desktop"
 	case "zed":
 		return "Zed", "desktop"
-	case "cursor":
-		return "Cursor", "desktop"
 	case "xcode-chat", "xcode-codex", "xcode-claude":
 		return "Xcode", "desktop"
 	}
@@ -109,13 +115,14 @@ func (a *app) clientsLaunch(w http.ResponseWriter, r *http.Request) {
 		terminal, reason := rt.terminal()
 		for _, id := range launchClients {
 			name, kind := launchClientIdentity(id)
-			info := clientLaunchAvailability{Name: name, Kind: kind}
+			info := clientLaunchAvailability{Name: name, Kind: kind, InstallURL: launchClientInstallURL(id)}
 			if reason := launchClientPlatformReason(id, rt.platform); reason != "" {
 				info.Reason = reason
 			} else if path, err := rt.resolve(id, ""); err != nil {
 				info.Reason = err.Error()
 			} else {
 				info.Path = path
+				info.Installed = true
 				info.Available = true
 				if id == "open-design" {
 					if err := openDesignCompatibility(path, rt.platform); err != nil {
@@ -162,15 +169,19 @@ func (a *app) clientsLaunch(w http.ResponseWriter, r *http.Request) {
 	}
 	if err = rt.start(plan); err != nil {
 		// Process errors can contain arguments or environment values. Keep them out of API responses and logs.
-		a.clientLaunchError(w, 500, "Could not open "+plan.Name+". Check that the application and a terminal are available, then try again.")
+		message := "Could not open " + plan.Name + ". Check that the application and a terminal are available, then try again."
+		if plan.Kind == "desktop" {
+			message = "Could not open " + plan.Name + ". Check that the application is available, then try again."
+		}
+		a.clientLaunchError(w, 500, message)
 		return
 	}
 	message := plan.Name + " opened."
+	if input.Client == "claude-desktop" {
+		message = "Claude Desktop opened with its Kilo gateway configuration."
+	}
 	if input.Client == "zed" {
 		message = "Zed opened. Local credentials and models are ready; existing projects stay open."
-	}
-	if input.Client == "cursor" {
-		message = "Cursor opened. Connect its provider to the existing tunnel if needed."
 	}
 	if input.Client == "open-design" {
 		message = "Open Design opened with its Kilo CLI profile. Use Local CLI mode in Open Design."
@@ -219,8 +230,9 @@ func (a *app) planClientLaunch(input clientLaunchRequest, rt clientLaunchRuntime
 	}
 	var err error
 	directory := input.Directory
-	if input.Client == "open-design" {
-		// Open Design restores its own workspace; it has no project-folder launch contract.
+	if !clientLaunchUsesProject(input.Client) {
+		// Let these desktop clients manage their own workspace. Ignore old
+		// remembered folders, while retaining a valid internal working directory.
 		directory = ""
 	}
 	p.Directory, err = launchPath(directory, rt.home)
@@ -230,6 +242,19 @@ func (a *app) planClientLaunch(input clientLaunchRequest, rt clientLaunchRuntime
 	p.Executable, err = rt.resolve(input.Client, input.AppPath)
 	if err != nil {
 		return p, err
+	}
+	if input.Client == "claude-desktop" {
+		check := a.claudeDesktopCheckRunning
+		if check == nil {
+			check = claudeDesktopRunning
+		}
+		running, checkErr := check(p.Executable)
+		if checkErr != nil {
+			return p, errors.New("Cannot check whether Claude Desktop is running. Quit Claude Desktop and try again.")
+		}
+		if running {
+			return p, errors.New("Quit Claude Desktop, then open it here to load the Kilo configuration. Existing sessions are not closed automatically.")
+		}
 	}
 	if kind == "terminal" {
 		if ok, why := rt.terminal(); !ok {
@@ -268,13 +293,20 @@ func (a *app) planClientLaunch(input clientLaunchRequest, rt clientLaunchRuntime
 			return p, errors.New("Cannot create the isolated Codex window profile.")
 		}
 		p.Env["CODEX_ELECTRON_USER_DATA_PATH"] = ui
-		p.Args = []string{"--user-data-dir=" + ui, p.Directory}
+		p.Args = []string{"--user-data-dir=" + ui}
 		if rt.platform == "macos" && strings.HasSuffix(p.Executable, ".app") {
 			binary := plistValue(filepath.Join(p.Executable, "Contents", "Info.plist"), "CFBundleExecutable")
 			if binary == "" || filepath.Base(binary) != binary {
 				return p, errors.New("The Codex application bundle is invalid.")
 			}
 			p.Executable = filepath.Join(p.Executable, "Contents", "MacOS", binary)
+		}
+	} else if input.Client == "claude-desktop" {
+		// Keep the validated home as the child process working directory. Desktop
+		// restores its own workspace, so no project folder is passed as an argument.
+		if rt.platform == "macos" && strings.HasSuffix(p.Executable, ".app") {
+			p.Args = []string{"-a", p.Executable}
+			p.Executable = "/usr/bin/open"
 		}
 	} else if input.Client == "open-design" {
 		// configureOpenDesignLaunch already selected its isolated native executable.

@@ -24,7 +24,7 @@ func launchTestApp(t *testing.T) *app {
 	a.claudeProfileDir = filepath.Join(home, "claude")
 	a.ompProfileDir = filepath.Join(home, "omp")
 	a.xcodeTestRoot = filepath.Join(home, "xcode")
-	a.launcher = &clientLaunchRuntime{home: home, platform: "macos", resolve: func(string, string) (string, error) { return "/synthetic/client", nil }, terminal: func() (bool, string) { return true, "" }, start: func(clientLaunchPlan) error { return nil }}
+	a.launcher = &clientLaunchRuntime{home: home, platform: "macos", resolve: func(string, string) (string, error) { return filepath.Join(home, "synthetic", "client"), nil }, terminal: func() (bool, string) { return true, "" }, start: func(clientLaunchPlan) error { return nil }}
 	return a
 }
 func TestClientLaunchAuthenticationAndStrictInput(t *testing.T) {
@@ -117,6 +117,27 @@ func TestClientLaunchRejectsMissingStaleAndUnsafeProfiles(t *testing.T) {
 		t.Fatal("nonregular profile accepted")
 	}
 }
+func TestCodexDesktopLaunchLeavesProjectSelectionToDesktop(t *testing.T) {
+	a := launchTestApp(t)
+	launchPrepareFixture(t, a, "codex")
+	plan, err := a.planClientLaunch(clientLaunchRequest{Client: "codex", Directory: "/missing/remembered-project"}, a.launchRuntime())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateClientProcessPlan(plan); err != nil {
+		t.Fatal(err)
+	}
+	if plan.Directory != a.launcher.home || len(plan.Args) != 1 || !strings.HasPrefix(plan.Args[0], "--user-data-dir=") {
+		t.Fatalf("Desktop still receives a project argument: %+v", plan)
+	}
+	launchPrepareFixture(t, a, "codex-cli")
+	project := t.TempDir()
+	cli, err := a.planClientLaunch(clientLaunchRequest{Client: "codex-cli", Directory: project}, a.launchRuntime())
+	if err != nil || cli.Directory != project {
+		t.Fatalf("CLI lost its project: %+v %v", cli, err)
+	}
+}
+
 func launchPrepareFixture(t *testing.T, a *app, client string) {
 	t.Helper()
 	endpoint := ""
@@ -196,17 +217,80 @@ func TestClientLaunchDispatchAndFailureIsolation(t *testing.T) {
 		t.Fatal("missing application started proxy")
 	}
 }
-func TestClientLaunchCursorDoesNotStartTunnel(t *testing.T) {
+
+func TestClientLaunchFailureMessageMatchesKindAndLanguage(t *testing.T) {
+	for _, tc := range []struct {
+		client, language, want string
+	}{
+		{"claude-desktop", "en", "Could not open Claude Desktop. Check that the application is available, then try again."},
+		{"claude-desktop", "es", "No se pudo abrir Claude Desktop. Comprueba que la aplicación está disponible e inténtalo de nuevo."},
+		{"codex-cli", "en", "Could not open Codex CLI. Check that the application and a terminal are available, then try again."},
+		{"codex-cli", "es", "No se pudo abrir Codex CLI. Comprueba que la aplicación y una terminal están disponibles e inténtalo de nuevo."},
+	} {
+		t.Run(tc.client+"/"+tc.language, func(t *testing.T) {
+			a := launchTestApp(t)
+			if tc.client == "claude-desktop" {
+				a.claudeDesktopCheckRunning = func(string) (bool, error) { return false, nil }
+				prepareDesktopLaunchTest(t, a)
+			} else {
+				launchPrepareFixture(t, a, tc.client)
+			}
+			a.config.Language = tc.language
+			a.launcher.start = func(clientLaunchPlan) error {
+				return errors.New("private-runtime-detail " + a.config.LocalKey)
+			}
+			body, _ := json.Marshal(clientLaunchRequest{Client: tc.client})
+			w := adminRequest(a, "clients/launch", string(body))
+			if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), tc.want) {
+				t.Fatalf("wrong launch failure: %d %s", w.Code, w.Body.String())
+			}
+			if strings.Contains(w.Body.String(), "private-runtime-detail") || strings.Contains(w.Body.String(), a.config.LocalKey) {
+				t.Fatal("launch failure exposed private process details")
+			}
+		})
+	}
+}
+func TestRemovedClientHasNoLaunchStateOrAPI(t *testing.T) {
 	a := launchTestApp(t)
+	a.config.Language = "en"
+	a.apiKey = ""
+	a.launcher.resolve = func(id, _ string) (string, error) {
+		if id == "cursor" {
+			t.Fatal("removed client reached discovery")
+		}
+		return "", errors.New("not installed")
+	}
+	a.launcher.start = func(clientLaunchPlan) error {
+		t.Fatal("removed client reached process launch")
+		return nil
+	}
 	w := adminRequest(a, "clients/launch", `{"client":"cursor"}`)
-	if w.Code != 409 || a.cursor != nil || a.proxyListener != nil {
-		t.Fatal("launch unexpectedly started Cursor ingress")
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "Unknown launch client.") || a.proxyListener != nil {
+		t.Fatal("removed client was accepted or started the proxy", w.Code, w.Body.String())
 	}
-	a.cursor = &cursorSession{Status: "running", URL: "https://synthetic.invalid/v1"}
-	if _, e := a.planClientLaunch(clientLaunchRequest{Client: "cursor"}, a.launchRuntime()); e != nil {
-		t.Fatal(e)
+	if path, err := resolveLaunchClient("cursor", ""); path != "" || err == nil {
+		t.Fatal("removed client can still be discovered")
 	}
-	a.cursor = nil
+	for _, endpoint := range []string{"state", "clients/launch"} {
+		response := adminRequest(a, endpoint, "")
+		var state map[string]json.RawMessage
+		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &state) != nil {
+			t.Fatal("invalid state or discovery response", response.Code)
+		}
+		if _, exists := state["cursor"]; exists || strings.Contains(response.Body.String(), `"cursor"`) {
+			t.Fatal("removed client remains in state or discovery", endpoint)
+		}
+	}
+	for _, body := range []string{"", `{"action":"start","models":["vendor/model"]}`, `{"action":"check"}`, `{"action":"stop"}`} {
+		response := adminRequest(a, "cursor", body)
+		want := http.StatusNotFound
+		if body == "" {
+			want = http.StatusMethodNotAllowed
+		}
+		if response.Code != want {
+			t.Fatal("removed route is still handled", response.Code, response.Body.String())
+		}
+	}
 }
 
 func TestClientLaunchRejectsSharedCodexWindowProfile(t *testing.T) {

@@ -16,36 +16,39 @@ import (
 )
 
 type nativeClients struct {
-	Grids                   map[string]*nativeModelGridState
-	Selections              map[string]*nativeClientSelection
-	Claude                  claudeCapabilities
-	ClaudeChecked           bool
-	ClaudeDetectStarted     bool
-	Xcode                   xcodeInstallation
-	XcodeChecked            bool
-	XcodeDetectStarted      bool
-	LaunchInfo              nativeLaunchInfo
-	LaunchChecked           bool
-	LaunchDetectStarted     bool
-	LaunchError             string
-	Launching               string
-	Variant                 string
-	OpenDesign              nativeOpenDesignInfo
-	OpenDesignChecked       bool
-	OpenDesignDetectStarted bool
+	Grids                       map[string]*nativeModelGridState
+	Selections                  map[string]*nativeClientSelection
+	Claude                      claudeCapabilities
+	ClaudeChecked               bool
+	ClaudeDetectStarted         bool
+	Xcode                       xcodeInstallation
+	XcodeChecked                bool
+	XcodeDetectStarted          bool
+	LaunchInfo                  nativeLaunchInfo
+	LaunchChecked               bool
+	LaunchDetectStarted         bool
+	LaunchError                 string
+	Launching                   string
+	Variant                     string
+	OpenDesign                  nativeOpenDesignInfo
+	OpenDesignChecked           bool
+	OpenDesignDetectStarted     bool
+	DesktopExperimentalRevision uint64
+	DesktopExperimentalTarget   *bool
 }
 
 // A selection belongs to one editor/variant. Labels never replace gateway IDs.
 type nativeClientSelection struct {
-	ImageGeneration         *imageGenerationSettings `json:"imageGeneration,omitempty"`
-	imageGenerationBaseline *imageGenerationSettings
-	QueueMode               string `json:"followUpQueueMode,omitempty"`
-	Models                  []nativeModelChoice
-	Initial                 string
-	Aliases                 map[string]string
-	Mode                    string
-	Saved                   string
-	Path                    string
+	DesktopExperimentalModels bool                     `json:"-"`
+	ImageGeneration           *imageGenerationSettings `json:"imageGeneration,omitempty"`
+	imageGenerationBaseline   *imageGenerationSettings
+	QueueMode                 string `json:"followUpQueueMode,omitempty"`
+	Models                    []nativeModelChoice
+	Initial                   string
+	Aliases                   map[string]string
+	Mode                      string
+	Saved                     string
+	Path                      string
 }
 
 func (c *nativeClients) selection(key string) *nativeClientSelection {
@@ -126,6 +129,8 @@ func nativeClientEndpoint(key string) string {
 		return "/api/" + key + "/catalog"
 	case "claude":
 		return "/api/claude/profile"
+	case "claude-desktop":
+		return "/api/claude-desktop/profile"
 	case "omp":
 		return "/api/omp/profile"
 	case "opencode", "zed":
@@ -173,6 +178,17 @@ func nativeClientPayload(key string, s *nativeClientSelection) (any, error) {
 			payload["followUpQueueMode"] = mode
 		}
 		return payload, err
+	}
+	if key == "claude-desktop" {
+		selection := editorSelection{Initial: s.Initial}
+		for _, m := range s.Models {
+			name := m.DisplayName
+			if name == "" {
+				name = m.Model.Name
+			}
+			selection.Models = append(selection.Models, editorModel{ID: m.Model.ID, Name: name})
+		}
+		return selection, validateClaudeDesktopSelectionMode(selection, s.DesktopExperimentalModels)
 	}
 	if key == "opencode" || key == "zed" {
 		selection := editorSelection{Initial: s.Initial}
@@ -231,7 +247,11 @@ func nativeSelectionFingerprint(key string, s *nativeClientSelection, base, keyV
 	if err != nil {
 		return "invalid:" + err.Error()
 	}
-	data, _ := json.Marshal([]any{key, base, keyValue, payload, caps})
+	values := []any{key, base, keyValue, payload, caps}
+	if key == "claude-desktop" {
+		values = append(values, s.DesktopExperimentalModels)
+	}
+	data, _ := json.Marshal(values)
 	return string(data)
 }
 
@@ -441,7 +461,7 @@ func (u *nativeUI) clientsPanel() layout.Widget {
 			}
 		})
 	}
-	clientNames := map[string]string{"codex": "Codex Desktop", "codex-cli": "Codex CLI", "claude": "Claude Code", "opencode": "OpenCode", "omp": "Oh My Pi", "zed": "Zed", "open-design": "Open Design", "cursor": "Cursor", "xcode": "Xcode", "generic": u.tr("Other agents", "Otros agentes")}
+	clientNames := map[string]string{"codex": "Codex Desktop", "codex-cli": "Codex CLI", "claude": "Claude Code", "claude-desktop": "Claude Desktop", "opencode": "OpenCode", "omp": "Oh My Pi", "zed": "Zed", "open-design": "Open Design", "xcode": "Xcode", "generic": u.tr("Other agents", "Otros agentes")}
 	widgets := []layout.Widget{
 		u.pills(u.iconButton("agents.back", u.tr("All agents", "Todos los agentes"), nativeButtonGhost, nativeIconBack, func() { u.page = "agents" })),
 		u.heading(clientNames[u.client]),
@@ -511,6 +531,9 @@ func (u *nativeUI) clientsPanel() layout.Widget {
 		protocol = u.tr("Uses Responses with shared models in an isolated Oh My Pi profile.", "Usa Responses con modelos compartidos en un perfil aislado de Oh My Pi.")
 	}
 	modelSummary := u.sharedModelSummary()
+	if key == "claude-desktop" {
+		modelSummary = u.claudeDesktopModelSummary(s)
+	}
 	if key == "open-design" {
 		modelSummary = u.tr("Your CLI engine uses the shared models and default.", "Tu motor CLI usa los modelos compartidos y el predeterminado.")
 	}
@@ -536,11 +559,11 @@ func (u *nativeUI) clientsPanel() layout.Widget {
 		)
 	}
 	widgets = append(widgets, u.section(u.tr("Models", "Modelos"), u.tr("One shared library for this agent.", "Una biblioteca compartida para este agente."), modelWidgets...))
-	if key == "cursor" {
-		return u.column(append(widgets, u.cursorClientPanel(s))...)
-	}
 	if key == "open-design" {
 		return u.column(append(widgets, u.openDesignClientPanel(s))...)
+	}
+	if key == "claude-desktop" {
+		return u.column(append(widgets, u.claudeDesktopClientPanel(s))...)
 	}
 	if key == "generic" {
 		base, local, _ := u.clientBase()
@@ -561,6 +584,135 @@ func (u *nativeUI) clientsPanel() layout.Widget {
 		}
 	}
 	return u.column(append(widgets, u.clientActions(key, s, protocol, launchSetup...))...)
+}
+
+func (u *nativeUI) claudeDesktopModelSummary(s *nativeClientSelection) string {
+	if s.DesktopExperimentalModels {
+		name := s.Initial
+		if initial := s.choice(s.Initial); initial != nil {
+			name = nativeCodexDisplayName(*initial)
+		}
+		if name == "" {
+			return u.tr("Experimental models · Add a model to your shared library.", "Modelos experimentales · Añade un modelo a tu biblioteca compartida.")
+		}
+		if len(s.Models) == 1 {
+			return fmt.Sprintf(u.tr("Experimental models · 1 selected · Starts with %s", "Modelos experimentales · 1 seleccionado · Empieza con %s"), name)
+		}
+		return fmt.Sprintf(u.tr("Experimental models · %d selected · Starts with %s", "Modelos experimentales · %d seleccionados · Empieza con %s"), len(s.Models), name)
+	}
+	if len(s.Models) == 0 {
+		return u.tr("Add a Claude model to your shared library.", "Añade un modelo Claude a tu biblioteca compartida.")
+	}
+	name := s.Initial
+	if initial := s.choice(s.Initial); initial != nil {
+		name = nativeCodexDisplayName(*initial)
+	}
+	if len(s.Models) == 1 {
+		return fmt.Sprintf(u.tr("1 Claude model · Starts with %s", "1 modelo Claude · Empieza con %s"), name)
+	}
+	return fmt.Sprintf(u.tr("%d Claude models · Starts with %s", "%d modelos Claude · Empieza con %s"), len(s.Models), name)
+}
+
+func (u *nativeUI) claudeDesktopSelectionNote(s *nativeClientSelection) string {
+	source := u.library.selection
+	omitted := len(source.Models) - len(s.Models)
+	text := u.tr("Claude models are used by default. Enable experimental models in Options to use other providers.", "Por defecto se usan modelos Claude. Activa los modelos experimentales en Opciones para usar otros proveedores.")
+	if s.DesktopExperimentalModels {
+		text = u.tr("Experimental support for other providers is enabled. Model and tool compatibility, context and reasoning support may be limited. Preparing a configuration does not verify inference.", "El soporte experimental para otros proveedores está activado. La compatibilidad de modelos y herramientas, el contexto y el razonamiento pueden ser limitados. Preparar una configuración no verifica la inferencia.")
+	}
+	if omitted == 1 {
+		text += " " + u.tr("1 shared model omitted; it remains available to other agents.", "1 modelo compartido omitido; sigue disponible para otros agentes.")
+	} else if omitted > 1 {
+		text += " " + fmt.Sprintf(u.tr("%d shared models omitted; they remain available to other agents.", "%d modelos compartidos omitidos; siguen disponibles para otros agentes."), omitted)
+	}
+	if s.Initial != "" && s.Initial != source.Initial {
+		if s.DesktopExperimentalModels {
+			text += " " + u.tr("The first compatible model is used because your shared default is unsupported.", "Se usa el primer modelo compatible porque el predeterminado compartido no es compatible.")
+		} else {
+			text += " " + u.tr("The first Claude model is used because your shared default is unsupported.", "Se usa el primer modelo Claude porque el predeterminado compartido no es compatible.")
+		}
+	}
+	return text
+}
+
+func (u *nativeUI) claudeDesktopClientPanel(s *nativeClientSelection) layout.Widget {
+	const key = "claude-desktop"
+	base, local, _ := u.clientBase()
+	_, validation := nativeClientPayload(key, s)
+	working := u.busy["POST"+nativeClientEndpoint(key)] || u.busy["GET"+nativeClientEndpoint(key)] || u.busy["POST/api/claude-desktop/options"] || u.clientState().Launching != ""
+	canPrepare := len(s.Models) > 0 && validation == nil && !working
+	ready := s.Saved != "" && s.Saved == nativeSelectionFingerprint(key, s, base, local, u.clientCaps(key))
+	tone, status := nativeToneNeutral, u.tr("Kilo configuration not prepared", "Configuración Kilo sin preparar")
+	if ready {
+		tone, status = nativeToneSuccess, u.tr("Kilo configuration ready", "Configuración Kilo lista")
+	} else if s.Saved != "" {
+		tone, status = nativeToneWarning, u.tr("Changes need preparing", "Hay cambios por preparar")
+	}
+	widgets := []layout.Widget{
+		u.note(u.claudeDesktopSelectionNote(s)),
+		u.clientLauncherPanel(key, s, canPrepare),
+		u.pills(u.disabled(canPrepare, u.button("client:claude-desktop:prepare", u.tr("Prepare without opening", "Preparar sin abrir"), func() { u.prepareClient(key) }))),
+		u.statusBadge(tone, status),
+	}
+	if ready {
+		widgets = append(widgets, u.note(s.Path))
+	}
+	if len(s.Models) == 0 {
+		widgets = append(widgets, u.hint(u.claudeDesktopModelSummary(s)))
+	} else if validation != nil {
+		widgets = append(widgets, u.message(nativeToneError, nativeMessage(validation.Error(), u.language)))
+	}
+	u.setChecked("client:claude-desktop:experimental", u.claudeDesktopExperimentalModels())
+	return u.column(
+		u.section(u.tr("Experimental models", "Modelos experimentales"), u.tr("Off by default. Changes affect only Claude Desktop; your shared library is preserved.", "Desactivado por defecto. Los cambios solo afectan a Claude Desktop; se conserva tu biblioteca compartida."),
+			u.disabled(!working, u.check("client:claude-desktop:experimental", u.tr("Experimental: use models from other providers", "Experimental: usar modelos de otros proveedores"), u.setClaudeDesktopExperimentalModels)),
+		),
+		u.section(u.tr("Launch", "Arranque"), u.tr("Prepares the named Kilo third-party configuration with your shared models, names and default.", "Prepara la configuración de terceros Kilo con tus modelos compartidos, nombres y modelo inicial."), widgets...),
+		u.section(u.tr("Compatibility", "Compatibilidad"), u.agentCompatibility(key),
+			u.note(u.tr("Context and output limits are managed by Claude Desktop and the model. Shared context presets are not applied.", "Claude Desktop y el modelo gestionan los límites de contexto y salida. Los preajustes de contexto compartidos no se aplican.")),
+			u.note(u.tr("Claude Desktop uses one applied third-party configuration at a time. Features depend on the installed app and operating system.", "Claude Desktop usa una configuración de terceros activa cada vez. Las funciones dependen de la app y del sistema operativo.")),
+			u.pills(u.iconButton("client:claude-desktop:install", u.tr("Get Claude Desktop", "Obtener Claude Desktop"), nativeButtonGhost, nativeIconOpenInNew, func() { u.open("https://claude.ai/download") })),
+		),
+	)
+}
+
+func (u *nativeUI) claudeDesktopExperimentalModels() bool {
+	if target := u.clientState().DesktopExperimentalTarget; target != nil {
+		return *target
+	}
+	return nativeBool(u.state, "claudeDesktopExperimentalModels")
+}
+
+func nativeClaudeDesktopModelAllowed(id string, experimental bool) bool {
+	return catalogID.MatchString(id) && !claudeDesktopReservedAlias(id) && (experimental || claudeDesktopModelSupported(id))
+}
+
+func (u *nativeUI) setClaudeDesktopExperimentalModels(enabled bool) {
+	c := u.clientState()
+	if u.busy["POST/api/claude-desktop/options"] || c.Launching != "" {
+		return
+	}
+	previous := u.claudeDesktopExperimentalModels()
+	c.DesktopExperimentalRevision++
+	c.DesktopExperimentalTarget = &enabled
+	u.clientRequest("POST", "/api/claude-desktop/options", map[string]bool{"experimentalModels": enabled}, func(data json.RawMessage, err error) {
+		var response struct {
+			ExperimentalModels bool `json:"experimentalModels"`
+		}
+		if err == nil {
+			err = json.Unmarshal(data, &response)
+		}
+		c.DesktopExperimentalTarget = nil
+		if err != nil {
+			u.state["claudeDesktopExperimentalModels"] = previous
+			u.sharedClientSelection("claude-desktop")
+			u.noticeError(err)
+			return
+		}
+		u.state["claudeDesktopExperimentalModels"] = response.ExperimentalModels
+		u.sharedClientSelection("claude-desktop")
+		u.refreshState()
+	})
 }
 
 func (u *nativeUI) clientPicker(key string, s *nativeClientSelection) layout.Widget {
@@ -992,6 +1144,10 @@ func (u *nativeUI) prepareClient(key string) {
 }
 
 func (u *nativeUI) prepareClientAfter(key string, done func(error)) {
+	if key == "claude-desktop" && u.busy["POST/api/claude-desktop/options"] {
+		done(errors.New(u.tr("Wait for the current agent operation to finish.", "Espera a que termine la operación actual del agente.")))
+		return
+	}
 	s := u.sharedClientSelection(key)
 	u.syncClientSelection(key, s)
 	payload, err := nativeClientPayload(key, s)
@@ -1028,6 +1184,9 @@ func (u *nativeUI) prepareClientAfter(key string, done func(error)) {
 			u.acceptClientImages(imagesSent)
 		}
 		u.setNotice(nativeToneSuccess, u.tr("Editor profile prepared.", "Perfil del editor preparado."))
+		if key == "claude-desktop" {
+			u.setNotice(nativeToneSuccess, u.tr("Kilo configuration prepared. Reopen Claude Desktop to apply changes.", "Configuración Kilo preparada. Vuelve a abrir Claude Desktop para aplicar los cambios."))
+		}
 		done(nil)
 	})
 }
@@ -1142,21 +1301,33 @@ func decodeNativeClientSelection(key string, data []byte, catalog []modelInfo) (
 		}
 		return s, nil
 	}
-	if key == "opencode" || key == "zed" {
+	if key == "opencode" || key == "zed" || key == "claude-desktop" {
 		var source struct {
-			Selection  editorSelection `json:"selection"`
-			ConfigPath string          `json:"configPath"`
+			Selection          editorSelection `json:"selection"`
+			ConfigPath         string          `json:"configPath"`
+			ExperimentalModels bool            `json:"experimentalModels"`
 		}
 		if err := json.Unmarshal(data, &source); err != nil {
 			return nil, err
 		}
-		if err := validateEditorSelection(source.Selection); err != nil {
+		validate := validateEditorSelection
+		if key == "claude-desktop" {
+			s.DesktopExperimentalModels = source.ExperimentalModels
+			validate = func(selection editorSelection) error {
+				return validateClaudeDesktopSelectionMode(selection, source.ExperimentalModels)
+			}
+		}
+		if err := validate(source.Selection); err != nil {
 			return nil, err
 		}
 		s.Initial = source.Selection.Initial
 		s.Path = source.ConfigPath
 		for _, m := range source.Selection.Models {
 			model := lookup(m.ID)
+			if key == "claude-desktop" {
+				s.Models = append(s.Models, nativeModelChoice{Model: model, DisplayName: m.Name, ContextPreset: contextPresetRecommended, MaximumOutputTokens: model.MaxOutputTokens})
+				continue
+			}
 			maximumOutput := model.MaxOutputTokens
 			model.MaxOutputTokens = m.Output
 			s.Models = append(s.Models, nativeModelChoice{Model: model, DisplayName: m.Name, ContextPreset: contextPresetCustom, ContextTokens: m.Context, MaximumOutputTokens: maximumOutput})
@@ -1216,6 +1387,9 @@ func (u *nativeUI) clientLaunch(key string, s *nativeClientSelection, reveal boo
 }
 
 func (u *nativeUI) clientExport(key string, s *nativeClientSelection, reveal bool) (string, error) {
+	if key == "claude-desktop" {
+		return "", errors.New("Prepare the Kilo configuration through Claude Desktop integration settings.")
+	}
 	base, local, port := u.clientBase()
 	// Zed exports only a credential-versioned URL, never the local key itself.
 	if !reveal && key != "zed" {
@@ -1260,82 +1434,4 @@ func (u *nativeUI) clientExport(key string, s *nativeClientSelection, reveal boo
 	}
 	data, err := json.MarshalIndent(claudeManagedSettings(payload.(claudeSelection), u.clientCaps(key), port, local), "", "  ")
 	return string(data), err
-}
-
-func (u *nativeUI) cursorClientPanel(s *nativeClientSelection) layout.Widget {
-	var session *cursorSession
-	if value := u.state["cursor"]; value != nil {
-		data, _ := json.Marshal(value)
-		_ = json.Unmarshal(data, &session)
-	}
-	running, _ := u.state["running"].(bool)
-	connected := session != nil && (session.Status == "running" || session.Status == "starting")
-	invoke := func(action string) {
-		u.call("POST", "/api/cursor", map[string]any{"action": action, "models": s.ids()}, func(data json.RawMessage) {
-			var result struct {
-				Session *cursorSession `json:"session"`
-			}
-			if action != "check" && json.Unmarshal(data, &result) == nil {
-				u.state["cursor"] = result.Session
-			}
-			if action == "check" {
-				u.setNotice(nativeToneSuccess, u.tr("Public HTTPS and authentication verified. Test a chat in Cursor.", "HTTPS público y autenticación verificados. Prueba un chat en Cursor."))
-			}
-		})
-	}
-	tunnelTone, tunnelStatus := nativeToneWarning, u.tr("Tunnel disconnected", "Túnel desconectado")
-	if session != nil {
-		switch session.Status {
-		case "running":
-			tunnelTone, tunnelStatus = nativeToneSuccess, u.tr("Tunnel connected", "Túnel conectado")
-		case "starting", "stopping":
-			tunnelTone, tunnelStatus = nativeToneInfo, u.tr("Tunnel changing state", "Cambiando estado del túnel")
-		case "failed", "error":
-			tunnelTone, tunnelStatus = nativeToneError, u.tr("Tunnel error", "Error del túnel")
-		}
-	}
-	launchWidgets := []layout.Widget{
-		u.clientLauncherPanel("cursor", s, session != nil && session.Status == "running"),
-		u.pills(u.statusBadge(tunnelTone, tunnelStatus)),
-		u.pills(
-			u.disabled(running && !connected && len(s.Models) > 0, u.button("cursor-connect", u.tr("Connect HTTPS tunnel", "Conectar túnel HTTPS"), func() { invoke("start") })),
-			u.disabled(session != nil, u.button("cursor-disconnect", u.tr("Disconnect", "Desconectar"), func() { invoke("stop") })),
-			u.disabled(session != nil && session.Status == "running", u.button("cursor-check", u.tr("Test public connection", "Probar conexión pública"), func() { invoke("check") })),
-		),
-		u.pills(
-			u.button("cursor-ngrok-download", u.tr("Install ngrok", "Instalar ngrok"), func() { u.open("https://ngrok.com/download") }),
-			u.button("cursor-ngrok-account", u.tr("Get ngrok authtoken", "Obtener authtoken de ngrok"), func() { u.open("https://dashboard.ngrok.com/get-started/your-authtoken") }),
-		),
-		u.code("cursor-ngrok-command", "ngrok config add-authtoken YOUR_NGROK_AUTHTOKEN"),
-		u.pills(u.iconButton("cursor-copy-ngrok-command", u.tr("Copy ngrok command", "Copiar comando de ngrok"), nativeButtonSecondary, nativeIconCopy, func() { u.copy("ngrok config add-authtoken YOUR_NGROK_AUTHTOKEN") })),
-	}
-	if !running {
-		launchWidgets = append(launchWidgets, u.hint(u.tr("Start the proxy before connecting the Cursor tunnel.", "Inicia el proxy antes de conectar el túnel de Cursor.")))
-	} else if len(s.Models) == 0 {
-		launchWidgets = append(launchWidgets, u.hint(u.tr("Choose at least one shared model before connecting.", "Elige al menos un modelo compartido antes de conectar.")))
-	}
-	if session != nil && session.Error != "" {
-		launchWidgets = append(launchWidgets, u.message(nativeToneError, nativeMessage(session.Error, u.language)))
-	}
-	if session != nil && session.Status == "running" {
-		launchWidgets = append(launchWidgets, u.pills(
-			u.iconButton("cursor-copy-url", u.tr("Copy Cursor URL", "Copiar URL de Cursor"), nativeButtonSecondary, nativeIconCopy, func() { u.copy(session.URL) }),
-			u.iconButton("cursor-copy-key", u.tr("Copy Cursor key", "Copiar clave de Cursor"), nativeButtonSecondary, nativeIconCopy, func() { u.copy(session.Key) }),
-			u.iconButton("cursor-copy-guide", u.tr("Copy complete connection", "Copiar conexión completa"), nativeButtonSecondary, nativeIconCopy, func() { u.copy(cursorSetupGuide(session, s.ids(), u.language, true)) }),
-		))
-	}
-	launch := u.section(u.tr("Launch", "Arranque"), u.tr("Cursor requests come from its servers; connect an HTTPS tunnel to reach this proxy.", "Las peticiones de Cursor llegan desde sus servidores; conecta un túnel HTTPS para acceder a este proxy."), launchWidgets...)
-	advancedWidgets := []layout.Widget{u.disclosure("cursor:about", u.tr("How this works", "Cómo funciona"))}
-	if u.expanded["cursor:about"] {
-		advancedWidgets = append(advancedWidgets,
-			u.note(u.tr("The public tunnel carries inference traffic through ngrok. Only the inference endpoint is exposed; the control panel stays local, and disconnect revokes this Cursor key.", "El túnel público lleva el tráfico de inferencia mediante ngrok. Solo se expone el endpoint de inferencia; el panel de control sigue en local y desconectar revoca esta clave de Cursor.")),
-			u.note(u.tr("Disable the OpenAI URL/key override to return to Cursor's built-in providers. Kilo does not supply Tab or Composer, and not every model supports Cursor BYOK.", "Desactiva la URL/clave OpenAI alternativa para volver a los proveedores integrados de Cursor. Kilo no ofrece Tab ni Composer, y no todos los modelos admiten BYOK de Cursor.")),
-		)
-	}
-	advancedWidgets = append(advancedWidgets,
-		u.disabled(len(s.Models) > 0, u.iconButton("cursor-copy-models", u.tr("Copy model IDs", "Copiar IDs de modelos"), nativeButtonSecondary, nativeIconCopy, func() { u.copy(strings.Join(s.ids(), "\n")) })),
-		u.code("cursor-guide", cursorSetupGuide(session, s.ids(), u.language, false)),
-	)
-	advanced := u.section(u.tr("Advanced", "Avanzado"), u.tr("Optional connection details and model IDs.", "Datos de conexión e IDs de modelo opcionales."), advancedWidgets...)
-	return u.column(launch, advanced)
 }

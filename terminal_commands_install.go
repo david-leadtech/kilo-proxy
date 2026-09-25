@@ -20,12 +20,14 @@ type terminalCommandsInstallResult struct {
 	Commands       map[string]string `json:"commands"`
 	PathConfigured bool              `json:"pathConfigured"`
 	Shell          string            `json:"shell"`
+	InstallerStyle string            `json:"installerStyle,omitempty"`
 	StartupFiles   []string          `json:"startupFiles,omitempty"`
 	Backups        []string          `json:"backups,omitempty"`
 	Message        string            `json:"message"`
 }
 
 type terminalInstallFile struct {
+	root         string
 	path, backup string
 	old, data    []byte
 	oldMode      os.FileMode
@@ -120,7 +122,7 @@ func terminalInstallAncestors(home, path string) error {
 }
 
 func readTerminalInstallFile(home, path string) (terminalInstallFile, error) {
-	f := terminalInstallFile{path: path, mode: 0600}
+	f := terminalInstallFile{root: home, path: path, mode: 0600}
 	if err := terminalInstallAncestors(home, path); err != nil {
 		return f, err
 	}
@@ -179,10 +181,24 @@ func terminalStartupContent(old, block []byte, ownedFile bool) ([]byte, error) {
 	return append(data, old[stop:]...), nil
 }
 
-func terminalCommandsPlan(home, configDir, binary, shell, platform string) (terminalCommandsInstallResult, []terminalInstallFile, error) {
+func terminalCommandsPlan(home, configDir, binary, shell, platform string, profiles ...[]string) (terminalCommandsInstallResult, []terminalInstallFile, error) {
+	if platform == "windows" {
+		var paths []string
+		if len(profiles) > 0 {
+			paths = profiles[0]
+		}
+		if paths == nil {
+			var err error
+			paths, err = detectTerminalPowerShellProfiles()
+			if err != nil {
+				return terminalCommandsInstallResult{Shell: "powershell", InstallerStyle: "powershell-profile"}, nil, err
+			}
+		}
+		return terminalPowerShellCommandsPlan(configDir, binary, paths)
+	}
 	result := terminalCommandsInstallResult{Directory: filepath.Join(home, ".local", "bin"), Commands: map[string]string{}}
 	if platform != "darwin" && platform != "macos" && platform != "linux" {
-		return result, nil, errors.New("Terminal commands are available on macOS and Linux only.")
+		return result, nil, errors.New("Terminal commands are available on macOS, Linux and Windows only.")
 	}
 	for _, value := range []string{home, configDir, binary} {
 		if !filepath.IsAbs(value) || strings.ContainsAny(value, "\x00\r\n") {
@@ -199,7 +215,7 @@ func terminalCommandsPlan(home, configDir, binary, shell, platform string) (term
 	}
 	files := []terminalInstallFile{}
 	result.Installed, result.PathConfigured = true, true
-	for _, command := range []struct{ name, client string }{{"kilo-codex", "codex-cli"}, {"kilo-claude", "claude"}, {"kilo-omp", "omp"}} {
+	for _, command := range []struct{ name, client string }{{"kilo-codex", "codex-cli"}, {"kilo-claude", "claude"}, {"kilo-omp", "omp"}, {"kilo-opencode", "opencode"}} {
 		path := filepath.Join(result.Directory, command.name)
 		result.Commands[command.name] = path
 		f, err := readTerminalInstallFile(home, path)
@@ -234,15 +250,15 @@ func terminalCommandsPlan(home, configDir, binary, shell, platform string) (term
 		files = append(files, f)
 	}
 	if result.Installed && result.PathConfigured {
-		result.Message = "kilo-codex, kilo-claude and kilo-omp are installed. Open a new terminal to use them; keep Kilo Proxy open."
+		result.Message = "kilo-codex, kilo-claude, kilo-omp and kilo-opencode are installed. Open a new terminal to use them; keep Kilo Proxy open."
 	} else {
-		result.Message = "Install kilo-codex, kilo-claude and kilo-omp for your current login shell."
+		result.Message = "Install kilo-codex, kilo-claude, kilo-omp and kilo-opencode for your current login shell."
 	}
 	return result, files, nil
 }
 
-func terminalCommandsStatus(home, configDir, binary, shell, platform string) (terminalCommandsInstallResult, error) {
-	result, _, err := terminalCommandsPlan(home, configDir, binary, shell, platform)
+func terminalCommandsStatus(home, configDir, binary, shell, platform string, profiles ...[]string) (terminalCommandsInstallResult, error) {
+	result, _, err := terminalCommandsPlan(home, configDir, binary, shell, platform, profiles...)
 	return result, err
 }
 
@@ -290,8 +306,8 @@ func backupTerminalInstallFile(f terminalInstallFile) (string, error) {
 
 // Preflight every command and startup file before making changes, back up only
 // changed existing files, and restore completed writes on an ordinary IO error.
-func installTerminalCommands(home, configDir, binary, shell, platform string) (terminalCommandsInstallResult, error) {
-	result, files, err := terminalCommandsPlan(home, configDir, binary, shell, platform)
+func installTerminalCommands(home, configDir, binary, shell, platform string, profiles ...[]string) (terminalCommandsInstallResult, error) {
+	result, files, err := terminalCommandsPlan(home, configDir, binary, shell, platform, profiles...)
 	if err != nil {
 		return result, err
 	}
@@ -300,7 +316,7 @@ func installTerminalCommands(home, configDir, binary, shell, platform string) (t
 		ok := true
 		for i := len(changed) - 1; i >= 0; i-- {
 			f := changed[i]
-			current, readErr := readTerminalInstallFile(home, f.path)
+			current, readErr := readTerminalInstallFile(f.root, f.path)
 			if readErr != nil || !current.exists || !bytes.Equal(current.old, f.data) {
 				ok = false
 				continue
@@ -324,7 +340,7 @@ func installTerminalCommands(home, configDir, binary, shell, platform string) (t
 		if f.exists && bytes.Equal(f.old, f.data) && f.oldMode == f.mode {
 			continue
 		}
-		current, err := readTerminalInstallFile(home, f.path)
+		current, err := readTerminalInstallFile(f.root, f.path)
 		if err != nil || current.exists != f.exists || !bytes.Equal(current.old, f.old) || current.oldMode != f.oldMode {
 			return fail()
 		}
@@ -344,6 +360,9 @@ func installTerminalCommands(home, configDir, binary, shell, platform string) (t
 		changed = append(changed, f)
 	}
 	result.Installed, result.PathConfigured = true, true
-	result.Message = "kilo-codex, kilo-claude and kilo-omp are installed. Open a new terminal to use them; keep Kilo Proxy open."
+	result.Message = "kilo-codex, kilo-claude, kilo-omp and kilo-opencode are installed. Open a new terminal to use them; keep Kilo Proxy open."
+	if result.Shell == "powershell" {
+		result.Message = "The four Kilo commands are installed in your PowerShell profiles. Open a new PowerShell window; keep Kilo Proxy open. Execution policy was not changed."
+	}
 	return result, nil
 }

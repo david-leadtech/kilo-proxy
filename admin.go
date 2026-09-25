@@ -59,7 +59,7 @@ func (a *app) adminHandler() http.Handler {
 			return
 		}
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
-			if r.Method != "GET" || (r.URL.Path != "/" && r.URL.Path != "/app.js" && r.URL.Path != "/desktop-helper.mjs" && r.URL.Path != "/editor-helper.mjs" && r.URL.Path != "/omp-helper.mjs" && r.URL.Path != "/open-design-helper.mjs" && r.URL.Path != "/xcode-helper.mjs" && r.URL.Path != "/activity-helper.mjs" && r.URL.Path != "/usage-helper.mjs" && r.URL.Path != "/account-usage.mjs" && r.URL.Path != "/codex-catalog.mjs" && r.URL.Path != "/model-helper.mjs" && r.URL.Path != "/context-policy.mjs" && r.URL.Path != "/client-config.mjs" && r.URL.Path != "/claude-helper.mjs" && r.URL.Path != "/i18n.mjs" && r.URL.Path != "/style.css" && r.URL.Path != "/icon.svg") {
+			if r.Method != "GET" || (r.URL.Path != "/" && r.URL.Path != "/app.js" && r.URL.Path != "/desktop-helper.mjs" && r.URL.Path != "/editor-helper.mjs" && r.URL.Path != "/omp-helper.mjs" && r.URL.Path != "/open-design-helper.mjs" && r.URL.Path != "/xcode-helper.mjs" && r.URL.Path != "/activity-helper.mjs" && r.URL.Path != "/usage-helper.mjs" && r.URL.Path != "/update-helper.mjs" && r.URL.Path != "/account-usage.mjs" && r.URL.Path != "/codex-catalog.mjs" && r.URL.Path != "/model-helper.mjs" && r.URL.Path != "/context-policy.mjs" && r.URL.Path != "/client-config.mjs" && r.URL.Path != "/claude-helper.mjs" && r.URL.Path != "/claude-desktop-helper.mjs" && r.URL.Path != "/i18n.mjs" && r.URL.Path != "/style.css" && r.URL.Path != "/icon.svg") {
 				http.NotFound(w, r)
 				return
 			}
@@ -68,6 +68,10 @@ func (a *app) adminHandler() http.Handler {
 		}
 		if !secureEqual(r.Header.Get("Authorization"), "Bearer "+a.adminToken) {
 			jsonError(w, 401, "Abre el panel desde la aplicación para recuperar el acceso.")
+			return
+		}
+		if r.URL.Path == "/api/updates" {
+			a.updatesAPI(w, r)
 			return
 		}
 		if r.URL.Path == "/api/clients/launch" {
@@ -86,6 +90,10 @@ func (a *app) adminHandler() http.Handler {
 			a.terminalCommandsAPI(w, r)
 			return
 		}
+		if r.URL.Path == "/api/terminal/manual" {
+			a.terminalManualAPI(w, r)
+			return
+		}
 		if r.URL.Path == "/api/terminal/prepare" {
 			a.terminalPrepareAPI(w, r)
 			return
@@ -102,12 +110,16 @@ func (a *app) adminHandler() http.Handler {
 			a.editorProfile(w, r)
 			return
 		}
-		if r.URL.Path == "/api/cursor" && (r.Method == "GET" || r.Method == "POST") {
-			a.cursorAPI(w, r)
-			return
-		}
 		if (r.Method == "GET" && r.URL.Path == "/api/xcode/info") || ((r.Method == "GET" || r.Method == "POST") && (r.URL.Path == "/api/xcode/chat" || r.URL.Path == "/api/xcode/codex" || r.URL.Path == "/api/xcode/claude")) {
 			a.xcodeAPI(w, r)
+			return
+		}
+		if (r.Method == "GET" || r.Method == "POST") && r.URL.Path == "/api/claude-desktop/profile" {
+			a.claudeDesktopProfile(w, r)
+			return
+		}
+		if (r.Method == "GET" || r.Method == "POST") && r.URL.Path == "/api/claude-desktop/options" {
+			a.claudeDesktopOptions(w, r)
 			return
 		}
 		if (r.Method == "GET" && r.URL.Path == "/api/claude/info") || ((r.Method == "GET" || r.Method == "POST") && r.URL.Path == "/api/claude/profile") {
@@ -185,21 +197,27 @@ func (a *app) adminHandler() http.Handler {
 }
 
 func (a *app) state(w http.ResponseWriter) {
+	imageDependency := a.imageTransportDependencySnapshot()
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	// The preference may have changed during static executable discovery.
+	imageDependency.Required = normalizeImageTransportSettings(a.config.ImageTransport).Mode == "cloudflare"
 	a.ensureBillingRefreshLocked(false)
 	uptime := int64(0)
 	if a.proxyServer != nil {
 		uptime = int64(time.Since(a.started).Seconds())
 	}
 	jsonResponse(w, 200, map[string]any{
-		"imageTransport":     a.config.ImageTransport,
-		"imageUploadWarning": a.imageUploadWarning,
-		"imageGeneration":    a.config.ImageGeneration,
-		"trayDisplay":        normalizeTrayDisplay(a.config.TrayDisplay),
-		"cursor":             a.cursor, "language": a.config.Language, "catalogRevision": a.catalogRevision,
+		"claudeDesktopExperimentalModels": a.config.ClaudeDesktopExperimentalModels,
+		"imageTransport":                  a.config.ImageTransport,
+		"imageTransportDependency":        imageDependency,
+		"imageUploadWarning":              a.imageUploadWarning,
+		"imageGeneration":                 a.config.ImageGeneration,
+		"trayDisplay":                     normalizeTrayDisplay(a.config.TrayDisplay),
+		"language":                        a.config.Language, "catalogRevision": a.catalogRevision,
 		"auth": a.login, "organizations": a.organizations, "accountEmail": a.accountEmail, "keySaved": a.keySaved,
 		"version": version, "desktop": a.desktop != nil, "port": a.config.Port, "orgId": a.config.OrgID,
+		"update":   a.updateSnapshot(),
 		"localKey": a.config.LocalKey, "hasKey": a.apiKey != "", "remember": a.config.Remember,
 		"running": a.proxyServer != nil, "baseURL": "http://127.0.0.1:" + strconv.Itoa(a.config.Port) + "/v1",
 		"zedBaseURL": zedBaseURL("http://127.0.0.1:"+strconv.Itoa(a.config.Port)+"/v1", a.config.LocalKey),

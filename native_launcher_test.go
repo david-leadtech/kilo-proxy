@@ -71,6 +71,11 @@ func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nat
 		},
 		terminal: func() (bool, string) { return true, "" },
 		start: func(plan clientLaunchPlan) error {
+			// Keep the real process boundary in UI tests: a prepared profile alone
+			// does not prove that the generated launch plan can be executed.
+			if err := validateClientProcessPlan(plan); err != nil {
+				return err
+			}
 			recorder.mu.Lock()
 			defer recorder.mu.Unlock()
 			if recorder.failLaunch {
@@ -126,7 +131,11 @@ func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nat
 		// The supported Claude compaction range is 100K–1M.
 		u.models[0].ContextWindow = 128000
 	}
-	nativeSeedSharedForTest(t, u, u.models[0])
+	if key == "claude-desktop" {
+		nativeSeedSharedForTest(t, u, u.models...)
+	} else {
+		nativeSeedSharedForTest(t, u, u.models[0])
+	}
 	u.sharedClientSelection(key)
 	u.detectLaunchers()
 	nativeTestWait(t, u, func() bool { return u.clientState().LaunchChecked })
@@ -191,9 +200,13 @@ func TestNativeLaunchPreparesEveryClientAndKeepsCommandsSeparate(t *testing.T) {
 func TestNativeLaunchPreservesEditsWhilePreparing(t *testing.T) {
 	for _, field := range []string{"model", "directory", "appPath"} {
 		t.Run(field, func(t *testing.T) {
-			u, r := nativeLaunchTestUI(t, "codex", true, false)
+			key := "codex"
+			if field == "directory" {
+				key = "codex-cli"
+			}
+			u, r := nativeLaunchTestUI(t, key, true, false)
 			nativeTestFrame(t, u)
-			u.clickable("client:codex:launch").Click()
+			u.clickable("client:" + key + ":launch").Click()
 			nativeTestFrame(t, u)
 			<-r.entered
 			switch field {
@@ -204,7 +217,7 @@ func TestNativeLaunchPreservesEditsWhilePreparing(t *testing.T) {
 			case "appPath":
 				u.setValue("clients-launch-app-path", "/different/Codex.app")
 			}
-			u.launchClient("codex")
+			u.launchClient(key)
 			r.unblock()
 			nativeTestWait(t, u, func() bool { return u.clientState().Launching == "" })
 			if r.count() != 0 || r.prepares.Load() != 1 {
@@ -265,7 +278,11 @@ func nativeHoldLaunchLibrarySave(t *testing.T, u *nativeUI, fail bool) (<-chan s
 func TestNativeLaunchLibrarySaveWaitPreservesRequestedSettings(t *testing.T) {
 	for _, change := range []string{"none", "model", "directory", "appPath", "connection", "raw-limit"} {
 		t.Run(change, func(t *testing.T) {
-			u, r := nativeLaunchTestUI(t, "codex", false, false)
+			key := "codex"
+			if change == "directory" {
+				key = "codex-cli"
+			}
+			u, r := nativeLaunchTestUI(t, key, false, false)
 			// An invalid numeric edit can still parse as the previous zero. The
 			// launch boundary must compare the raw draft, not only exported JSON.
 			if change == "raw-limit" {
@@ -273,20 +290,20 @@ func TestNativeLaunchLibrarySaveWaitPreservesRequestedSettings(t *testing.T) {
 			}
 			entered, release := nativeHoldLaunchLibrarySave(t, u, false)
 			u.setValue(nativeClientField(sharedModelKey, "vendor/one", "name"), "Requested model name")
-			u.launchAgent("codex")
+			u.launchAgent(key)
 			select {
 			case <-entered:
 			case <-time.After(3 * time.Second):
 				t.Fatal("launch did not wait for its library save")
 			}
-			if u.clients.Launching != "codex" || u.agents.Phase != "Saving models…" || r.prepares.Load() != 0 {
+			if u.clients.Launching != key || u.agents.Phase != "Saving models…" || r.prepares.Load() != 0 {
 				t.Fatal("profile preparation started before library persistence")
 			}
 			switch change {
 			case "model":
 				u.setValue(nativeClientField(sharedModelKey, "vendor/one", "name"), "Newer model name")
 			case "directory":
-				u.setValue(agentProjectField("codex"), t.TempDir())
+				u.setValue(agentProjectField(key), t.TempDir())
 			case "appPath":
 				u.setValue("clients-launch-app-path", "/different/codex")
 			case "connection":
@@ -296,7 +313,7 @@ func TestNativeLaunchLibrarySaveWaitPreservesRequestedSettings(t *testing.T) {
 			case "raw-limit":
 				u.setValue(nativeClientField(sharedModelKey, "vendor/one", "output"), "not a number")
 			}
-			u.launchAgent("codex") // A second click cannot queue a second waiter.
+			u.launchAgent(key) // A second click cannot queue a second waiter.
 			release()
 			nativeTestWait(t, u, func() bool { return u.clients.Launching == "" })
 			if u.agents.Phase != "" {
@@ -315,7 +332,7 @@ func TestNativeLaunchLibrarySaveWaitPreservesRequestedSettings(t *testing.T) {
 				if u.value(nativeClientField(sharedModelKey, "vendor/one", "name")) != "Newer model name" {
 					t.Fatal("save waiter overwrote the latest model edit")
 				}
-				u.launchAgent("codex")
+				u.launchAgent(key)
 				nativeTestWait(t, u, func() bool { return u.clients.Launching == "" })
 				if r.count() != 1 || r.prepares.Load() != 1 {
 					t.Fatalf("explicit retry failed: %s", u.notice)
@@ -419,32 +436,6 @@ func TestNativeLaunchDetectionAndValidation(t *testing.T) {
 	nativeTestWait(t, u, func() bool { return c.Launching == "" })
 	if r.count() != 0 || r.prepares.Load() != 0 || c.Launching != "" {
 		t.Fatal("empty selection dispatched a launch")
-	}
-}
-
-func TestNativeCursorLaunchRequiresRunningTunnel(t *testing.T) {
-	u, r := nativeLaunchTestUI(t, "cursor", false, false)
-	for _, status := range []string{"disconnected", "starting"} {
-		u.state["cursor"] = cursorSession{Status: status}
-		nativeTestFrame(t, u)
-		u.clickable("client:cursor:launch").Click()
-		nativeTestFrame(t, u)
-		if r.launchRequests.Load() != 0 || r.count() != 0 {
-			t.Fatal("Cursor launch started before its tunnel was running")
-		}
-	}
-	u.state["cursor"] = cursorSession{Status: "running", URL: "https://synthetic.invalid/v1"}
-	nativeTestFrame(t, u)
-	u.clickable("client:cursor:launch").Click()
-	nativeTestFrame(t, u)
-	nativeTestWait(t, u, func() bool { return u.clientState().Launching == "" })
-	if r.launchRequests.Load() != 1 || r.prepares.Load() != 0 {
-		t.Fatal("running Cursor UI did not use launch directly")
-	}
-	// The backend independently rejects this UI-only tunnel fixture. No public
-	// tunnel is ever created by a native Launch action or this test.
-	if r.count() != 0 {
-		t.Fatal("UI state bypassed backend tunnel validation")
 	}
 }
 

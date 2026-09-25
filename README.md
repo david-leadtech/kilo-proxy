@@ -14,7 +14,7 @@ Connect with your personal Kilo account, choose your organization, add models on
 2. Open **Kilo Proxy.app** on macOS, **Kilo Proxy.exe** on Windows, or run `./kilo-proxy` on Linux.
 3. The first-run guide opens automatically. Click **Sign in with Kilo / SSO** and approve the device code on Kilo’s website using your usual login or SSO. Choose your team and click **Save & choose models**. **Use an API key or team ID instead** provides manual entry.
 4. Choose at least one model, then **Continue**. Names, order, default and supported reasoning preferences save automatically to the shared library.
-5. Click **Start proxy and go to agents**, choose a project folder, and click **Open Codex** or another installed agent. Supported profiles are prepared automatically from the shared library. Zed also receives its local credential automatically. Cursor and Xcode retain their one-time provider setup under **Options**; choose Open Design's local CLI under **Engine settings** on its card.
+5. Click **Start proxy and go to agents**, then **Open Codex** or another installed agent. Choose your project inside Codex Desktop; terminal agents and editors have their own folder picker. Supported profiles are prepared automatically from the shared library. Zed also receives its local credential automatically. Xcode retains its one-time provider setup under **Options**; choose Open Design's local CLI under **Engine settings** on its card.
 
 Configured installations open **Agents** directly. **Start proxy** sits beside the stopped status; opening an agent also starts the proxy before launching it. If startup fails, the agent stays closed and the error appears in Kilo Proxy. Incomplete setup can be resumed with **Continue setup**.
 
@@ -24,7 +24,9 @@ The default API URL is `http://127.0.0.1:8877/v1`. The editor uses a randomly ge
 
 Closing the application window leaves the proxy running. The system tray / menu bar can reopen the interface, show status and observed spend, start or stop the saved connection, and quit the application. **Settings → Appearance** saves your choice of **K icon** or **Session cost**; macOS shows the K icon and amount together in **Session cost**, while other tray hosts may use the K icon, tooltip and menu. Stopping cancels active requests. The proxy does not start automatically when opening the application.
 
-On macOS and Linux, **Settings → Terminal commands → Install terminal commands** adds `kilo-codex`, `kilo-claude` and `kilo-omp` together. Open a new terminal in your project and run the command for your installed CLI to use the latest saved shared models in that terminal. Arguments pass through, including `kilo-codex resume`, `kilo-claude --resume` and `kilo-omp --resume`. Keep Kilo Proxy open, including in the tray; the commands start its saved connection when needed. Your ordinary `codex`, `claude` and `omp` profiles keep their usual authentication. If you installed the commands before `kilo-omp` was added, run **Update terminal commands** once. See [terminal command setup](docs/terminal-commands.md).
+On macOS, Linux and Windows, **Settings → Terminal commands** adds `kilo-codex`, `kilo-claude`, `kilo-opencode` and `kilo-omp` together. Use **Install terminal commands** on macOS/Linux or **Install PowerShell functions** on Windows. Open a new terminal in your project and run the command for your installed CLI to use the latest saved shared models in that terminal. Arguments pass through, including `kilo-codex resume`, `kilo-claude --resume`, `kilo-opencode --continue` and `kilo-omp --resume`. Keep Kilo Proxy open, including in the tray; the commands start its saved connection when needed. Your ordinary CLI authentication is preserved. Use the install/update button again after moving the app or to add commands missing from an older installation. See [terminal command setup](docs/terminal-commands.md).
+
+Prefer to configure your shell yourself? **Manual setup** on the same Settings page offers a separate copy button for each command and **Copy all**. Paste the generated functions into `.zshrc` or `.bashrc` on macOS/Linux, or into `$PROFILE` in Windows PowerShell 5.1 or PowerShell 7. No installer or PATH changes are needed, and the blocks contain no API keys.
 
 ## Downloads
 
@@ -38,6 +40,12 @@ Every release includes six archives and `SHA256SUMS.txt`. Linux’s installer ad
 
 macOS bundles have an **ad-hoc signature** covering the executable, bundle metadata, and resources. They are **not Developer ID signed or notarized**; Windows binaries are unsigned. macOS and Windows may show origin warnings. Company-wide managed distribution can add publisher signing and macOS notarization separately. The project does not install an auto-updater or change system startup settings.
 
+## App updates
+
+Kilo Proxy checks this repository's latest stable GitHub release in the background when it starts and every six hours while it remains open. A newer version shows a download notice. **Settings → App updates** shows the installed version, last check, and a manual **Check for updates** button. The optional browser interface has the same controls in **App updates**.
+
+Checks use GitHub's public release API without your Kilo credentials, organization, conversations, or GitHub authentication. Manual checks are limited to once per minute. Offline or rate-limited checks show an unavailable status and do not stop the proxy. The download button opens the exact release page; installation stays under your control. Drafts and prereleases are excluded, and development builds with an unrecognized version do not claim to be up to date.
+
 ## Editors and models
 
 | Client | What the helper configures |
@@ -48,11 +56,9 @@ macOS bundles have an **ad-hoc signature** covering the executable, bundle metad
 | Oh My Pi | Isolated OMP terminal profile, shared models, names, supported reasoning, and Kilo image MCP |
 | Open Design | Codex CLI, Claude Code or OpenCode engine, private profiles from shared models, separate desktop workspace, and automatic proxy startup |
 | Claude Code | Automatic isolated profile, version-aware model picker, short names, native effort and terminal launcher |
+| Claude Desktop | Official gateway configuration, shared Claude models and names, automatic preparation and desktop launch |
 | Zed | Automatic local credentials and JSONC settings updates, multiple models, names, and initial model |
 | Xcode | Dedicated Chat model list, automatic Codex/Claude agent profiles, version-aware Claude aliases and setup guidance |
-| Cursor | Managed ngrok HTTPS connection, dedicated key, selected models, and public connection check |
-
-**Cursor connects through a dedicated HTTPS tunnel.** Install and configure ngrok once, choose shared models, and use **Agents → Cursor → Set up tunnel → Connect HTTPS tunnel**. Copy its URL and dedicated key into Cursor. [Setup, privacy, and compatibility limits](docs/cursor.md).
 
 **Open Design uses Codex CLI, Claude Code or OpenCode through the local proxy.** Choose **Agents → Open Design → Engine settings**, select an installed engine, and click **Launch Open Design**. Kilo Proxy prepares private profiles from the shared library and starts a separate Open Design workspace on macOS or Windows, without copying credentials manually. Keep **CLI default** in Open Design for the shared default; its own model picker may not list every shared choice. See [Open Design setup and Linux guidance](docs/open-design.md).
 
@@ -70,9 +76,11 @@ The Codex Desktop helper also exposes its message queue mode. **Queue** keeps ne
 
 From v0.23.1, image results include a preview bounded to **1024 pixels per side and 256 KiB per image**, while the full-resolution original stays saved locally for export and editing. Existing conversations can still contain large inline images; an upstream **413** may require client-side compaction, a new conversation, or fewer attachments. See [payload limits and recovery](docs/codex-images.md#payload-limits-and-413-errors).
 
-**Settings → Large images** handles oversized Responses, Chat Completions and Anthropic Messages requests. Choose **Off** (default), **Compress locally**, **Upload to Kilo · Experimental**, **Cloudflare quick tunnel**, **Litterbox**, or **Tailscale Funnel**. Compression has fixed **High quality**, **Balanced**, and **Small size** profiles. URL modes preserve the image bytes; local originals stay unchanged in every mode. Cloudflare and Tailscale require their installed executables and expose only a separate temporary image server. Litterbox needs no extra executable, but uploads to a third party with a chosen expiry and no early deletion. Modes never fall back to another service automatically. Read [setup, limits, and image lifetime](docs/image-uploads.md).
+**Settings → Large images** handles oversized Responses, Chat Completions and Anthropic Messages requests. New profiles default to **Cloudflare quick tunnel**. You can also choose **Off**, **Compress locally**, **Upload to Kilo · Experimental**, **Litterbox**, or **Tailscale Funnel**; existing saved choices are preserved. Compression has fixed **High quality**, **Balanced**, and **Small size** profiles. URL modes preserve the image bytes; local originals stay unchanged in every mode. Cloudflare and Tailscale require their installed executables and expose only a separate temporary image server. When Cloudflare is selected and `cloudflared` is missing, startup shows installation guidance and a check-again action; the proxy can still start for ordinary requests. Litterbox needs no extra executable, but uploads to a third party with a chosen expiry and no early deletion. Modes never fall back to another service automatically. Read [setup, limits, and image lifetime](docs/image-uploads.md).
 
 The Claude Code card detects the installed version, prepares a separate profile with backups, and opens an interactive terminal. Shared names and reasoning preferences apply only where that version and model support them. See [client setup](docs/clients.md) for profile isolation, saving, and compatibility limits.
+
+**Claude Desktop** has its own full-width row immediately below Codex. **Open Claude Desktop** prepares its third-party gateway configuration from the shared library. Claude models work directly; **Integration settings → Experimental: use models from other providers** enables local aliases for other Kilo models while preserving their real display names and cost attribution. Quit an already running Claude Desktop before opening the changed configuration. See [Desktop setup and compatibility limits](docs/claude-desktop.md).
 
 OpenCode and Zed receive the shared IDs, names, default and token limits through JSONC-preserving updates. Their reasoning remains automatic. OpenCode includes local authentication in its dedicated profile; Zed receives its local key in the system credential store and refreshes the provider when the key changes, including in an already-open editor. See [their setup guide](docs/opencode-and-zed.md).
 

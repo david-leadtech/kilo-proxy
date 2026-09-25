@@ -12,6 +12,9 @@ func (a *app) clientLaunchMessage(message string) string {
 	if language != "es" {
 		return message
 	}
+	if translated := nativeMessage(message, language); translated != message {
+		return translated
+	}
 	known := map[string]string{
 		"Cannot resolve the detected Codex CLI executable.": "No se pudo localizar el ejecutable del Codex CLI detectado.",
 		"Cannot inspect the detected Codex CLI executable.": "No se pudo comprobar el ejecutable del Codex CLI detectado.",
@@ -33,9 +36,7 @@ func (a *app) clientLaunchMessage(message string) string {
 		"The Codex application bundle is invalid.":                                                               "El paquete de la aplicación Codex no es válido.",
 		"Choose an absolute path to the Codex application.":                                                      "Indica la ruta absoluta de la aplicación Codex.",
 		"The selected Codex application does not exist or cannot be executed.":                                   "La aplicación Codex seleccionada no existe o no se puede ejecutar.",
-		"Start the Cursor HTTPS tunnel before launching Cursor.":                                                 "Conecta el túnel HTTPS de Cursor antes de abrir Cursor.",
 		"Zed opened. Local credentials and models are ready; existing projects stay open.":                       "Zed abierto. Las credenciales locales y los modelos están preparados; tus proyectos siguen abiertos.",
-		"Cursor opened. Connect its provider to the existing tunnel if needed.":                                  "Cursor abierto. Conecta su proveedor al túnel existente si hace falta.",
 		"Xcode opened. Existing projects stay open; complete its provider setup if needed.":                      "Xcode abierto. Los proyectos existentes siguen abiertos; completa la configuración del proveedor si hace falta.",
 		"Terminal is not installed":                                                                              "Terminal no está instalado.",
 		"A desktop session is required to open a terminal":                                                       "Necesitas una sesión de escritorio para abrir una terminal.",
@@ -49,6 +50,7 @@ func (a *app) clientLaunchMessage(message string) string {
 		patterns := map[string]string{
 			"Install {client} on this computer, then refresh installed apps.": "Instala {client} en este equipo y actualiza las aplicaciones instaladas.",
 			"{client} opened.": "{client} abierto.",
+			"Could not open {client}. Check that the application is available, then try again.":                       "No se pudo abrir {client}. Comprueba que la aplicación está disponible e inténtalo de nuevo.",
 			"Could not open {client}. Check that the application and a terminal are available, then try again.":       "No se pudo abrir {client}. Comprueba que la aplicación y una terminal están disponibles e inténtalo de nuevo.",
 			"Prepare {client} again: its saved profile is missing, unsafe or no longer matches the proxy connection.": "Vuelve a preparar {client}: su perfil guardado falta, no es seguro o ya no coincide con la conexión del proxy.",
 		}

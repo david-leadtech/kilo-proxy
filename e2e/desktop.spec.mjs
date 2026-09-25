@@ -3,7 +3,7 @@ import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 
 const first='vendor/one', second='anthropic/claude-sonnet-4.6';
-const helperClients=['generic','codex','codex-cli','claude','opencode','zed','cursor','xcode'];
+const helperClients=['generic','codex','codex-cli','claude','opencode','zed','xcode'];
 const helperPrefix=client=>['opencode','zed'].includes(client)?'editor':client==='xcode'?'xcode':'model';
 const sortLabels={en:['Code Mode Rank','Coding Index','Speed','Price','Name'],es:['Ranking de Code Mode','Índice de programación','Velocidad','Precio','Nombre']};
 const model=(page,id)=>page.locator('input[name="model-choice"]').filter({visible:true}).and(page.locator(`[value="${id}"]`));
@@ -32,7 +32,9 @@ test('connection, team selection, language persistence, all clients and mobile n
   await expect(page.locator('#org-id')).toHaveValue('other-team');
   await page.locator('#team-select').selectOption('e2e-team');
 
-  for(const client of ['generic','codex','codex-cli','claude','opencode','zed','cursor','xcode']) {
+  const clients=['generic','zed','opencode','omp','open-design','xcode','codex','claude-desktop','codex-cli','claude'];
+  expect(await page.locator('[role="tab"][data-client]').evaluateAll(tabs=>tabs.map(tab=>tab.dataset.client))).toEqual(clients);
+  for(const client of clients) {
     await page.locator('#tab-'+client).click();
     await expect(page.locator('#tab-'+client)).toHaveAttribute('aria-selected','true');
     await expect(page.locator('#client-panel')).toHaveAttribute('aria-labelledby','tab-'+client);
@@ -368,8 +370,11 @@ test('Claude prepares and reloads model picker, alias and reasoning without over
   await expect(page.locator(`[data-focus="claude-name:${second}"]`)).toHaveValue('Sonnet');
 });
 
-test('OpenCode and Zed save multiple models, limits, backups and independent selections',async({page,gateway,request})=>{
-  for(const client of ['opencode','zed']) {
+// Each profile workflow owns its test budget. WebKit on Linux can take several
+// seconds per pointer action, so combining both workflows exhausted 60 seconds
+// even though every completed action and assertion had succeeded.
+for(const client of ['opencode','zed']) {
+  test(`${client==='zed'?'Zed':'OpenCode'} saves multiple models, limits, backups and reloads its selection`,async({page,gateway,request})=>{
     const dir=gateway.profiles[client],name=client==='zed'?'settings.json':'opencode.json';
     const original='// Keep team comments\n{"theme":"dark", "permission":{"bash":"ask"},}\n';
     await seed(dir,name,original);
@@ -425,11 +430,45 @@ test('OpenCode and Zed save multiple models, limits, backups and independent sel
     await page.locator('#editor-save').click();
     await expect(page.locator('#editor-copy')).toBeEnabled();
     expect(await readFile(path.join(dir,name+'.bak'),'utf8')).toBe(original);
-  }
+    await expect(page.locator('[data-editor-id]:checked')).toHaveCount(2);
+    await page.locator('#language').selectOption('es');
+    await expect(page.locator('#editor-save')).toHaveText('1. Preparar '+(client==='zed'?'Zed':'OpenCode'));
+  });
+}
+
+test('OpenCode and Zed keep models, names and defaults independent when switching prepared profiles',async({page,gateway})=>{
+  await page.locator('#tab-opencode').click();
+  await page.locator(`[data-editor-id="${first}"]`).check();
+  await page.locator(`[data-editor-id="${second}"]`).check();
+  await page.locator(`[data-editor-name="${first}"]`).fill('OpenCode One');
+  await page.locator(`[data-editor-initial="${second}"]`).click();
+  await page.locator('#editor-save').click();
+  await expect(page.locator('#editor-status')).toContainText('Configuration saved:');
+
+  await page.locator('#tab-zed').click();
+  await expect(page.locator('[data-editor-id]:checked')).toHaveCount(0);
+  await expect(page.locator('#editor-save')).toBeDisabled();
+  await page.locator(`[data-editor-id="${first}"]`).check();
+  await page.locator(`[data-editor-name="${first}"]`).fill('Zed One');
+  await page.locator('#editor-save').click();
+  await expect(page.locator('#editor-status')).toContainText('Configuration saved:');
+
   await page.locator('#tab-opencode').click();
   await expect(page.locator('[data-editor-id]:checked')).toHaveCount(2);
-  await page.locator('#language').selectOption('es');
-  await expect(page.locator('#editor-save')).toHaveText('1. Preparar OpenCode');
+  await expect(page.locator(`[data-editor-name="${first}"]`)).toHaveValue('OpenCode One');
+  await expect(page.locator(`[data-editor-initial="${second}"]`)).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('#editor-copy')).toBeEnabled();
+  await page.locator('#tab-zed').click();
+  await expect(page.locator('[data-editor-id]:checked')).toHaveCount(1);
+  await expect(page.locator(`[data-editor-id="${second}"]`)).not.toBeChecked();
+  await expect(page.locator(`[data-editor-name="${first}"]`)).toHaveValue('Zed One');
+  await expect(page.locator(`[data-editor-initial="${first}"]`)).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('#editor-copy')).toBeEnabled();
+
+  const opencode=await readFile(path.join(gateway.profiles.opencode,'opencode.json'),'utf8');
+  const zed=await readFile(path.join(gateway.profiles.zed,'settings.json'),'utf8');
+  expect(opencode).toContain('OpenCode One');expect(opencode).not.toContain('Zed One');
+  expect(zed).toContain('Zed One');expect(zed).not.toContain('OpenCode One');
 });
 
 test('real JSON and SSE proxy traffic reaches cost, cache and redacted activity inspectors',async({page,gateway,request})=>{

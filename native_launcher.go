@@ -15,12 +15,19 @@ import (
 const nativeLaunchEndpoint = "/api/clients/launch"
 
 type nativeLaunchClient struct {
-	Available bool   `json:"available"`
-	Name      string `json:"name"`
-	Kind      string `json:"kind"`
-	Path      string `json:"path"`
-	Reason    string `json:"reason"`
+	Available  bool   `json:"available"`
+	Installed  bool   `json:"installed"`
+	InstallURL string `json:"installURL,omitempty"`
+	Name       string `json:"name"`
+	Kind       string `json:"kind"`
+	Path       string `json:"path"`
+	Reason     string `json:"reason"`
 }
+
+func nativeLaunchClientInstalled(info nativeLaunchClient) bool {
+	return info.Installed || info.Available || info.Path != ""
+}
+
 type nativeLaunchInfo struct {
 	Platform  string                        `json:"platform"`
 	Directory string                        `json:"directory"`
@@ -92,13 +99,18 @@ func (u *nativeUI) clientLauncherPanel(key string, s *nativeClientSelection, can
 	if key == "codex" {
 		widgets = append(widgets, u.field("clients-launch-app-path", u.tr("Codex application path (optional)", "Ruta de la aplicación Codex (opcional)"), info.Path, false))
 	}
+	openButton := u.disabled(enabled, u.primaryButton("client:"+key+":launch", label, func() { u.launchClient(key) }))
+	if !clientLaunchUsesProject(key) {
+		widgets = append(widgets, u.pills(openButton))
+	} else {
+		widgets = append(widgets, u.actionRow(u.field("clients-project-directory", u.tr("Project folder", "Carpeta del proyecto"), c.LaunchInfo.Directory, false), openButton))
+	}
 	widgets = append(widgets,
-		u.actionRow(u.field("clients-project-directory", u.tr("Project folder", "Carpeta del proyecto"), c.LaunchInfo.Directory, false), u.disabled(enabled, u.primaryButton("client:"+key+":launch", label, func() { u.launchClient(key) }))),
 		u.pills(u.disabled(!u.busy["GET"+nativeLaunchEndpoint], u.iconButton("clients-launch-detect", u.tr("Refresh installed apps", "Actualizar aplicaciones instaladas"), nativeButtonGhost, nativeIconRefresh, u.detectLaunchers))),
 	)
 	installTone, installStatus := nativeToneInfo, u.tr("Checking installation…", "Comprobando instalación…")
 	if c.LaunchChecked {
-		if launchable {
+		if launchable || terminalClientSupported(key) && nativeLaunchClientInstalled(info) {
 			installTone, installStatus = nativeToneSuccess, u.tr("Installed", "Instalado")
 		} else {
 			installTone, installStatus = nativeToneNeutral, u.tr("Not found", "No encontrado")
@@ -119,8 +131,6 @@ func (u *nativeUI) clientLauncherPanel(key string, s *nativeClientSelection, can
 		widgets = append(widgets, u.hint(u.tr("Save your Kilo connection before opening this app.", "Guarda tu conexión de Kilo antes de abrir esta aplicación.")))
 	case connectionWorking:
 		widgets = append(widgets, u.hint(u.tr("Wait for the Kilo connection update to finish.", "Espera a que termine la actualización de la conexión de Kilo.")))
-	case key == "cursor" && !canPrepare:
-		widgets = append(widgets, u.hint(u.tr("Connect the HTTPS tunnel before opening Cursor.", "Conecta el túnel HTTPS antes de abrir Cursor.")))
 	case working:
 		widgets = append(widgets, u.hint(u.tr("Wait for the current profile operation to finish.", "Espera a que termine la operación actual del perfil.")))
 	}
@@ -136,7 +146,7 @@ func (u *nativeUI) launchClient(key string) {
 
 func (u *nativeUI) launchAgent(key string) {
 	u.agentsState()
-	if key == "open-design" {
+	if !clientLaunchUsesProject(key) {
 		u.launchClientFrom(key, "")
 		return
 	}
@@ -180,12 +190,12 @@ func (u *nativeUI) launchSettingsChangedMessage() string {
 }
 
 func (u *nativeUI) launchClientFrom(key, directoryField string) {
-	if key == "open-design" {
-		directoryField = "" // Open Design has no supported project-folder launch argument.
+	if !clientLaunchUsesProject(key) {
+		directoryField = "" // Desktop apps manage their own project selection.
 	}
 	a := u.agentsState()
 	c := u.clientState()
-	if c.Launching != "" {
+	if c.Launching != "" || key == "claude-desktop" && u.busy["POST/api/claude-desktop/options"] {
 		return
 	}
 	u.persistLibraryEdits()
@@ -220,15 +230,7 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 	}
 	s := u.sharedClientSelection(key)
 	u.syncClientSelection(key, s)
-	if key == "cursor" {
-		var session cursorSession
-		data, _ := json.Marshal(u.state["cursor"])
-		_ = json.Unmarshal(data, &session)
-		if session.Status != "running" {
-			u.setNotice(nativeToneWarning, u.tr("Connect the Cursor HTTPS tunnel first.", "Conecta primero el túnel HTTPS de Cursor."))
-			return
-		}
-	} else if _, err := nativeClientPayload(key, s); err != nil || len(s.Models) == 0 {
+	if _, err := nativeClientPayload(key, s); err != nil || len(s.Models) == 0 {
 		u.setNotice(nativeToneWarning, u.tr("Choose valid models before launching.", "Elige modelos válidos antes de abrir."))
 		if err != nil {
 			u.noticeError(err)
@@ -236,13 +238,17 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 		return
 	}
 	directory, appPath := u.value(directoryField), u.value("clients-launch-app-path")
-	if key == "open-design" {
+	if !clientLaunchUsesProject(key) {
 		directory = ""
 	}
-	resolvedDirectory, err := launchPath(directory, c.LaunchInfo.Directory)
-	if err != nil {
-		u.noticeError(err)
-		return
+	resolvedDirectory := ""
+	if clientLaunchUsesProject(key) {
+		var err error
+		resolvedDirectory, err = launchPath(directory, c.LaunchInfo.Directory)
+		if err != nil {
+			u.noticeError(err)
+			return
+		}
 	}
 	prepared := u.launchSettingsFingerprint(key, directoryField)
 	c.Launching = key
@@ -265,6 +271,9 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 			return
 		}
 		payload := map[string]string{"client": key, "directory": directory}
+		if !clientLaunchUsesProject(key) {
+			delete(payload, "directory")
+		}
 		if key == "open-design" {
 			payload["engine"] = u.openDesignEngine()
 		}
@@ -290,7 +299,7 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 				return
 			}
 			finish(nil)
-			if key != "open-design" {
+			if key != "open-design" && key != "claude-desktop" {
 				u.rememberAgentProject(key, resolvedDirectory)
 			}
 			u.setNotice(nativeToneWarning, result.Message)
@@ -302,9 +311,5 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 	}
 	// A managed profile can be edited externally between launches. Reapply the
 	// shared library each time; the backend preserves unrelated preferences.
-	if key == "cursor" {
-		launch(nil)
-	} else {
-		u.prepareClientAfter(key, launch)
-	}
+	u.prepareClientAfter(key, launch)
 }

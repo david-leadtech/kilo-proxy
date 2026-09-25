@@ -49,6 +49,12 @@ type nativeUI struct {
 	modelMenuAnchors    map[string]image.Point
 	activeModelMenu     *nativeModelMenuState
 
+	imageDependencyDismissed bool
+	imageSettingsFocus       bool
+	updateRevision           uint64
+	updateRequestFailed      bool
+	proxyRevision            uint64
+
 	owner                          *app
 	invalidate                     func()
 	theme                          *material.Theme
@@ -529,10 +535,17 @@ func (u *nativeUI) call(method, path string, payload any, done func(json.RawMess
 		return
 	}
 	u.busy[key] = true
+	changesProxy := method == "POST" && (path == "/api/start" || path == "/api/stop")
+	if changesProxy {
+		u.proxyRevision++
+	}
 	go func() {
 		raw, err := nativeRequest(u.owner, method, path, payload)
 		u.enqueue(func() {
 			delete(u.busy, key)
+			if changesProxy {
+				u.proxyRevision++
+			}
 			if err != nil {
 				u.noticeError(err)
 				return
@@ -545,8 +558,35 @@ func (u *nativeUI) call(method, path string, payload any, done func(json.RawMess
 }
 func (u *nativeUI) refreshState() {
 	revision, saving := u.languageRevision, u.languageTarget != ""
+	proxyRevision, proxySaving := u.proxyRevision, u.busy["POST/api/start"] || u.busy["POST/api/stop"]
+	updateRevision, updateSaving := u.updateRevision, u.busy["POST/api/updates"]
+	c := u.clientState()
+	desktopRevision, desktopSaving := c.DesktopExperimentalRevision, c.DesktopExperimentalTarget != nil
 	u.call("GET", "/api/state", nil, func(raw json.RawMessage) {
+		// A snapshot that overlaps Start or Stop can predate the completed
+		// operation. Discard it before applying any state-derived effects;
+		// the next poll will fetch a coherent snapshot, including after errors.
+		if proxySaving || proxyRevision != u.proxyRevision || u.busy["POST/api/start"] || u.busy["POST/api/stop"] {
+			return
+		}
+		desktopExperimental := u.claudeDesktopExperimentalModels()
+		update := u.state["update"]
 		u.acceptState(raw)
+		// A poll captured before a manual check must not restore its old status.
+		if updateSaving || updateRevision != u.updateRevision || u.busy["POST/api/updates"] {
+			u.state["update"] = update
+		} else if u.updateRequestFailed {
+			var previous releaseUpdateState
+			nativeDecode(update, &previous)
+			current := u.releaseUpdate()
+			if current.Checking || current.CheckedAt != "" && current.CheckedAt != previous.CheckedAt {
+				u.updateRequestFailed = false
+			}
+		}
+		// Ignore a Desktop option snapshot captured before or during its save.
+		if desktopSaving || desktopRevision != c.DesktopExperimentalRevision || c.DesktopExperimentalTarget != nil {
+			u.state["claudeDesktopExperimentalModels"] = desktopExperimental
+		}
 		// A response captured before a choice or during its save can contain
 		// the previous language, even when it arrives after the save succeeds.
 		if !saving && revision == u.languageRevision && u.languageTarget == "" {
@@ -566,6 +606,7 @@ func (u *nativeUI) acceptState(raw json.RawMessage) {
 	oldEpoch := nativeNumber(u.state, "activityEpoch")
 	oldOrg := nativeString(u.state, "orgId")
 	loginApproved := nativeString(nativeMap(state["auth"]), "status") == "approved" && nativeString(nativeMap(u.state["auth"]), "status") != "approved"
+	u.acceptImageDependencyState(state)
 	u.state = state
 	u.authenticated = true
 	if !first && oldEpoch != nativeNumber(state, "activityEpoch") {
