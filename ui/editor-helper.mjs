@@ -111,7 +111,7 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
  $('editor-lab').addEventListener('change',()=>{setModelLab($('editor-lab').value);$('editor-picker').scrollTop=0;render(ctx,true)});
  $('editor-shell').addEventListener('change',controls);
  $('editor-refresh').addEventListener('click',()=>refreshCatalog());
- $('editor-add').addEventListener('click',()=>{const id=$('editor-id').value.trim();if(!validModelID(id)||s().models.size>=50)return;s().models.set(id,ctx.catalog.find(m=>m.id===id)||{id,name:id});if(!s().initial)s().initial=id;$('editor-search').value='';$('editor-selected').checked=true;$('editor-id').value='';render(ctx)});
+ $('editor-add').addEventListener('click',()=>{const id=$('editor-id').value.trim();if(!validModelID(id)||s().models.size>=50)return;s().models.set(id,{...(ctx.catalog.find(m=>m.id===id)||{id,name:id})});if(!s().initial)s().initial=id;$('editor-search').value='';$('editor-selected').checked=true;$('editor-id').value='';render(ctx)});
  async function prepare(){
   if(working)throw new Error(L('This editor is already being prepared.','Este editor ya se está preparando.'));
   const client=ctx.client,selection=s(),fp=fingerprint(),body=payload();working=true;render(ctx);

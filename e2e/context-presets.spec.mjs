@@ -78,3 +78,22 @@ test('refresh updates filtered-out selections and invalid context drafts block p
  await input.fill('');await expect(page.locator('#editor-save')).toBeDisabled();
  await expect(page.locator('#editor-status')).toContainText('whole number');
 });
+
+
+test('adding a catalog ID manually keeps provider caps and other client choices independent',async({page})=>{
+ const id='vendor/one';
+ await page.locator('#tab-omp').click();
+ await page.locator('#editor-manual-title').click();
+ await page.locator('#editor-id').fill(id);await page.locator('#editor-add').click();
+ const row=card(page,id);
+ await row.getByRole('button',{name:'Custom',exact:true}).click();
+ await row.getByRole('spinbutton',{name:'Context tokens: '+id,exact:true}).fill('80000');
+ await row.locator('details > summary').click();
+ await row.getByRole('spinbutton',{name:'Max output tokens (0 = automatic): '+id,exact:true}).fill('128000');
+ const omp=JSON.parse(await copied(page,'#editor-export'));
+ expect(omp.providers['kilo-local'].models[0]).toMatchObject({contextWindow:80000,maxTokens:4000});
+ await page.locator('#tab-opencode').click();await page.locator(`[data-editor-id="${id}"]`).check();
+ await expect(row.getByRole('button',{name:'Recommended · 272K',exact:true})).toHaveAttribute('aria-pressed','true');
+ const openCode=JSON.parse(await copied(page,'#editor-export'));
+ expect(openCode.provider['kilo-local'].models[id].limit).toEqual({context:128000,output:4000});
+});
