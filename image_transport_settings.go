@@ -6,8 +6,9 @@ import (
 )
 
 type imageTransportSettings struct {
-	Mode    string `json:"mode"`
-	Profile string `json:"profile"`
+	Mode         string `json:"mode"`
+	Profile      string `json:"profile"`
+	LitterboxTTL string `json:"litterboxTTL"`
 }
 
 func normalizeImageTransportSettings(value imageTransportSettings) imageTransportSettings {
@@ -17,15 +18,26 @@ func normalizeImageTransportSettings(value imageTransportSettings) imageTranspor
 	if value.Profile == "" {
 		value.Profile = "high"
 	}
+	if value.LitterboxTTL == "" {
+		value.LitterboxTTL = "1h"
+	}
 	return value
 }
 
 func validateImageTransportSettings(value imageTransportSettings) error {
-	if value.Mode != "off" && value.Mode != "compress" && value.Mode != "upload" {
-		return errors.New("Choose off, compress, or upload for large images.")
+	switch value.Mode {
+	case "off", "compress", "upload", "cloudflare", "litterbox", "tailscale":
+	default:
+		return errors.New("Choose off, local compression, Kilo upload, Cloudflare, Litterbox, or Tailscale for large images.")
 	}
 	if value.Profile != "high" && value.Profile != "balanced" && value.Profile != "small" {
 		return errors.New("Choose high, balanced, or small for image compression.")
+	}
+	// Missing TTL is accepted for settings saved by older versions.
+	switch value.LitterboxTTL {
+	case "", "1h", "12h", "24h", "72h":
+	default:
+		return errors.New("Choose 1h, 12h, 24h, or 72h for Litterbox expiry.")
 	}
 	return nil
 }
@@ -55,6 +67,7 @@ func (a *app) imageTransportSettings(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	cfg := a.config
+	input = normalizeImageTransportSettings(input)
 	cfg.ImageTransport = input
 	if err := writeSettings(a.dir, cfg); err != nil {
 		jsonError(w, http.StatusInternalServerError, "Could not save the image preference. Check the configuration folder permissions.")

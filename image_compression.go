@@ -43,7 +43,7 @@ type compressibleResponseImage struct {
 	raw      []byte
 	format   string
 	config   image.Config
-	parts    []map[string]any
+	parts    []inferenceImagePart
 	animated bool
 }
 
@@ -51,7 +51,7 @@ type compressibleResponseImage struct {
 // concurrent large-image work; decoding is sequential and bounded per image and
 // per request. Local files and remote URLs are never opened by this adapter.
 func prepareCompressedResponseImages(r *http.Request, profile string) (*http.Request, error) {
-	if r.Method != http.MethodPost || r.URL.Path != "/v1/responses" || r.Header.Get("Content-Encoding") != "" || r.Body == nil {
+	if r.Method != http.MethodPost || !imageTransportPath(r.URL.Path) || r.Header.Get("Content-Encoding") != "" || r.Body == nil {
 		return r, nil
 	}
 	data, err := io.ReadAll(io.LimitReader(r.Body, bridgeLimit+1))
@@ -74,7 +74,7 @@ func prepareCompressedResponseImages(r *http.Request, profile string) (*http.Req
 	if err != nil {
 		return r, nil // Preserve existing gateway validation for invalid JSON.
 	}
-	images, err := collectCompressionImages(doc)
+	images, err := collectInferenceCompressionImages(doc, r.URL.Path)
 	if err != nil {
 		return r, err
 	}
@@ -142,11 +142,15 @@ func compressedResponseRequest(r *http.Request, data []byte) *http.Request {
 }
 
 func collectCompressionImages(doc map[string]any) ([]*compressibleResponseImage, error) {
+	return collectInferenceCompressionImages(doc, "/v1/responses")
+}
+
+func collectInferenceCompressionImages(doc map[string]any, path string) ([]*compressibleResponseImage, error) {
 	groups := make(map[string]*compressibleResponseImage)
 	var images []*compressibleResponseImage
 	pixels := 0
-	for _, part := range responseImageParts(doc) {
-		value := stringValue(part["image_url"])
+	for _, part := range inferenceImageParts(doc, path) {
+		value := part.inline()
 		if existing := groups[value]; existing != nil {
 			existing.parts = append(existing.parts, part)
 			continue
@@ -169,9 +173,11 @@ func collectCompressionImages(doc map[string]any) ([]*compressibleResponseImage,
 		// x/image/webp does not decode animation. Its extended header still
 		// provides a bounded canvas size, so animated data can pass unchanged.
 		if format == "webp" && animated {
-			if canvas, valid := animatedWebPCanvas(raw); valid {
-				cfg, actual, err = canvas, "webp", nil
+			canvas, valid := animatedWebPCanvas(raw)
+			if !valid {
+				return nil, imageCompressionInvalid()
 			}
+			cfg, actual, err = canvas, "webp", nil
 		}
 		if err != nil || actual != format || cfg.Width < 1 || cfg.Height < 1 {
 			return nil, imageCompressionInvalid()
@@ -183,7 +189,7 @@ func collectCompressionImages(doc map[string]any) ([]*compressibleResponseImage,
 		if pixels > imageCompressionRequestPixelLimit {
 			return nil, imageUploadProblem(413, "These images exceed the local compression limit of 80 million unique pixels per request. Use temporary image uploads or reduce attachments. No image was changed.")
 		}
-		candidate := &compressibleResponseImage{raw: raw, format: format, config: cfg, parts: []map[string]any{part}, animated: animated}
+		candidate := &compressibleResponseImage{raw: raw, format: format, config: cfg, parts: []inferenceImagePart{part}, animated: animated}
 		groups[value] = candidate
 		images = append(images, candidate)
 	}
@@ -415,9 +421,9 @@ func imageCompressionEncodeError(ctx context.Context) error {
 	return imageUploadProblem(400, "An inline image could not be compressed safely. No image was changed or sent.")
 }
 
-func setCompressedImage(parts []map[string]any, raw []byte, format string) {
-	value := "data:image/" + format + ";base64," + base64.StdEncoding.EncodeToString(raw)
+func setCompressedImage(parts []inferenceImagePart, raw []byte, format string) {
+	encoded := base64.StdEncoding.EncodeToString(raw)
 	for _, part := range parts {
-		part["image_url"] = value
+		part.setInline("image/"+format, encoded)
 	}
 }

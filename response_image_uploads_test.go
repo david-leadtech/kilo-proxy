@@ -117,6 +117,27 @@ func TestResponseImageUploadRejectsInvalidImages(t *testing.T) {
 	}
 }
 
+func TestImageURLTransportPreservesAnimatedWebP(t *testing.T) {
+	// Two synthetic 2x2 red/blue frames. This is a complete animation rather
+	// than a header-only fixture, and requires no external image tools at test time.
+	const encoded = "UklGRsAAAABXRUJQVlA4WAoAAAACAAAAAQAAAQAAQU5JTQYAAAD/////AABBTk1GSAAAAAAAAAAAAAEAAAEAAGQAAAJWUDggMAAAANABAJ0BKgIAAgACADQloAJ0ugH4AAOwAP7wxAv/ILlhdcjX/yA/5Af8gP/48gAAAEFOTUZEAAAAAAAAAAAAAQAAAQAAZAAAAFZQOCAsAAAAlAEAnQEqAgACAAAANCWgAnS6AAOYAP75k2//kB//kB//kB//ID/iF3sgMAA="
+	original, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, mime, err := decodeResponseImage("data:image/webp;base64," + encoded)
+	if err != nil || mime != "image/webp" || !bytes.Equal(data, original) || !responseImageAnimated(data, "webp") {
+		t.Fatal("animated WebP was rejected or changed", err)
+	}
+	if err := validateImageTransportData(original, "image/png"); err == nil {
+		t.Fatal("animation accepted with the wrong declared format")
+	}
+	truncated := original[:len(original)-1]
+	if err := validateImageTransportData(truncated, "image/webp"); err == nil {
+		t.Fatal("truncated animation accepted")
+	}
+}
+
 type responseUploadStore struct {
 	mu          sync.Mutex
 	objects     map[string][]byte

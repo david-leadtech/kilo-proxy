@@ -265,11 +265,11 @@ function renderSnippet() {
 }
 function renderImageTransport(s) {
   const L=(en,es)=>language==='es'?es:en;
-  const current=imageTransportPending??s.imageTransport??{mode:'off',profile:'high'};
+  const current=imageTransportPending??s.imageTransport??{mode:'off',profile:'high',litterboxTTL:'1h'};
   $('image-transport-title').textContent=L('Large images','Imágenes grandes');
-  $('image-transport-description').textContent=L("Choose how to handle inline images when a Responses request exceeds 4.4 MB, just below Kilo's limit. Smaller requests and your original files stay unchanged.", 'Elige cómo tratar las imágenes cuando una petición Responses supera 4,4 MB, justo por debajo del límite de Kilo. Las peticiones pequeñas y tus archivos originales no cambian.');
+  $('image-transport-description').textContent=L("Choose one method for inline images when a request exceeds 4.4 MB. Works with Responses, Chat Completions, and Anthropic Messages. Smaller requests and your original files stay unchanged.", 'Elige un método para las imágenes cuando una petición supera 4,4 MB. Funciona con Responses, Chat Completions y Anthropic Messages. Las peticiones pequeñas y tus archivos originales no cambian.');
   $('image-transport-mode-label').textContent=L('Large image handling','Tratamiento de imágenes grandes');
-  for(const [mode,en,es] of [['off','Off','Desactivado'],['compress','Compress locally','Comprimir en local'],['upload','Upload to Kilo · Experimental','Subir a Kilo · Experimental']])$('image-transport-mode').querySelector(`option[value="${mode}"]`).textContent=L(en,es);
+  for(const [mode,en,es] of [['off','Off','Desactivado'],['compress','Compress locally','Comprimir en local'],['cloudflare','Cloudflare quick tunnel','Túnel rápido de Cloudflare'],['tailscale','Tailscale Funnel','Tailscale Funnel'],['litterbox','Litterbox · Experimental','Litterbox · Experimental'],['upload','Upload to Kilo · Experimental','Subir a Kilo · Experimental']])$('image-transport-mode').querySelector(`option[value="${mode}"]`).textContent=L(en,es);
   $('image-transport-mode').value=current.mode||'off';
   $('image-transport-mode').disabled=busy;
   $('image-compression-options').hidden=current.mode!=='compress';
@@ -285,7 +285,39 @@ function renderImageTransport(s) {
   $('image-upload-cleanup').textContent=L('Deletion is requested after completion or cancellation. Network failures or an app crash can leave remote copies behind; an expired link does not mean the image was deleted. Any unconfirmed deletion is shown here.', 'Se solicita el borrado al terminar o cancelar. Un fallo de red o el cierre inesperado de la app puede dejar copias remotas; que un enlace caduque no significa que la imagen se haya borrado. Los borrados sin confirmar se muestran aquí.');
   $('image-transport-off').hidden=current.mode!=='off';
   $('image-transport-off').textContent=L("Images pass through unchanged. Large requests can still exceed Kilo's limit and need conversation compaction or fewer attachments.", 'Las imágenes se envían sin cambios. Las peticiones grandes pueden superar el límite de Kilo y requerir compactar la conversación o reducir los adjuntos.');
-  $('image-transport-saving').textContent=L('Off by default. Changes save automatically for new requests, without restarting. Switching mode still allows cleanup of earlier uploads.', 'Desactivado por defecto. Los cambios se guardan automáticamente para nuevas peticiones, sin reiniciar. Cambiar de modo permite que continúe la limpieza de subidas anteriores.');
+  const publicDetails={
+    cloudflare:{
+      title:L('Cloudflare quick tunnel','Túnel rápido de Cloudflare'),
+      description:L('Serves original image bytes from this computer through public, unguessable links. Links are removed after the request finishes or is cancelled. Keep Kilo Proxy running while images are in use.','Sirve las imágenes originales desde este equipo mediante enlaces públicos difíciles de adivinar. Los enlaces se retiran al terminar o cancelar la petición. Mantén Kilo Proxy abierto mientras se usan las imágenes.'),
+      requirements:L('Requires cloudflared installed on this computer and available on PATH. No Cloudflare account, S3 bucket, or ngrok setup is needed. The tunnel starts when a large request needs it.','Requiere cloudflared instalado en este equipo y disponible en PATH. No necesita cuenta de Cloudflare, un bucket S3 ni configurar ngrok. El túnel se inicia cuando lo necesita una petición grande.')
+    },
+    tailscale:{
+      title:'Tailscale Funnel',
+      description:L('Funnel makes image links publicly reachable, including outside your tailnet. Images stay on this computer and links are removed after the request finishes or is cancelled.','Funnel permite acceder a los enlaces de imágenes desde Internet, incluso fuera de tu tailnet. Las imágenes permanecen en este equipo y los enlaces se retiran al terminar o cancelar la petición.'),
+      requirements:L('Requires the tailscale command, a signed-in account, and Funnel enabled for this device. Uses a dedicated HTTPS port 8443; leave it free for Kilo Proxy.','Requiere el comando tailscale, una cuenta con sesión iniciada y Funnel habilitado para este dispositivo. Usa el puerto HTTPS 8443; déjalo libre para Kilo Proxy.')
+    },
+    litterbox:{
+      title:L('Temporary public hosting','Alojamiento público temporal'),
+      description:L('Uploads original images to Litterbox, a third-party service. Anyone with the link can access them until expiry. Choose this only for images you can share with that service.','Sube las imágenes originales a Litterbox, un servicio externo. Cualquiera con el enlace puede acceder hasta que caduque. Elígelo solo para imágenes que puedas compartir con ese servicio.'),
+      requirements:L('No account or extra executable is required.','No requiere cuenta ni ejecutables adicionales.')
+    }
+  };
+  const publicDetail=publicDetails[current.mode];
+  $('image-public-options').hidden=!publicDetail;
+  $('image-public-title').textContent=publicDetail?.title||'';
+  $('image-public-description').textContent=publicDetail?.description||'';
+  $('image-public-requirements').textContent=publicDetail?.requirements||'';
+  $('image-litterbox-options').hidden=current.mode!=='litterbox';
+  $('image-litterbox-experimental').hidden=current.mode!=='litterbox';
+  $('image-litterbox-experimental').textContent=L('Experimental: live availability could not be confirmed from this network. If the service rejects uploads, choose Cloudflare or local compression.','Experimental: no se ha podido confirmar la disponibilidad real desde esta red. Si el servicio rechaza las subidas, elige Cloudflare o la compresión local.');
+  $('image-litterbox-terms').textContent=L('Litterbox requires prior approval for commercial service use.','Litterbox requiere autorización previa para uso en servicios comerciales.');
+  $('image-litterbox-faq').textContent=L('Read the Litterbox FAQ','Consulta las preguntas frecuentes de Litterbox');
+  $('image-litterbox-ttl-label').textContent=L('Link expiry','Caducidad del enlace');
+  for(const [ttl,en,es] of [['1h','1 hour','1 hora'],['12h','12 hours','12 horas'],['24h','24 hours','24 horas'],['72h','72 hours','72 horas']])$('image-litterbox-ttl').querySelector(`option[value="${ttl}"]`).textContent=L(en,es);
+  $('image-litterbox-ttl').value=current.litterboxTTL||'1h';
+  $('image-litterbox-ttl').disabled=busy;
+  $('image-litterbox-cleanup').textContent=L('Litterbox handles expiry. Kilo Proxy cannot delete these uploads early, even after you switch modes or close the app.','Litterbox gestiona la caducidad. Kilo Proxy no puede borrar estas subidas antes, aunque cambies de modo o cierres la app.');
+  $('image-transport-saving').textContent=L('Off by default. Changes save automatically for new requests, without restarting. Only the selected method is used; failures never switch to another backend or upload service. Earlier uploads still receive their scheduled cleanup.', 'Desactivado por defecto. Los cambios se guardan automáticamente para nuevas peticiones, sin reiniciar. Solo se usa el método elegido; los fallos nunca cambian a otro backend o servicio de subida. Las subidas anteriores conservan su limpieza programada.');
   $('image-upload-warning').hidden=!s.imageUploadWarning;
   $('image-upload-warning').textContent=s.imageUploadWarning?L('Image cleanup needs attention: ','Revisa la limpieza de imágenes: ')+t(s.imageUploadWarning):'';
 }
@@ -953,9 +985,9 @@ $('account-usage').addEventListener('change', event => {
     action(async () => { await api('tray-settings', {display}, 'PUT'); });
   }
 });
-for(const id of ['image-transport-mode','image-compression-profile'])$(id).addEventListener('change', async event => {
-  const current={mode:state?.imageTransport?.mode||'off',profile:state?.imageTransport?.profile||'high'};
-  if(id==='image-transport-mode')current.mode=event.target.value;else current.profile=event.target.value;
+for(const id of ['image-transport-mode','image-compression-profile','image-litterbox-ttl'])$(id).addEventListener('change', async event => {
+  const current={mode:state?.imageTransport?.mode||'off',profile:state?.imageTransport?.profile||'high',litterboxTTL:state?.imageTransport?.litterboxTTL||'1h'};
+  if(id==='image-transport-mode')current.mode=event.target.value;else if(id==='image-litterbox-ttl')current.litterboxTTL=event.target.value;else current.profile=event.target.value;
   imageTransportPending=current;
   try { await action(() => api('image-transport-settings', current, 'PUT')); }
   finally { imageTransportPending=null; if(state)renderImageTransport(state); }

@@ -47,10 +47,22 @@
         <h2 id="image-transport-title"></h2>
         <p id="image-transport-description" class="field-help"></p>
         <label for="image-transport-mode" id="image-transport-mode-label"></label>
-        <select id="image-transport-mode" disabled aria-describedby="image-transport-description"><option value="off"></option><option value="compress"></option><option value="upload"></option></select>
+        <select id="image-transport-mode" disabled aria-describedby="image-transport-description"><option value="off"></option><option value="compress"></option><option value="cloudflare"></option><option value="tailscale"></option><option value="litterbox"></option><option value="upload"></option></select>
         <div id="image-compression-options" hidden><label for="image-compression-profile" id="image-compression-profile-label"></label><select id="image-compression-profile"><option value="high"></option><option value="balanced"></option><option value="small"></option></select><p id="image-compression-levels" class="field-help"></p><p id="image-compression-note" class="field-help"></p></div>
         <p id="image-transport-off" class="field-help"></p>
         <div id="image-upload-options" hidden><p id="image-upload-description" class="field-help"></p><p id="image-upload-limit" class="field-help"></p><p id="image-upload-cleanup" class="field-help"></p></div>
+        <div id="image-public-options" class="image-backend-details" hidden>
+          <h3 id="image-public-title"></h3>
+          <p id="image-litterbox-experimental" class="field-help" hidden></p>
+          <p id="image-public-description" class="field-help"></p>
+          <p id="image-public-requirements" class="field-help"></p>
+          <div id="image-litterbox-options" hidden>
+            <p class="field-help"><span id="image-litterbox-terms"></span> <a id="image-litterbox-faq" href="https://litterbox.catbox.moe/faq.php" target="_blank" rel="noopener noreferrer"></a></p>
+            <label for="image-litterbox-ttl" id="image-litterbox-ttl-label"></label>
+            <select id="image-litterbox-ttl"><option value="1h"></option><option value="12h"></option><option value="24h"></option><option value="72h"></option></select>
+            <p id="image-litterbox-cleanup" class="field-help"></p>
+          </div>
+        </div>
         <p id="image-transport-saving" class="field-help"></p>
         <p id="image-upload-warning" class="notice" role="status" hidden></p>
       </section>

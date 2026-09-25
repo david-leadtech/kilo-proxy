@@ -31,7 +31,7 @@ func TestImageTransportSettingsDefaultAndPersistence(t *testing.T) {
 	if w := imageTransportSettingsRequest(a, http.MethodGet, "", a.adminToken); w.Code != 200 || !strings.Contains(w.Body.String(), `"mode":"off","profile":"high"`) {
 		t.Fatalf("default image preference: %d %s", w.Code, w.Body.String())
 	}
-	for _, preference := range []imageTransportSettings{{"compress", "high"}, {"compress", "balanced"}, {"compress", "small"}, {"upload", "small"}, {"off", "small"}} {
+	for _, preference := range []imageTransportSettings{{"compress", "high", "1h"}, {"compress", "balanced", "1h"}, {"compress", "small", "1h"}, {"upload", "small", "1h"}, {"cloudflare", "small", "1h"}, {"tailscale", "small", "1h"}, {"litterbox", "small", "1h"}, {"litterbox", "small", "12h"}, {"litterbox", "small", "24h"}, {"litterbox", "small", "72h"}, {"off", "small", "72h"}} {
 		body, _ := json.Marshal(preference)
 		w := imageTransportSettingsRequest(a, http.MethodPut, string(body), a.adminToken)
 		if w.Code != 200 {
@@ -52,7 +52,7 @@ func TestImageTransportSettingsDefaultAndPersistence(t *testing.T) {
 		state := httptest.NewRecorder()
 		a.state(state)
 		var data map[string]any
-		if json.Unmarshal(state.Body.Bytes(), &data) != nil || !reflect.DeepEqual(data["imageTransport"], map[string]any{"mode": preference.Mode, "profile": preference.Profile}) {
+		if json.Unmarshal(state.Body.Bytes(), &data) != nil || !reflect.DeepEqual(data["imageTransport"], map[string]any{"mode": preference.Mode, "profile": preference.Profile, "litterboxTTL": preference.LitterboxTTL}) {
 			t.Fatal("state does not reflect the preference")
 		}
 	}
@@ -74,6 +74,8 @@ func TestImageTransportSettingsRejectInvalidInputAndAuth(t *testing.T) {
 		{http.MethodPut, `{"mode":"upload","profile":null}`, a.adminToken, 400},
 		{http.MethodPut, `{"mode":null,"profile":"high"}`, a.adminToken, 400},
 		{http.MethodPut, `{"mode":"upload","profile":"invalid"}`, a.adminToken, 400},
+		{http.MethodPut, `{"mode":"litterbox","profile":"high","litterboxTTL":"5h"}`, a.adminToken, 400},
+		{http.MethodPut, `{"mode":"cloudflare,litterbox","profile":"high"}`, a.adminToken, 400},
 		{http.MethodPut, `{"mode":"upload","profile":"high","port":8888}`, a.adminToken, 400},
 		{http.MethodPut, `{"mode":"upload","profile":"high"} {}`, a.adminToken, 400},
 	} {
@@ -110,7 +112,7 @@ func TestImageTransportSettingsLegacyDefaultsOff(t *testing.T) {
 		t.Fatal(err)
 	}
 	loaded, err := readSettings(a.dir)
-	if err != nil || loaded.ImageTransport != (imageTransportSettings{Mode: "off", Profile: "high"}) {
+	if err != nil || loaded.ImageTransport != (imageTransportSettings{Mode: "off", Profile: "high", LitterboxTTL: "1h"}) {
 		t.Fatalf("legacy settings enabled uploads: %+v %v", loaded, err)
 	}
 }
@@ -130,7 +132,7 @@ func TestImageTransportSettingsDisablingPreservesCleanupWarning(t *testing.T) {
 }
 
 func TestImageTransportSettingsReadValidation(t *testing.T) {
-	for _, preference := range []imageTransportSettings{{"invalid", "high"}, {"off", "invalid"}} {
+	for _, preference := range []imageTransportSettings{{"invalid", "high", "1h"}, {"off", "invalid", "1h"}, {"litterbox", "high", "5h"}} {
 		a := testApp(t)
 		a.config.ImageTransport = preference
 		if err := writeSettings(a.dir, a.config); err != nil {
@@ -146,7 +148,25 @@ func TestImageTransportSettingsReadValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	loaded, err := readSettings(a.dir)
-	if err != nil || loaded.ImageTransport != (imageTransportSettings{"off", "high"}) {
+	if err != nil || loaded.ImageTransport != (imageTransportSettings{"off", "high", "1h"}) {
 		t.Fatalf("empty values not normalized: %+v %v", loaded.ImageTransport, err)
+	}
+}
+
+func TestImageTransportSettingsLegacyTTL(t *testing.T) {
+	// Older clients omit the new field. Persist the normalized value so all
+	// readers agree on the expiry after a restart.
+	a := testApp(t)
+	w := imageTransportSettingsRequest(a, http.MethodPut, `{"mode":"upload","profile":"balanced"}`, a.adminToken)
+	want := imageTransportSettings{Mode: "upload", Profile: "balanced", LitterboxTTL: "1h"}
+	if w.Code != http.StatusOK || a.config.ImageTransport != want {
+		t.Fatalf("legacy update did not normalize expiry: %d %+v", w.Code, a.config.ImageTransport)
+	}
+	loaded, err := readSettings(a.dir)
+	if err != nil || loaded.ImageTransport != want {
+		t.Fatalf("legacy expiry did not persist: %+v %v", loaded.ImageTransport, err)
+	}
+	if !strings.Contains(w.Body.String(), `"litterboxTTL":"1h"`) {
+		t.Fatal("response did not include the normalized expiry")
 	}
 }

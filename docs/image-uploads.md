@@ -1,18 +1,27 @@
-# Large images: local compression and experimental uploads
+# Large images: compression and temporary URLs
 
-**Settings → Large images** controls what Kilo Proxy does when inline images make a Responses request too large for the Gateway. Choose one mode:
+**Settings → Large images** controls oversized image requests across **Responses**, **Chat Completions**, and **Anthropic Messages**. Choose one mode:
 
-| Mode | Behavior |
-| --- | --- |
-| **Off** (default) | Send image data unchanged. Oversized requests can still fail with HTTP 413. |
-| **Compress locally** | Optimize the copies sent with the request, using your selected quality profile. |
-| **Upload to Kilo · Experimental** | Preserve the image bytes and substitute temporary Kilo links. |
+| Mode | Behavior | Additional requirements |
+| --- | --- | --- |
+| **Off** (default) | Send image data unchanged. Oversized requests can still fail with HTTP 413. | None |
+| **Compress locally** | Optimize outbound copies using the selected quality profile. | None |
+| **Upload to Kilo · Experimental** | Upload original bytes to Kilo's Cloud Agent attachment storage and request deletion after inference. | Your configured Kilo account |
+| **Cloudflare quick tunnel** | Serve original bytes from a temporary local image server through a public Cloudflare URL. | Installed `cloudflared`; no Cloudflare account or domain required |
+| **Litterbox · Experimental** | Upload original bytes anonymously to temporary third-party storage. | Internet access; no account or extra executable; live availability has not been confirmed |
+| **Tailscale Funnel** | Serve original bytes from a temporary local image server through a public Tailscale URL. | Installed Tailscale CLI, signed-in account, and Funnel enabled |
 
-The selected mode and compression profile save automatically in `settings.json` as `imageTransport.mode` and `imageTransport.profile`. They apply to new requests without restarting. The optional browser helper exposes the same choices under **Large images**. Switching modes never cancels cleanup for earlier uploads. Smaller requests and local original files are unchanged in every mode.
+The selected mode, compression profile, and Litterbox expiry save automatically in `settings.json` as `imageTransport.mode`, `imageTransport.profile`, and `imageTransport.litterboxTTL`. They apply to new requests without restarting. The optional browser helper exposes the same choices. Switching modes does not cancel cleanup for earlier requests.
+
+**Each mode is explicit: a failure never falls back to another service or to a different compression profile.** Requests at or below **4,400,000 bytes** pass through unchanged. This budget leaves room below the Gateway's 4.5 MB body limit.
+
+Only recognized inline PNG, JPEG, GIF, and WebP image parts are eligible. This includes Responses `input_image` parts in messages and `function_call_output` arrays, Chat Completions `image_url` parts in message content, and Anthropic base64 image blocks in messages and `tool_result` content. Text, arbitrary base64 strings, tool arguments, file attachments, local paths, existing remote image URLs, and unknown content structures are not searched or rewritten. Invalid data in a recognized image part produces a validation error before publication.
+
+Local original files, newly generated originals, and the client's saved conversation are unchanged in every mode. URL modes preserve the bytes received from the client, including dimensions and transparency. They cannot recover a full-resolution original from an MCP preview or another image that the client has already resized. A later request containing the same inline images may need to publish them again.
 
 ## Local compression
 
-Compression starts only when a Responses request exceeds **4,400,000 bytes**, with a margin below Kilo's 4.5 MB limit. The proxy first tries lossless optimization. If the request is still too large, it uses the selected fixed profile:
+Compression first tries lossless optimization. If the body remains above the budget, it uses the selected fixed profile:
 
 | Profile | Maximum longest side | JPEG quality |
 | --- | --- | --- |
@@ -20,55 +29,92 @@ Compression starts only when a Responses request exceeds **4,400,000 bytes**, wi
 | **Balanced** | 2048 px | 85 |
 | **Small size** | 1280 px | 75 |
 
-Aspect ratio is preserved. These are encoder settings, not a guarantee of a specific perceptual quality or final byte size. Static PNG images are first optimized without changing their pixels. Opaque static PNG, JPEG, and WebP images can use JPEG compression with the selected profile. Images with transparency remain PNG instead of being flattened. GIF images and animated PNG/WebP images pass through unchanged so animation frames are not discarded. Only outbound image copies are changed; generated originals, attachments on disk, and the client's saved conversation are not rewritten.
+Aspect ratio is preserved. These are encoder settings, not a guarantee of a specific perceptual quality or final byte size. Static PNG images are first optimized without changing their pixels. Opaque static PNG, JPEG, and WebP images can use JPEG compression with the selected profile. Images with transparency remain PNG instead of being flattened. GIF images and animated PNG/WebP images pass through unchanged so animation frames are not discarded.
 
-JPEG orientation metadata is retained. PNG color and orientation metadata are preserved during lossless optimization. PNG and WebP images with EXIF metadata are excluded from lossy conversion to avoid changing their orientation.
+JPEG orientation metadata is retained. PNG color and orientation metadata are preserved during lossless optimization. PNG and WebP images with EXIF metadata are excluded from lossy conversion to avoid changing their orientation. To bound local decoding, compression accepts at most **40 million pixels per image**, **32,768 pixels per side**, and **80 million unique pixels per request**.
 
-The proxy does not step down to a lower profile if your selection still does not fit. It returns an explanation instead. It never falls back from local compression to remote uploads automatically. Change the profile yourself, choose experimental uploads explicitly, or compact the conversation if needed.
+If the selected profile still cannot make the body fit, the proxy returns an explanation before inference. Choose another profile or a URL mode explicitly, reduce attachments, or compact the conversation. Compression does not create a remote attachment, but the resulting inline image still goes to Kilo and the model provider with the inference request.
 
-## Experimental uploads
+## Temporary URL limits and request lifetime
 
-This feature uses Kilo's own Cloud Agent attachment storage with your configured Kilo account. **Reusing that storage for Gateway requests is not documented as a supported Gateway integration.** It may change or stop working. No ngrok process, storage account, bucket configuration, or extra executable is needed.
+For an authenticated request above the budget, the proxy validates eligible images and checks whether replacing them with links can make the body fit **before publishing anything**. It selects only as many images as needed, prioritizing the greatest reduction in request size. Identical image bytes within one request share one published image.
 
-### How uploads work
+- Each image is limited to **20 MiB**. Cloudflare, Litterbox, and Tailscale support at most **64 unique published images per request**; Kilo storage supports at most **five**. Additional images may remain inline if the final body fits.
+- The **32 MiB local request-body limit** still applies before base64 images are replaced. URL transport cannot receive arbitrarily large conversations.
+- Requests that publish images have a **10-minute total timeout**, covering publication and inference. A shorter image-link expiry can shorten that deadline.
+- At most **two large-image requests** can be active at once. Concurrent requests using the same tunnel backend share its image server, with separate image URLs and cleanup.
+- Oversized Responses requests using `background: true` are rejected before publication. Temporary image lifetime must cover the actual inference; use a foreground request or local compression.
+- Provider format, resolution, context, and account restrictions still apply. URLs do not reduce image-token usage or guarantee a lower inference charge.
 
-For an authenticated **Responses** request larger than **4,400,000 bytes**, the proxy checks whether moving inline images to temporary links can bring the body below that budget. The margin leaves room below the upstream 4.5 MB limit. Only as many of the largest images as necessary are uploaded; smaller requests retain their existing behavior.
+If text or other attachments keep the body above the budget, the request fails before publication. A publication failure stops inference and triggers the selected backend's cleanup. The proxy does not retry paid inference automatically.
 
-1. The proxy validates the image data and checks whether the request can fit before uploading anything.
-2. It uploads the original bytes to Kilo and substitutes temporary image links in the outbound request.
-3. The model provider downloads the originals from Kilo. Dimensions, quality, transparency, and the encoded image bytes remain unchanged.
-4. After the response finishes or the request is canceled or fails, the proxy requests deletion of the attachments.
+## Cloudflare quick tunnel
 
-This does not change your local files or rewrite the client's saved conversation. A later request containing the same inline images may need another upload. Existing MCP previews remain previews: this feature preserves the bytes received from the client and does not recover a full-resolution original from a smaller preview.
+Install `cloudflared`, then select **Cloudflare quick tunnel**. Kilo Proxy starts its own foreground process and a separate loopback image server. The tunnel publishes only registered images at unguessable URLs; it does not expose the administration panel, inference endpoints, or arbitrary local files. It does not reuse the optional Cursor/ngrok tunnel.
 
-### Upload limits
+Cloudflare quick tunnels use a temporary `trycloudflare.com` hostname without an account or custom domain. Cloudflare describes them as a development and testing service without an uptime guarantee. See its [Quick Tunnels documentation](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/).
 
-- PNG, JPEG, GIF, and WebP inline image parts in Responses messages and image parts returned in function-tool outputs are supported.
-- Up to **five unique images** are uploaded for one request, with a maximum of **20 MiB per image**. Identical images in the same request share one upload. Additional images can remain inline if the final body fits the budget.
-- The existing **32 MiB local request-body limit** still applies. This feature cannot receive arbitrarily large conversations.
-- Requests that use uploaded images have a **10-minute total timeout**, shorter than the temporary links' 15-minute lifetime.
-- Long text, arbitrary base64 strings in tool arguments or text, remote image URLs, and other protocols are not transformed. The feature does not remove conversation context or silently recompress images to make a request fit.
-- Provider image, resolution, context, and account restrictions still apply. Moving images to links does not reduce the model's image-token usage or guarantee a lower inference charge.
+Images remain available while the request is active, including while a streaming response is being read. Completion, failure, or cancellation removes that request's image URLs. The empty image server and owned tunnel process can be reused by later requests and remain open until Kilo Proxy quits. Switching modes does not stop an already started tunnel. A stopped tunnel is replaced when a new request needs it. Keep the computer and network connection available until inference finishes.
 
-If the eligible images cannot make the body fit, the request fails with an explanation before uploading. If upload or inference fails, the proxy attempts to delete any attachments it already created. It does not automatically retry paid inference.
+## Litterbox
 
-### Deletion and privacy
+Select **Litterbox** and choose **1 hour** (default), **12 hours**, **24 hours**, or **72 hours**. The HTTP uploader is part of Kilo Proxy's single binary: it needs no account, storage configuration, or additional executable.
 
-The images leave your computer and are stored temporarily in your Kilo account. Temporary links grant access to anyone who obtains them until they expire or deletion takes effect. For requests that use uploaded images, captured response bodies are omitted because a model can repeat temporary links across streaming chunks. Request metadata and the redacted outbound request remain available when capture is enabled. Keep captures private; arbitrary prompt secrets are not automatically detected.
+Images leave the computer and are stored by Litterbox. The selected expiry is a request to that service, not a deletion guarantee verified by Kilo Proxy. **The API has no early-delete operation.** Completion, cancellation, switching modes, and quitting Kilo Proxy cannot remove an uploaded copy before its service-managed expiry.
 
-Deletion runs after the response body finishes, including streaming responses, rather than when the initial response headers arrive. Cancellation also triggers cleanup. Cleanup uses a separate bounded context so that canceling the inference request does not immediately cancel the deletion attempt. Failed deletions are retried within a 30-second cleanup window, with up to three attempts.
+Litterbox's [official FAQ](https://litterbox.catbox.moe/faq.php) says it stores the uploader's IP address with uploaded files and requires prior approval to use Catbox for commercial services. Review that policy before selecting Litterbox for company or commercial use. The available expiry values and upload interface are documented in its [official API tools page](https://litterbox.catbox.moe/tools.php).
 
-If cleanup cannot be confirmed, **Settings → Large images** displays **Image cleanup needs attention**. Selecting **Off** or **Compress locally** prevents uploads for new requests; it does not stop cleanup already in progress or erase the warning.
+## Tailscale Funnel
 
-**Link expiry does not mean file deletion.** Normal quit waits for the bounded cleanup attempt before exiting. The feature keeps its upload bookkeeping and cleanup warning in memory only. Network failures, force quitting, a crash, or a machine shutdown can leave remote copies behind. Restarting the app does not recover a deletion queue or prove that earlier files were removed. There is no guarantee of deletion after an abrupt exit, and the proxy does not claim a storage-retention guarantee from Kilo.
+Install Tailscale and its CLI, sign in, and enable Funnel for the device before selecting **Tailscale Funnel**. The tailnet needs MagicDNS, HTTPS certificates, and a policy that permits Funnel. Follow the [official Funnel setup guide](https://tailscale.com/docs/features/tailscale-funnel); Kilo Proxy does not sign in or enable these account settings for you.
 
-Request capture remains a separate opt-in preference. Enabling experimental uploads does not enable debug capture or save image bodies to a new local history file.
+Kilo Proxy uses **HTTPS port 8443** and an independent loopback image server. It checks existing Serve/Funnel configuration and refuses to replace a route that conflicts with its use of that port. It never runs a global Serve/Funnel reset. Its own foreground process provides the route, which can be reused for later requests until Kilo Proxy quits. Switching modes does not stop an already started tunnel. Application cleanup stops only the resources that Kilo Proxy started.
 
-## Validation and implementation source
+The Funnel URL is public, including to a model provider outside your tailnet. Registered image URLs are unguessable, but anyone who obtains one can retrieve the image while it is active. The server publishes no administration routes, inference routes, or arbitrary local paths. Request completion, failure, or cancellation removes that request's image URLs; application shutdown also closes the server and owned process. Existing Tailscale routes remain under your control.
 
-Automated tests use synthetic storage and Gateway services. They exercise settings persistence, opt-in behavior, request transformation, unchanged image bytes, and cleanup paths without uploading personal images or making paid inference requests. The browser settings checks use the real Go backend in isolated temporary profiles.
+## Tunnel dependencies
 
-An additional real Gateway test is skipped unless explicitly enabled. It creates four synthetic images, verifies byte-for-byte downloads, sends one bounded inference, and verifies deletion through the production Go request pipeline. It reads a chosen saved profile without changing it or restarting the running app. This test uses account credits and is not enabled in CI:
+Cloudflare and Tailscale are optional external dependencies. **They are not bundled with Kilo Proxy or installed automatically.** Off, local compression, Kilo uploads, and Litterbox need no extra image-transport executable.
+
+| System | Cloudflare | Tailscale |
+| --- | --- | --- |
+| macOS | Install `cloudflared` through Homebrew or the official Darwin download. | Install Tailscale and make its CLI available to Kilo Proxy; sign in and configure Funnel. |
+| Windows | Install/download `cloudflared.exe` and make it available on `PATH`. | Install Tailscale with its CLI, then sign in and configure Funnel. |
+| Linux | Install the Cloudflare package or binary and make it available on `PATH`. | Install Tailscale and its daemon, then sign in and configure Funnel. |
+
+Use the official [Cloudflare downloads](https://developers.cloudflare.com/tunnel/downloads/) and [Tailscale installation instructions](https://tailscale.com/download). The executable must be visible to the desktop app's environment, which can differ from an interactive shell's `PATH`. A missing executable or unavailable service produces an error for the chosen backend; it does not select another mode.
+
+## Experimental Kilo uploads
+
+This mode uses Kilo's own Cloud Agent attachment storage with the configured account. **Reusing that storage for Gateway requests is not documented as a supported Gateway integration.** It may change or stop working. No tunnel, storage account, bucket configuration, or extra executable is needed.
+
+The proxy uploads original bytes and sends temporary links to the model provider. Kilo's [attachment constants](https://github.com/Kilo-Org/cloud/blob/main/apps/web/src/lib/cloud-agent/constants.ts) specify a 15-minute link lifetime; the request's 10-minute timeout leaves a margin. When the response body finishes, including streaming, or the request fails or is canceled, the proxy requests deletion. Cleanup uses a separate bounded context so client cancellation does not immediately cancel deletion. Failed deletions are retried within a **30-second cleanup window**, with up to **three attempts**.
+
+If deletion cannot be confirmed, **Settings → Large images** displays **Image cleanup needs attention**. Changing modes prevents Kilo uploads for new requests but does not stop cleanup already in progress or erase the warning.
+
+**Link expiry does not mean file deletion.** Normal quit waits for bounded cleanup. Upload bookkeeping and cleanup warnings are kept only in memory. Network failures, force quitting, a crash, or machine shutdown can leave remote copies behind. Restarting the app does not recover a deletion queue or prove earlier files were removed. Kilo Proxy does not claim a storage-retention guarantee from Kilo.
+
+The storage behavior is based on Kilo's [Cloud Agent pending attachments implementation](https://github.com/Kilo-Org/cloud/blob/main/apps/web/src/lib/r2/cloud-agent-pending-uploads.ts), rather than a public Gateway attachment contract.
+
+## Privacy and capture
+
+Anyone who obtains an active image URL can download the image without a Kilo API key. Tunnel cleanup stops future access through the local server but cannot retract copies already fetched. Litterbox and Kilo store remote copies with the different cleanup behavior described above.
+
+URL modes do not enable request capture or create a new local image-history file. If capture is enabled separately, response bodies for URL-backed requests are omitted because models can repeat temporary links across streaming chunks. Request metadata and the redacted outbound request remain available. Keep captures private; arbitrary prompt secrets are not automatically detected.
+
+## Validation
+
+For v0.31.0, the live Cloudflare test passed: public downloads matched the original bytes and returned HTTP 404 after lease cleanup. Litterbox returned HTTP 412 (`No file!`) or HTTP 403 from the test network, including with the documented standalone curl example. Its multipart and lifecycle tests pass, but a successful live upload has not been confirmed; the option is marked experimental. Tailscale is covered by automated process, capability, conflict, and cleanup tests; a live signed-in Tailscale account was not available for this release check.
+
+Automated tests use synthetic images, storage, tunnel processes, and Gateway services. They exercise settings persistence, supported image positions across all three inference APIs, unchanged URL-backed image bytes, deduplication, limits, explicit failure without fallback, and cleanup without paid inference. Browser settings checks use the real Go backend in isolated temporary profiles. Passing these tests does not establish live availability of every external service.
+
+An optional backend test uses `KILO_IMAGE_BACKEND_LIVE=cloudflare`, `litterbox`, or `tailscale`. It publishes synthetic images, checks their public downloads, and exercises backend cleanup. It requires the selected backend's normal dependencies and network access, but **no Kilo account or inference credits**. Litterbox test uploads remain until expiry because that service has no early-delete API. This test is opt-in and is not enabled in CI.
+
+```sh
+KILO_IMAGE_BACKEND_LIVE=cloudflare go test -run '^TestImageURLBackendLive$' -count=1 -v .
+```
+
+The separate Kilo Gateway test creates four synthetic images, verifies byte-for-byte downloads, sends one bounded inference, and verifies deletion through the production Go request pipeline. It reads a chosen saved profile without changing it or restarting the running app. **This test uses Kilo account credits** and is not enabled in CI:
 
 ```sh
 KILO_IMAGE_UPLOAD_LIVE_TEST=1 \
@@ -76,4 +122,4 @@ KILO_IMAGE_UPLOAD_CONFIG_DIR="$HOME/Library/Application Support/kilo-proxy" \
 go test -run '^TestImageUploadsLiveGateway$' -count=1 -v .
 ```
 
-The experimental storage behavior is based on Kilo's [Cloud Agent pending attachments implementation](https://github.com/Kilo-Org/cloud/blob/main/apps/web/src/lib/r2/cloud-agent-pending-uploads.ts). A successful integration test establishes current behavior, not a stable public API contract. See also [payload limits and recovery](codex-images.md#payload-limits-and-413-errors).
+A successful live test establishes observed behavior at that time, not a stable service contract. See also [payload limits and recovery](codex-images.md#payload-limits-and-413-errors).
