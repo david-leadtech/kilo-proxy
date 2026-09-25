@@ -25,6 +25,16 @@ python3 scripts/check-codex-context.py /absolute/path/to/codex
 
 This creates an isolated temporary profile, verifies Recommended/Low usable windows and an automatic compaction event, then removes the profile. It does not contact Kilo or use personal credentials. CI covers preset persistence, exported metadata and native/browser interactions without requiring an installed third-party agent.
 
+When changing the Codex V1 collaboration compatibility repair, run the installed-client A/B check:
+
+```sh
+python3 scripts/check-codex-collab.py /absolute/path/to/codex
+```
+
+The script uses two disposable profiles and a local synthetic SSE gateway. It verifies that `multi_agent_v1.spawn_agent` rejects a nonempty `message` together with `items: []`, then creates a subagent when the otherwise identical arguments omit `items`. Success requires a completed collaboration event containing the returned child agent ID. Both temporary Codex processes are stopped and their profiles removed, including when an assertion fails. No existing profiles or agents are used and no paid inference is requested.
+
+This A/B check connects Codex directly to the synthetic gateway; it does **not** test the full Codex → Kilo Proxy network path. The Go collaboration bridge tests separately cover the corresponding argument repair in JSON and streamed SSE responses, including cases that must remain unchanged. Run both checks when modifying the repair.
+
 The desktop build additionally requires Xcode command line tools on macOS, and X11/Wayland, EGL and Vulkan development libraries on Linux. For Ubuntu 24.04:
 
 ```sh
