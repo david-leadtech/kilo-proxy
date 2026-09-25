@@ -42,7 +42,7 @@ Preparation preserves unrelated settings and makes `.bak` copies of changed exis
 
 YAML anchors, aliases and merge keys are also rejected before any profile files are written. Expand these constructs into explicit values in `models.yml` or `config.yml` before preparing again. This prevents a managed update from breaking an alias or silently removing inherited settings.
 
-The provider uses **OpenAI Responses** at the local proxy's `/v1` URL, with WebSockets disabled. OMP sends the full conversation on subsequent turns; the launcher disables server-side response storage/chaining. Large image handling therefore follows **Settings → Large images**, including your compression or experimental upload preference.
+The provider uses **OpenAI Responses** at the local proxy's `/v1` URL, with WebSockets disabled. OMP sends the full conversation on subsequent turns; the launcher disables server-side response storage/chaining. Large image handling therefore follows **Settings → Large images**, including local compression, Cloudflare quick tunnel, Litterbox, Tailscale Funnel or experimental Kilo uploads. These are proxy-wide settings; preparing OMP does not enable or reconfigure OMP's own **Serve Images as URLs** backends. Existing remote image URLs pass through unchanged. See [image transport setup and lifetime](image-uploads.md).
 
 The generated profile contains the **local proxy key**, not your upstream Kilo credential. These files are private configuration, not material to commit or share. Kilo Proxy retains your upstream key and applies the selected organization's header when forwarding requests.
 

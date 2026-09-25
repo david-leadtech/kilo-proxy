@@ -126,6 +126,7 @@ func main() {
 			imageCleanupCtx, imageCleanupCancel := context.WithTimeout(context.Background(), imageUploadCleanupTimeout+2*time.Second)
 			app.drainImageUploads(imageCleanupCtx)
 			imageCleanupCancel()
+			_ = app.imageURLBackends.Close()
 			stopFakeGateway()
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()

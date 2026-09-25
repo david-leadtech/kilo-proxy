@@ -3,10 +3,12 @@
 package main
 
 import (
-	"gioui.org/io/semantic"
 	"image"
+	"strings"
 	"testing"
 	"time"
+
+	"gioui.org/io/semantic"
 )
 
 func nativeScrollImageSetting(h *nativePointerHarness, label string) {
@@ -34,19 +36,26 @@ func nativeScrollImageSetting(h *nativePointerHarness, label string) {
 }
 
 func TestNativeImageTransportSettingsPointerAndPersistence(t *testing.T) {
-	for _, size := range []image.Point{{1180, 820}, {780, 700}} {
+	for _, size := range []image.Point{{1180, 820}, {780, 700}, {720, 700}} {
 		for _, lang := range []string{"en", "es"} {
 			t.Run(fmtSize(size)+"-"+lang, func(t *testing.T) {
 				u := nativeTestUI(t)
 				u.page, u.language = "settings", lang
 				h := &nativePointerHarness{t: t, u: u, size: size, now: time.Now()}
 				h.frame()
+				capture := func(name string) {
+					// Finish the pointer ripple before taking a review screenshot.
+					h.now = h.now.Add(time.Second)
+					h.frame()
+					nativeGridCapture(t, h, name+"-"+fmtSize(size)+"-"+lang)
+				}
+				ttl := "1h"
 				choose := func(label string, mode, profile string) {
 					nativeScrollImageSetting(h, label)
 					h.click(label, semantic.Button)
 					nativeTestWait(t, u, func() bool { return !u.busy["PUT/api/image-transport-settings"] })
 					saved, err := readSettings(u.owner.dir)
-					if err != nil || saved.ImageTransport != (imageTransportSettings{mode, profile}) {
+					if err != nil || saved.ImageTransport != (imageTransportSettings{mode, profile, ttl}) {
 						t.Fatalf("image preference did not persist: %+v %v", saved.ImageTransport, err)
 					}
 					h.frame()
@@ -56,11 +65,47 @@ func TestNativeImageTransportSettingsPointerAndPersistence(t *testing.T) {
 				choose("○ "+u.tr("Small size", "Tamaño pequeño"), "compress", "small")
 				choose("○ "+u.tr("High quality", "Alta calidad"), "compress", "high")
 				nativeScrollImageSetting(h, "● "+u.tr("Compress locally", "Comprimir en local"))
-				nativeGridCapture(t, h, "image-compression-"+fmtSize(size)+"-"+lang)
-				choose("○ "+u.tr("Upload to Kilo · Experimental", "Subir a Kilo · Experimental"), "upload", "high")
-				nativeGridCapture(t, h, "experimental-image-uploads-"+fmtSize(size)+"-"+lang)
+				capture("image-compression")
+				choose("○ "+u.tr("Kilo · Experimental", "Kilo · Experimental"), "upload", "high")
+				capture("experimental-image-uploads")
+				choose("○ Cloudflare", "cloudflare", "high")
+				assertNativeImageDescription(t, h, u.tr("Requires cloudflared", "Requiere cloudflared"))
+				nativeScrollImageSetting(h, "● Cloudflare")
+				capture("image-cloudflare")
+				choose("○ Tailscale Funnel", "tailscale", "high")
+				assertNativeImageDescription(t, h, "8443")
+				capture("image-tailscale")
+				choose("○ Litterbox · Experimental", "litterbox", "high")
+				assertNativeImageDescription(t, h, u.tr("third-party service", "servicio externo"))
+				assertNativeImageDescription(t, h, u.tr("Experimental: live availability could not be confirmed from this network. If the service rejects uploads, choose Cloudflare or local compression.", "Experimental: no se ha podido confirmar la disponibilidad real desde esta red. Si el servicio rechaza las subidas, elige Cloudflare o la compresión local."))
+				capture("image-litterbox-experimental")
+				for _, expiry := range []struct{ value, en, es string }{
+					{"12h", "12 hours", "12 horas"}, {"24h", "24 hours", "24 horas"}, {"72h", "72 hours", "72 horas"}, {"1h", "1 hour", "1 hora"},
+				} {
+					ttl = expiry.value
+					choose("○ "+u.tr(expiry.en, expiry.es), "litterbox", "high")
+				}
+				nativeScrollImageSetting(h, "● "+u.tr("1 hour", "1 hora"))
+				capture("image-litterbox")
 				choose("○ "+u.tr("Off", "Desactivado"), "off", "high")
+				// Layout, scrolling and changing language must never opt in by themselves.
+				u.language = u.tr("es", "en")
+				h.frame()
+				h.frame()
+				if u.owner.config.ImageTransport.Mode != "off" {
+					t.Fatal("redrawing or translating enabled image uploads")
+				}
 			})
 		}
 	}
+}
+
+func assertNativeImageDescription(t *testing.T, h *nativePointerHarness, contains string) {
+	t.Helper()
+	for _, node := range h.nodes() {
+		if strings.Contains(node.Desc.Label, contains) {
+			return
+		}
+	}
+	t.Fatalf("active backend is missing its description %q", contains)
 }

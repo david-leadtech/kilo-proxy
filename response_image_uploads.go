@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
@@ -43,7 +44,7 @@ func imageUploadProblem(status int, message string) error {
 type responseImageCandidate struct {
 	data  []byte
 	mime  string
-	parts []map[string]any
+	parts []inferenceImagePart
 	saved int
 }
 
@@ -82,32 +83,52 @@ func responseImageParts(doc map[string]any) []map[string]any {
 func decodeResponseImage(value string) ([]byte, string, error) {
 	header, encoded, ok := strings.Cut(value, ",")
 	if !ok || !strings.HasSuffix(header, ";base64") {
-		return nil, "", imageUploadProblem(400, "Experimental image uploads require base64 PNG, JPEG, GIF or WebP images.")
+		return nil, "", imageUploadProblem(400, "Temporary image URLs require base64 PNG, JPEG, GIF or WebP images.")
 	}
 	mime := strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(header, "data:"), ";base64"))
-	formats := map[string]string{"image/png": "png", "image/jpeg": "jpeg", "image/gif": "gif", "image/webp": "webp"}
-	format, ok := formats[mime]
-	if !ok {
-		return nil, "", imageUploadProblem(400, "Experimental image uploads support PNG, JPEG, GIF and WebP images only.")
-	}
 	if base64.StdEncoding.DecodedLen(len(encoded)) > imageAttachmentMaxBytes+2 {
-		return nil, "", imageUploadProblem(413, "An image exceeds Kilo's experimental 20 MiB attachment limit. Reduce attachments or start a new conversation; no image was resized.")
+		return nil, "", imageUploadProblem(413, "An image exceeds 20 MiB image transport limit. Reduce attachments or start a new conversation; no image was resized.")
 	}
 	data, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil || len(data) == 0 {
-		return nil, "", imageUploadProblem(400, "Could not decode an inline image for experimental upload.")
+		return nil, "", imageUploadProblem(400, "Could not decode an inline image for temporary URL transport.")
 	}
-	if len(data) > imageAttachmentMaxBytes {
-		return nil, "", imageUploadProblem(413, "An image exceeds Kilo's experimental 20 MiB attachment limit. No image was resized.")
-	}
-	cfg, actual, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil || actual != format || cfg.Width <= 0 || cfg.Height <= 0 {
-		return nil, "", imageUploadProblem(400, "An inline image does not match its declared format. No files were uploaded.")
+	if err := validateImageTransportData(data, mime); err != nil {
+		return nil, "", err
 	}
 	return data, mime, nil
 }
 
+// URL backends use the same bounded validation as the inline request adapter.
+// Only the image header is decoded; original pixels and animation are untouched.
+func validateImageTransportData(data []byte, mime string) error {
+	formats := map[string]string{"image/png": "png", "image/jpeg": "jpeg", "image/gif": "gif", "image/webp": "webp"}
+	format, ok := formats[mime]
+	if !ok {
+		return imageUploadProblem(400, "Temporary image URLs support PNG, JPEG, GIF and WebP images only.")
+	}
+	if len(data) > imageAttachmentMaxBytes {
+		return imageUploadProblem(413, "An image exceeds the 20 MiB image transport limit. No image was resized.")
+	}
+	cfg, actual, err := image.DecodeConfig(bytes.NewReader(data))
+	if format == "webp" && responseImageAnimated(data, format) {
+		canvas, valid := animatedWebPCanvas(data)
+		if !valid {
+			return imageUploadProblem(400, "The animated WebP image has an invalid or truncated container. No files were uploaded.")
+		}
+		cfg, actual, err = canvas, format, nil
+	}
+	if err != nil || actual != format || cfg.Width <= 0 || cfg.Height <= 0 {
+		return imageUploadProblem(400, "An inline image does not match its declared format. No files were uploaded.")
+	}
+	return nil
+}
+
 func planResponseImageUploads(data []byte) (*responseImageUploadPlan, error) {
+	return planInferenceImageUploads(data, "/v1/responses", imageAttachmentMaxCount)
+}
+
+func planInferenceImageUploads(data []byte, path string, maxImages int) (*responseImageUploadPlan, error) {
 	if len(data) <= imageUploadRequestBudget {
 		return nil, nil
 	}
@@ -115,10 +136,13 @@ func planResponseImageUploads(data []byte) (*responseImageUploadPlan, error) {
 	if err != nil {
 		return nil, nil // Leave invalid JSON to the existing gateway validation.
 	}
+	if background, _ := doc["background"].(bool); path == "/v1/responses" && background {
+		return nil, imageUploadProblem(400, "Temporary image URLs require a foreground request so images remain available until inference finishes. Disable background mode or choose local compression. No image was published.")
+	}
 	groups := make(map[[32]byte]*responseImageCandidate)
 	var candidates []*responseImageCandidate
-	for _, part := range responseImageParts(doc) {
-		value := stringValue(part["image_url"])
+	for _, part := range inferenceImageParts(doc, path) {
+		value := part.inline()
 		raw, mime, err := decodeResponseImage(value)
 		if err != nil {
 			return nil, err
@@ -139,11 +163,11 @@ func planResponseImageUploads(data []byte) (*responseImageUploadPlan, error) {
 	plan := &responseImageUploadPlan{doc: doc}
 	placeholder := strings.Repeat("x", imageUploadURLBudget)
 	for _, candidate := range candidates {
-		if len(plan.images) == imageAttachmentMaxCount || candidate.saved <= 0 {
+		if len(plan.images) == maxImages || candidate.saved <= 0 {
 			break
 		}
 		for _, part := range candidate.parts {
-			part["image_url"] = placeholder
+			part.setURL(placeholder)
 		}
 		plan.images = append(plan.images, candidate)
 		encoded, err := json.Marshal(doc)
@@ -154,14 +178,14 @@ func planResponseImageUploads(data []byte) (*responseImageUploadPlan, error) {
 			return plan, nil
 		}
 	}
-	return nil, imageUploadProblem(413, "This request still exceeds Kilo's 4.5 MB limit with temporary image URLs. Experimental uploads allow up to five unique images per request; text and other attachments still count. Compact the conversation or reduce attachments. No files were uploaded or resized.")
+	return nil, imageUploadProblem(413, fmt.Sprintf("This request still exceeds Kilo's 4.5 MB limit with temporary image URLs (up to %d unique images with this backend). Text and other attachments still count. Compact the conversation or reduce attachments. No files were uploaded or resized.", maxImages))
 }
 
 func (a *app) prepareResponseImageUploads(r *http.Request, key, org string) (*http.Request, func(), error) {
 	a.mu.Lock()
 	setting := normalizeImageTransportSettings(a.config.ImageTransport)
 	a.mu.Unlock()
-	if setting.Mode == "off" || r.Method != http.MethodPost || r.URL.Path != "/v1/responses" || r.Header.Get("Content-Encoding") != "" {
+	if setting.Mode == "off" || r.Method != http.MethodPost || !imageTransportPath(r.URL.Path) || r.Header.Get("Content-Encoding") != "" || r.Body == nil {
 		return r, nil, nil
 	}
 	data, err := io.ReadAll(io.LimitReader(r.Body, bridgeLimit+1))
@@ -206,20 +230,35 @@ func (a *app) prepareResponseImageUploads(r *http.Request, key, org string) (*ht
 		releaseSlot()
 		return prepared, nil, err
 	}
-	plan, err := planResponseImageUploads(data)
+	maxImages := 64
+	if setting.Mode == "upload" {
+		maxImages = imageAttachmentMaxCount
+	}
+	plan, err := planInferenceImageUploads(data, r.URL.Path, maxImages)
 	if err != nil || plan == nil {
 		releaseSlot()
 		return r, nil, err
 	}
-	if factory == nil {
-		factory = newImageAttachmentClient
-	}
-	lease, err := factory(key, org).NewLease()
-	if err != nil {
-		releaseSlot()
-		return r, nil, errors.New("Could not prepare temporary Kilo image uploads.")
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), imageUploadRequestTimeout)
+	var lease imageURLLease
+	if setting.Mode == "upload" {
+		if factory == nil {
+			factory = newImageAttachmentClient
+		}
+		lease, err = factory(key, org).NewLease()
+		if err != nil {
+			err = errors.New("Could not prepare temporary Kilo image uploads.")
+		}
+	} else if a.imageURLLeaseFactory != nil {
+		lease, err = a.imageURLLeaseFactory(ctx, setting.Mode, setting.LitterboxTTL)
+	} else {
+		lease, err = a.imageURLBackends.NewLease(ctx, setting.Mode, setting.LitterboxTTL)
+	}
+	if err != nil {
+		cancel()
+		releaseSlot()
+		return r, nil, err
+	}
 	var once sync.Once
 	cleanup := func() {
 		once.Do(func() {
@@ -231,7 +270,11 @@ func (a *app) prepareResponseImageUploads(r *http.Request, key, org string) (*ht
 			defer cleanupCancel()
 			if err := lease.Close(cleanupCtx); err != nil {
 				a.mu.Lock()
-				a.imageUploadWarning = "Kilo could not confirm deletion of temporary images. Files may remain in your Kilo account until its pending-upload cleanup runs. Closing the app does not guarantee deletion."
+				if setting.Mode == "upload" {
+					a.imageUploadWarning = "Kilo could not confirm deletion of temporary images. Files may remain in your Kilo account until its pending-upload cleanup runs. Closing the app does not guarantee deletion."
+				} else {
+					a.imageUploadWarning = "Could not finish temporary image cleanup. Check the selected image backend before retrying."
+				}
 				a.mu.Unlock()
 			}
 		})
@@ -239,10 +282,16 @@ func (a *app) prepareResponseImageUploads(r *http.Request, key, org string) (*ht
 	for _, candidate := range plan.images {
 		url, err := lease.Upload(ctx, candidate.data, candidate.mime)
 		if err != nil {
-			return r, cleanup, errors.New("Kilo's experimental image upload failed. No inference was sent and no image was resized. Check your connection or disable Experimental image uploads in Settings.")
+			// Only explicitly sanitized application errors may cross this boundary;
+			// raw transport/process errors can contain bearer URLs or private data.
+			var problem *imageUploadRequestError
+			if errors.As(err, &problem) {
+				return r, cleanup, problem
+			}
+			return r, cleanup, errors.New("The selected image backend could not publish an image. No inference was sent, no fallback was attempted, and no image was resized. Check the backend requirements in Settings.")
 		}
 		if len(url) > imageUploadURLBudget {
-			return r, cleanup, errors.New("Kilo returned an unsupported temporary image URL. No inference was sent.")
+			return r, cleanup, errors.New("The image backend returned an unsupported temporary image URL. No inference was sent.")
 		}
 		// Register before the actual upstream body can be recorded. Include
 		// JSON escaping, since signatures contain ampersands escaped by Go.
@@ -251,7 +300,7 @@ func (a *app) prepareResponseImageUploads(r *http.Request, key, org string) (*ht
 			capture.omitImageUploadResponses()
 		}
 		for _, part := range candidate.parts {
-			part["image_url"] = url
+			part.setURL(url)
 		}
 	}
 	encoded, err := json.Marshal(plan.doc)
@@ -261,7 +310,7 @@ func (a *app) prepareResponseImageUploads(r *http.Request, key, org string) (*ht
 	if expiry := lease.ExpiresAt(); !expiry.IsZero() {
 		deadline := expiry.Add(-30 * time.Second)
 		if !deadline.After(time.Now()) {
-			return r, cleanup, errors.New("Kilo's temporary image URLs expired before inference could start. No inference was sent.")
+			return r, cleanup, errors.New("The temporary image URLs expired before inference could start. No inference was sent.")
 		}
 		next, expiryCancel := context.WithDeadline(ctx, deadline)
 		previousCancel := cancel

@@ -86,6 +86,8 @@ sudo apt-get install libwayland-client0 libwayland-cursor0 libwayland-egl1 \
 
 Linux executables use system libraries; they are not universal binaries with all graphics dependencies bundled. Package names and availability vary between distributions.
 
+Optional image tunnels have their own dependencies: **Cloudflare quick tunnel** needs `cloudflared`, and **Tailscale Funnel** needs the Tailscale CLI and a configured account. They are not bundled or installed automatically. **Off**, local compression, Kilo uploads and Litterbox require no extra image-transport executable. See [image backend setup for each operating system](image-uploads.md#tunnel-dependencies).
+
 ## Optional launch modes
 
 Use these options with the executable. In Windows archives it is named `Kilo Proxy.exe`; in the macOS bundle it is `Kilo Proxy.app/Contents/MacOS/kilo-proxy`.

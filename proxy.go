@@ -30,6 +30,8 @@ type event struct {
 }
 
 type app struct {
+	imageURLBackends        imageURLBackendManager
+	imageURLLeaseFactory    func(context.Context, string, string) (imageURLLease, error)
 	attachmentClientFactory func(string, string) *imageAttachmentClient
 	imageUploadsActive      int
 	imageUploadsDone        chan struct{}
