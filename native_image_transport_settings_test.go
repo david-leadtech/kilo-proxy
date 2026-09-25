@@ -40,7 +40,13 @@ func TestNativeImageTransportSettingsPointerAndPersistence(t *testing.T) {
 		for _, lang := range []string{"en", "es"} {
 			t.Run(fmtSize(size)+"-"+lang, func(t *testing.T) {
 				u := nativeTestUI(t)
-				u.page, u.language = "settings", lang
+				u.page = "settings"
+				// Persist the language through the real API. Assigning u.language
+				// alone lets the periodic state refresh restore the fixture's English.
+				u.setLanguage(lang)
+				nativeTestWait(t, u, func() bool {
+					return u.language == lang && u.languageTarget == "" && !u.busy["POST/api/language"] && !u.busy["GET/api/state"]
+				})
 				h := &nativePointerHarness{t: t, u: u, size: size, now: time.Now()}
 				h.frame()
 				capture := func(name string) {
@@ -51,12 +57,23 @@ func TestNativeImageTransportSettingsPointerAndPersistence(t *testing.T) {
 				}
 				ttl := "1h"
 				choose := func(label string, mode, profile string) {
+					// Exercise the same refresh that the background poll performs,
+					// without depending on the runner taking over one second.
+					u.refreshState()
+					nativeTestWait(t, u, func() bool { return !u.busy["GET/api/state"] })
+					h.frame()
+					if u.language != lang {
+						t.Fatalf("state refresh changed the test language to %q, want %q", u.language, lang)
+					}
 					nativeScrollImageSetting(h, label)
 					h.click(label, semantic.Button)
 					nativeTestWait(t, u, func() bool { return !u.busy["PUT/api/image-transport-settings"] })
 					saved, err := readSettings(u.owner.dir)
 					if err != nil || saved.ImageTransport != (imageTransportSettings{mode, profile, ttl}) {
 						t.Fatalf("image preference did not persist: %+v %v", saved.ImageTransport, err)
+					}
+					if saved.Language != lang {
+						t.Fatalf("saving image preferences changed the persisted language to %q, want %q", saved.Language, lang)
 					}
 					h.frame()
 				}
@@ -89,11 +106,15 @@ func TestNativeImageTransportSettingsPointerAndPersistence(t *testing.T) {
 				capture("image-litterbox")
 				choose("○ "+u.tr("Off", "Desactivado"), "off", "high")
 				// Layout, scrolling and changing language must never opt in by themselves.
-				u.language = u.tr("es", "en")
+				nextLanguage := u.tr("es", "en")
+				h.click(u.tr("English ▾", "Español ▾"), semantic.Button)
+				nativeTestWait(t, u, func() bool {
+					return u.language == nextLanguage && u.languageTarget == "" && !u.busy["POST/api/language"] && !u.busy["GET/api/state"]
+				})
 				h.frame()
-				h.frame()
-				if u.owner.config.ImageTransport.Mode != "off" {
-					t.Fatal("redrawing or translating enabled image uploads")
+				saved, err := readSettings(u.owner.dir)
+				if err != nil || saved.Language != nextLanguage || saved.ImageTransport != (imageTransportSettings{"off", "high", ttl}) {
+					t.Fatalf("changing language lost its preference or changed image settings: language=%q imageTransport=%+v error=%v", saved.Language, saved.ImageTransport, err)
 				}
 			})
 		}
