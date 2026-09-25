@@ -104,7 +104,7 @@ func (u *nativeUI) initModelLibrary() {
 	state := u.owner.modelLibrary.snapshot()
 	s := &nativeClientSelection{Aliases: map[string]string{}, Mode: "installed", Initial: state.Library.DefaultModel}
 	for _, item := range state.Library.Models {
-		choice := nativeModelChoice{Model: modelInfo{ID: item.ID, Name: item.ID, ContextWindow: item.ContextWindow, MaxOutputTokens: item.MaxOutputTokens}, DisplayName: item.DisplayName, DefaultReasoning: item.ReasoningEffort, ReasoningCustom: item.ReasoningCustom, ReasoningLevels: slices.Clone(item.ReasoningLevels)}
+		choice := contextChoiceFromLibrary(item, u.contextCatalogModel(item.ID))
 		s.Models = append(s.Models, choice)
 		u.seedClientChoice(sharedModelKey, choice)
 		// Keep the requested preference even while catalog metadata is unavailable.
@@ -119,7 +119,7 @@ func (u *nativeUI) modelLibraryValue() modelLibrary {
 	s := u.library.selection
 	value := modelLibrary{SchemaVersion: 1, DefaultModel: s.Initial, Models: []modelLibraryItem{}}
 	for _, m := range s.Models {
-		value.Models = append(value.Models, modelLibraryItem{ID: m.Model.ID, DisplayName: m.DisplayName, ReasoningEffort: m.DefaultReasoning, ReasoningLevels: slices.Clone(m.ReasoningLevels), ReasoningCustom: m.ReasoningCustom, ContextWindow: m.Model.ContextWindow, MaxOutputTokens: m.Model.MaxOutputTokens})
+		value.Models = append(value.Models, nativeLibraryItem(m))
 	}
 	return value
 }
@@ -286,6 +286,9 @@ func (u *nativeUI) modelsPanel() layout.Widget {
 	if len(s.Models) == 0 && !u.expanded["library.catalog"] {
 		widgets = append(widgets, u.card(u.heading(u.tr("A model library for all your agents", "Una biblioteca para todos tus agentes")), u.note(u.tr("Add the models you use, give them short names and choose a default. Your selection stays here next time.", "Añade tus modelos, ponles nombres cortos y elige uno inicial. Tu selección seguirá aquí la próxima vez."))))
 	} else {
+		if !u.expanded["library.catalog"] {
+			widgets = append(widgets, u.sharedContextPanel())
+		}
 		widgets = append(widgets, u.clientPicker(sharedModelKey, s))
 	}
 	if !u.expanded["library.catalog"] {
@@ -370,6 +373,9 @@ func (u *nativeUI) sharedModelOrder() []modelInfo {
 }
 
 func (u *nativeUI) setSharedTokenLimits(id string, context, output int) {
+	if choice := u.library.selection.choice(id); choice != nil {
+		choice.ContextPreset = contextPresetCustom
+	}
 	u.setValue(nativeClientField(sharedModelKey, id, "context"), strconv.Itoa(context))
 	u.setValue(nativeClientField(sharedModelKey, id, "output"), strconv.Itoa(output))
 }
@@ -378,7 +384,7 @@ func (u *nativeUI) reviewSavedLibrary() {
 	state := u.owner.modelLibrary.snapshot()
 	candidate := &nativeClientSelection{Initial: state.Library.DefaultModel, Aliases: map[string]string{}, Mode: "installed"}
 	for _, item := range state.Library.Models {
-		candidate.Models = append(candidate.Models, nativeModelChoice{Model: modelInfo{ID: item.ID, Name: item.ID, ContextWindow: item.ContextWindow, MaxOutputTokens: item.MaxOutputTokens}, DisplayName: item.DisplayName, DefaultReasoning: item.ReasoningEffort, ReasoningLevels: item.ReasoningLevels, ReasoningCustom: item.ReasoningCustom})
+		candidate.Models = append(candidate.Models, contextChoiceFromLibrary(item, u.contextCatalogModel(item.ID)))
 	}
 	u.library.pendingImport, u.library.pendingState = candidate, &state
 	u.expanded["library.catalog"] = false
@@ -416,8 +422,10 @@ func (u *nativeUI) sharedModelControls(choice *nativeModelChoice) layout.Widget 
 		}
 		children = append(children, u.note(u.tr("Reasoning: automatic", "Razonamiento: automático")))
 	}
+	children = append(children, u.note(u.contextChoiceSummary(*choice)))
 	if u.expanded[prefix+"edit:"+id] {
 		children = append(children, u.field(nativeClientField(key, id, "name"), u.tr("Display name", "Nombre visible"), choice.Model.Name, false))
+		children = append(children, u.contextChoiceControls(key, choice))
 		index := slices.Index(s.ids(), id)
 		children = append(children, u.pills(u.disabled(index > 0, u.button(prefix+"up:"+id, u.tr("Move up", "Subir"), func() { u.moveSharedModel(id, -1) })), u.disabled(index < len(s.Models)-1, u.button(prefix+"down:"+id, u.tr("Move down", "Bajar"), func() { u.moveSharedModel(id, 1) }))))
 		if u.checked(prefix + "advanced") {
@@ -432,7 +440,7 @@ func (u *nativeUI) sharedModelControls(choice *nativeModelChoice) layout.Widget 
 				u.setChecked(nativeClientField(key, id, "custom"), false)
 				_, effort := nativeReasoningFor(*choice)
 				u.setValue(nativeClientField(key, id, "reasoning"), effort)
-			}), u.field(nativeClientField(key, id, "context"), u.tr("Context tokens", "Tokens de contexto"), "200000", false), u.field(nativeClientField(key, id, "output"), u.tr("Max output tokens", "Tokens máximos de salida"), "0", false))
+			}), u.field(nativeClientField(key, id, "output"), u.tr("Max output (0 = automatic)", "Salida máxima (0 = automática)"), "0", false))
 		}
 	}
 	return u.column(children...)

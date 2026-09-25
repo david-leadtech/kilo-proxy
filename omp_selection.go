@@ -5,12 +5,13 @@ import "slices"
 // Keep the shared library's gateway IDs and editable limits. Only capabilities
 // actually published for the model (or explicitly overridden by the user) are
 // offered to Oh My Pi; its backend narrows these to its supported vocabulary.
-func ompSelectionFromChoices(choices []nativeModelChoice, initial string) ompSelection {
+func ompSelectionFromChoices(choices []nativeModelChoice, initial string) (ompSelection, error) {
 	selection := ompSelection{Initial: initial}
 	for _, choice := range choices {
 		model := choice.Model
-		if model.ContextWindow == 0 {
-			model.ContextWindow = 200000
+		context, err := contextPolicyForChoice(choice)
+		if err != nil {
+			return selection, err
 		}
 		levels, effort := nativeReasoningFor(choice)
 		reasoning := false
@@ -33,7 +34,7 @@ func ompSelectionFromChoices(choices []nativeModelChoice, initial string) ompSel
 			name = model.Name
 		}
 		selection.Models = append(selection.Models, ompModel{
-			editorModel:      editorModel{ID: model.ID, Name: name, Context: model.ContextWindow, Output: model.MaxOutputTokens},
+			editorModel:      editorModel{ID: model.ID, Name: name, Context: context.ContextWindow, Output: context.MaxOutputTokens},
 			Reasoning:        reasoning,
 			ReasoningEfforts: slices.Clone(levels),
 			Effort:           effort,
@@ -42,5 +43,5 @@ func ompSelectionFromChoices(choices []nativeModelChoice, initial string) ompSel
 			OutputPrice:      model.OutputPrice,
 		})
 	}
-	return selection
+	return selection, nil
 }

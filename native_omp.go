@@ -8,7 +8,7 @@ import (
 	"slices"
 )
 
-func nativeOMPSelection(source *nativeClientSelection) ompSelection {
+func nativeOMPSelection(source *nativeClientSelection) (ompSelection, error) {
 	return ompSelectionFromChoices(source.Models, source.Initial)
 }
 
@@ -43,13 +43,14 @@ func decodeNativeOMPSelection(data []byte, catalog []modelInfo) (*nativeClientSe
 				break
 			}
 		}
-		model.ContextWindow, model.MaxOutputTokens = saved.Context, saved.Output
+		maximumOutput := model.MaxOutputTokens
+		model.MaxOutputTokens = saved.Output
 		model.Reasoning = new(bool)
 		*model.Reasoning = saved.Reasoning
 		model.ReasoningEfforts = slices.Clone(saved.ReasoningEfforts)
 		model.InputModalities = slices.Clone(saved.InputModalities)
 		model.InputPrice, model.OutputPrice = saved.InputPrice, saved.OutputPrice
-		selection.Models = append(selection.Models, nativeModelChoice{Model: model, DisplayName: saved.Name, DefaultReasoning: saved.Effort, ReasoningCustom: true, ReasoningLevels: slices.Clone(saved.ReasoningEfforts)})
+		selection.Models = append(selection.Models, nativeModelChoice{Model: model, DisplayName: saved.Name, DefaultReasoning: saved.Effort, ReasoningCustom: true, ReasoningLevels: slices.Clone(saved.ReasoningEfforts), ContextPreset: contextPresetCustom, ContextTokens: saved.Context, MaximumOutputTokens: maximumOutput})
 	}
 	return selection, nil
 }

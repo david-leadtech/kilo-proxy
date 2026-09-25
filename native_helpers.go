@@ -14,12 +14,15 @@ import (
 // Selection metadata is separate from the gateway's exact model identity.
 // ReasoningCustom preserves an explicit empty override (disable reasoning).
 type nativeModelChoice struct {
-	Model            modelInfo
-	DisplayName      string
-	ReasoningLevels  []string
-	ReasoningCustom  bool
-	DefaultReasoning string
-	ClaudeEffort     string
+	Model               modelInfo
+	DisplayName         string
+	ReasoningLevels     []string
+	ReasoningCustom     bool
+	DefaultReasoning    string
+	ClaudeEffort        string
+	ContextPreset       string
+	ContextTokens       int
+	MaximumOutputTokens int
 }
 
 type nativeReasoning struct {
@@ -144,9 +147,12 @@ func buildCodexCatalog(models []nativeModelChoice, initial string, xcode bool) (
 			"use_responses_lite": false, "supports_parallel_tool_calls": false, "experimental_supported_tools": []string{},
 			"truncation_policy": map[string]any{"mode": "tokens", "limit": 10000}, "input_modalities": modalities,
 		}
-		if m.ContextWindow >= 1024 && m.ContextWindow <= 100000000 {
-			entry["context_window"] = m.ContextWindow
+		context, err := contextPolicyForChoice(choice)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", m.ID, err)
 		}
+		entry["context_window"] = context.ContextWindow
+		entry["auto_compact_token_limit"] = context.AutoCompactTokenLimit
 		entries = append(entries, entry)
 	}
 	data, err := json.MarshalIndent(map[string]any{"models": entries}, "", "  ")
@@ -274,7 +280,7 @@ func codexLaunchCommand(desktop bool, shell, platform, appPath, key, language st
 }
 
 var nativeClaudeResetEnv = func() []string {
-	names := []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_EFFORT_LEVEL", "ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CODE_SUBAGENT_MODEL", "ANTHROPIC_SMALL_FAST_MODEL", "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"}
+	names := []string{"CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT", "CLAUDE_CODE_DISABLE_1M_CONTEXT", "CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_CODE_MAX_OUTPUT_TOKENS", "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "DISABLE_AUTO_COMPACT", "DISABLE_COMPACT", "CLAUDE_CODE_MAX_CONTEXT_TOKENS", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "CLAUDE_CODE_EFFORT_LEVEL", "ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CODE_SUBAGENT_MODEL", "ANTHROPIC_SMALL_FAST_MODEL", "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"}
 	for _, alias := range []string{"SONNET", "OPUS", "HAIKU", "FABLE"} {
 		for _, suffix := range []string{"", "_NAME", "_DESCRIPTION", "_SUPPORTED_CAPABILITIES"} {
 			names = append(names, "ANTHROPIC_DEFAULT_"+alias+"_MODEL"+suffix)

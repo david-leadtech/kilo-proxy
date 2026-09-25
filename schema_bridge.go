@@ -13,14 +13,17 @@ import (
 
 // Preserve union constraints inside an object envelope instead of flattening them.
 // The envelope is private to this request and is removed from every tool call
-// returned to the client. Only Anthropic Responses requests need this bridge.
+// returned to the client. Only Anthropic Responses requests need this envelope;
+// the bridge also normalizes declared Codex V1 subagent inputs across providers.
 const toolEnvelope = "kilo_tool_input"
 const bridgeLimit = 32 << 20
 
 type schemaBridge struct {
-	tools    map[string]bool
-	calls    map[string]bool
-	sequence int64
+	tools       map[string]bool
+	calls       map[string]bool
+	collabTools map[string]bool
+	collabCalls map[string]bool
+	sequence    int64
 }
 
 func decodeObject(data []byte) (map[string]any, error) {
@@ -143,7 +146,25 @@ func (b *schemaBridge) wrapTools(tools []any, namespace string) error {
 	return nil
 }
 func (b *schemaBridge) matches(item map[string]any) bool {
-	return stringValue(item["type"]) == "function_call" && b.tools[toolKey(stringValue(item["namespace"]), stringValue(item["name"]))]
+	return b.matchesEnvelope(item) || b.matchesCollab(item)
+}
+func (b *schemaBridge) matchesEnvelope(item map[string]any) bool {
+	if stringValue(item["type"]) != "function_call" {
+		return false
+	}
+	namespace, name := stringValue(item["namespace"]), stringValue(item["name"])
+	if b.tools[toolKey(namespace, name)] {
+		return true
+	}
+	// Use the same aliases as the collaboration adapter, but only for its
+	// declared tools. Other namespaced functions keep exact matching.
+	if b.matchesCollab(item) {
+		if namespace == "" {
+			return b.tools[toolKey("multi_agent_v1", strings.TrimPrefix(name, "multi_agent_v1."))]
+		}
+		return b.tools[toolKey("", namespace+"."+name)]
+	}
+	return false
 }
 func wrapArguments(value any) (string, error) {
 	args, ok := value.(string)
@@ -195,22 +216,22 @@ func prepareSchemaBridge(r *http.Request) (*schemaBridge, error) {
 		return nil, nil
 	} // Let the gateway report invalid JSON.
 	model := strings.TrimPrefix(stringValue(doc["model"]), "~")
-	if !strings.HasPrefix(model, "anthropic/") {
-		return nil, nil
-	}
 	tools, _ := doc["tools"].([]any)
-	b := &schemaBridge{tools: map[string]bool{}, calls: map[string]bool{}}
-	if err := b.wrapTools(tools, ""); err != nil {
-		return nil, err
+	b := &schemaBridge{tools: map[string]bool{}, calls: map[string]bool{}, collabTools: map[string]bool{}, collabCalls: map[string]bool{}}
+	b.registerCollabTools(tools, "")
+	if strings.HasPrefix(model, "anthropic/") {
+		if err := b.wrapTools(tools, ""); err != nil {
+			return nil, err
+		}
 	}
-	if len(b.tools) == 0 {
+	if len(b.tools) == 0 && len(b.collabTools) == 0 {
 		return nil, nil
 	}
 	// Tool-call history must use the same wire representation as new calls.
 	input, _ := doc["input"].([]any)
 	for _, v := range input {
 		item := object(v)
-		if b.matches(item) {
+		if b.matchesEnvelope(item) {
 			args, err := wrapArguments(item["arguments"])
 			if err != nil {
 				return nil, err
@@ -231,14 +252,11 @@ func prepareSchemaBridge(r *http.Request) (*schemaBridge, error) {
 	return b, nil
 }
 
-func (b *schemaBridge) unwrapItem(item map[string]any, allowEmpty bool) error {
+func (b *schemaBridge) unwrapItem(item map[string]any) error {
 	if !b.matches(item) {
 		return nil
 	}
-	if allowEmpty && stringValue(item["arguments"]) == "" {
-		return nil
-	}
-	args, err := unwrapArguments(item["arguments"])
+	args, err := adaptToolArguments(item["arguments"], b.matchesEnvelope(item), b.matchesCollab(item))
 	if err != nil {
 		return err
 	}
@@ -248,7 +266,7 @@ func (b *schemaBridge) unwrapItem(item map[string]any, allowEmpty bool) error {
 func (b *schemaBridge) unwrapOutput(response map[string]any) error {
 	output, _ := response["output"].([]any)
 	for _, item := range output {
-		if err := b.unwrapItem(object(item), false); err != nil {
+		if err := b.unwrapItem(object(item)); err != nil {
 			return err
 		}
 	}
@@ -267,24 +285,27 @@ func (b *schemaBridge) transformEvent(data []byte) ([][]byte, error) {
 	case "response.output_item.added":
 		item := object(event["item"])
 		if b.matches(item) {
-			b.calls[stringValue(item["id"])] = true
-			if err := b.unwrapItem(item, true); err != nil {
-				return nil, err
+			if id := stringValue(item["id"]); id != "" {
+				b.calls[id] = b.matchesEnvelope(item)
+				b.collabCalls[id] = b.matchesCollab(item)
 			}
+			// The complete adapted delta is emitted at arguments.done. Starting
+			// with full arguments here would duplicate them in accumulating clients.
+			item["arguments"] = ""
 		}
 	case "response.function_call_arguments.delta":
-		if b.calls[stringValue(event["item_id"])] {
+		if id := stringValue(event["item_id"]); b.calls[id] || b.collabCalls[id] {
 			return nil, nil
 		}
 	case "response.function_call_arguments.done":
-		if b.calls[stringValue(event["item_id"])] {
-			args, err := unwrapArguments(event["arguments"])
+		if id := stringValue(event["item_id"]); b.calls[id] || b.collabCalls[id] {
+			args, err := adaptToolArguments(event["arguments"], b.calls[id], b.collabCalls[id])
 			if err != nil {
 				return nil, err
 			}
 			event["arguments"] = args
-			// Emit one complete delta after validation. Never expose wrapper fragments
-			// or an invalid call to the client, but keep the rest of the SSE stream live.
+			// Emit a complete adapted delta so clients never accumulate wrapper
+			// fragments or the empty-items conflict. Other SSE events stay live.
 			delta := map[string]any{}
 			for k, v := range event {
 				if k != "arguments" {
@@ -299,7 +320,7 @@ func (b *schemaBridge) transformEvent(data []byte) ([][]byte, error) {
 			return [][]byte{d, done}, nil
 		}
 	case "response.output_item.done":
-		if err := b.unwrapItem(object(event["item"]), false); err != nil {
+		if err := b.unwrapItem(object(event["item"])); err != nil {
 			return nil, err
 		}
 	case "response.completed", "response.incomplete":

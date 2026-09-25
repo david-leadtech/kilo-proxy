@@ -23,7 +23,7 @@ async function records(gateway) {
 }
 async function seedLibrary(request, gateway) {
  const current = await readAPI(request, gateway, 'model-library');
- const library = {schemaVersion:1, defaultModel:first, models:[{id:first, displayName:'My saved model', contextWindow:64000, maxOutputTokens:4000, reasoningEffort:'high', reasoningLevels:['low', 'high'], reasoningCustom:true}]};
+ const library = {schemaVersion:1, defaultModel:first, models:[{id:first, displayName:'My saved model', contextPreset:'custom', contextWindow:128000, maxOutputTokens:4000, reasoningEffort:'high', reasoningLevels:['low', 'high'], reasoningCustom:true}]};
  const response = await request.put(new URL('/api/model-library', gateway.url).href, {headers:headers(gateway), data:{library, revision:current.revision}});
  expect(response.ok()).toBe(true); return library;
 }

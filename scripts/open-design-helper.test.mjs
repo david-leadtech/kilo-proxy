@@ -8,7 +8,7 @@ const models = [{id:'vendor/first', name:'Friendly First'}, {id:'vendor/second',
 
 test('Open Design profile payload retains exact IDs and initial choice without credentials or catalog prices', () => {
  const library = openDesignLibrary([{...models[0], apiKey:'secret', pricing:{input:5}, contextWindow:64000, maxOutputTokens:4096}, models[1]], 'vendor/second');
- assert.deepEqual(library, {schemaVersion:1, defaultModel:'vendor/second', models:[{id:'vendor/first', displayName:'Friendly First', contextWindow:64000, maxOutputTokens:4096}, {id:'vendor/second', displayName:'Friendly Second'}]});
+ assert.deepEqual(library, {schemaVersion:1, defaultModel:'vendor/second', models:[{id:'vendor/first', displayName:'Friendly First', contextPreset:'recommended', maxOutputTokens:4096}, {id:'vendor/second', displayName:'Friendly Second', contextPreset:'recommended'}]});
  assert.doesNotMatch(JSON.stringify(library), /secret|pricing|apiKey/);
 });
 

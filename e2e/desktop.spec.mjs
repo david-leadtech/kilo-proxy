@@ -348,8 +348,9 @@ test('OpenCode and Zed save multiple models, limits, backups and independent sel
     await page.locator(`[data-editor-initial="${second}"]`).click();
     const firstRow=page.locator('.codex-model-entry').filter({has:page.locator(`[data-editor-id="${first}"]`)});
     await firstRow.locator('details > summary').click();
+    await firstRow.getByRole('button',{name:'Custom',exact:true}).click();
     await firstRow.getByRole('spinbutton',{name:'Context tokens: '+first,exact:true}).fill('80000');
-    await firstRow.getByRole('spinbutton',{name:'Max output tokens (0 = unspecified): '+first,exact:true}).fill('5000');
+    await firstRow.getByRole('spinbutton',{name:'Max output tokens (0 = automatic): '+first,exact:true}).fill('5000');
     await page.locator('#editor-save').click();
     await expect(page.locator('#editor-status')).toContainText('Configuration saved:');
     const settings=await readFile(path.join(dir,name),'utf8');
@@ -357,7 +358,7 @@ test('OpenCode and Zed save multiple models, limits, backups and independent sel
     expect(settings).toContain('"bash":"ask"');
     expect(settings).toContain('Short One');
     expect(settings).toContain('80000');
-    expect(settings).toContain('5000');
+    expect(settings).toContain('4000');
     expect(await readFile(path.join(dir,name+'.bak'),'utf8')).toBe(original);
     expect(settings.includes('kl_local_')).toBe(client==='opencode');
     const output=await copied(page,'#editor-copy');

@@ -36,7 +36,8 @@ func TestNativeOMPSharedModelsPreserveCapabilitiesAndDisabledReasoning(t *testin
 		t.Fatalf("shared order or default lost: %#v", selection)
 	}
 	m := selection.Models[0]
-	if m.ID != "vendor/one" || m.Name != "Daily model" || m.Context != 64000 || m.Output != 8192 || !m.Reasoning || m.Effort != "high" || !reflect.DeepEqual(m.ReasoningEfforts, []string{"low", "high"}) || !reflect.DeepEqual(m.InputModalities, []string{"text", "image"}) || m.InputPrice == nil || *m.InputPrice != 1 {
+	// The saved 8K preference is capped by the published 4K output ceiling.
+	if m.ID != "vendor/one" || m.Name != "Daily model" || m.Context != 64000 || m.Output != 4000 || !m.Reasoning || m.Effort != "high" || !reflect.DeepEqual(m.ReasoningEfforts, []string{"low", "high"}) || !reflect.DeepEqual(m.InputModalities, []string{"text", "image"}) || m.InputPrice == nil || *m.InputPrice != 1 {
 		t.Fatalf("shared capabilities did not reach Oh My Pi: %#v", m)
 	}
 	if m := selection.Models[1]; m.Reasoning || m.Effort != "" || len(m.ReasoningEfforts) != 0 {

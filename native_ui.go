@@ -480,8 +480,10 @@ func (u *nativeUI) acceptState(raw json.RawMessage) {
 		u.models = nil
 		if u.library != nil {
 			for i := range u.library.selection.Models {
-				m := &u.library.selection.Models[i].Model
-				*m = modelInfo{ID: m.ID, Name: m.ID, ContextWindow: m.ContextWindow, MaxOutputTokens: m.MaxOutputTokens}
+				choice := &u.library.selection.Models[i]
+				m := &choice.Model
+				*m = modelInfo{ID: m.ID, Name: m.ID, MaxOutputTokens: m.MaxOutputTokens}
+				choice.MaximumOutputTokens = 0
 			}
 		}
 		u.catalogCached = false

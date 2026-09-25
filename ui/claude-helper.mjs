@@ -1,3 +1,4 @@
+import {contextLimits} from './context-policy.mjs';
 import {validModelID} from './model-helper.mjs';
 export function claudeCapabilities(version='') {
  const match=String(version).match(/^(\d+)\.(\d+)\.(\d+)(?:\s|$)/);
@@ -17,7 +18,7 @@ export function claudeEfforts(id,caps={}) {
 export function claudeSelection(models,initial,aliases={},mode='installed') {
  const selected=[...new Map(models.filter(m=>m && validModelID(m.id)).map(m=>[m.id,m])).values()].slice(0,50);
  const ids=new Set(selected.map(m=>m.id));
- return {models:selected.map(m=>({id:m.id,displayName:[...(m.displayName || m.name || m.id).replace(/[\x00-\x1f\x7f]/g,'')].slice(0,80).join(''),...(m.effort ? {effort:m.effort} : {})})),initial:ids.has(initial)?initial:selected[0]?.id || '',aliases:Object.fromEntries(['sonnet','opus','haiku'].map(a=>[a,ids.has(aliases[a])?aliases[a]:''])),mode};
+ return {models:selected.map(m=>({id:m.id,contextWindow:contextLimits(m).contextWindow,maxOutputTokens:contextLimits(m).maxOutputTokens,displayName:[...(m.displayName || m.name || m.id).replace(/[\x00-\x1f\x7f]/g,'')].slice(0,80).join(''),...(m.effort ? {effort:m.effort} : {})})),initial:ids.has(initial)?initial:selected[0]?.id || '',aliases:Object.fromEntries(['sonnet','opus','haiku'].map(a=>[a,ids.has(aliases[a])?aliases[a]:''])),mode};
 }
 export function claudeSettings(selection,caps,baseURL,key) {
  const {models,initial,aliases}=selection;
@@ -28,7 +29,12 @@ export function claudeSettings(selection,caps,baseURL,key) {
   env[prefix]=nativeID(id);
   if(caps.picker)env[prefix+'_NAME']=models.find(m=>m.id===id)?.displayName || id;
  }
- const settings={env,model:nativeID(initial)};
+ const windows=models.map(m=>m.contextWindow).filter(n=>Number.isSafeInteger(n)&&n>0),outputs=models.map(m=>m.maxOutputTokens).filter(n=>Number.isSafeInteger(n)&&n>0);
+ const budget=Math.min(1000000,...windows);
+ if(windows.length&&budget<100000)throw new Error('Claude Code requires a session context window of at least 100,000 tokens. Remove models with smaller windows or choose another agent.');
+ const settings={env,model:nativeID(initial),...(windows.length?{autoCompactWindow:budget,autoCompactEnabled:true}:{})};
+ if(windows.length)env.CLAUDE_CODE_AUTO_COMPACT_WINDOW=String(budget);
+ if(outputs.length)env.CLAUDE_CODE_MAX_OUTPUT_TOKENS=String(Math.min(...outputs));
  if(caps.picker){env.ANTHROPIC_DEFAULT_FABLE_MODEL=nativeID(initial);env.ANTHROPIC_DEFAULT_FABLE_MODEL_NAME=models.find(m=>m.id===initial)?.displayName || initial;}
  if(caps.picker)settings.modelPicker={options:models.map(m=>({model:nativeID(m.id),label:m.displayName || m.id})),replaceBuiltInOptions:true};
  if(caps.picker){const overrides=Object.fromEntries(models.filter(m=>nativeID(m.id)!==m.id).map(m=>[nativeID(m.id),m.id]));if(Object.keys(overrides).length)settings.modelOverrides=overrides;}
@@ -41,7 +47,7 @@ export function claudeSettings(selection,caps,baseURL,key) {
 }
 const shQuote=value=>"'"+value.replaceAll("'","'\\''")+"'";
 const psQuote=value=>"'"+value.replaceAll("'","''")+"'";
-export const claudeResetEnv=['ANTHROPIC_API_KEY','ANTHROPIC_AUTH_TOKEN','ANTHROPIC_BASE_URL','ANTHROPIC_MODEL','CLAUDE_CODE_OAUTH_TOKEN','CLAUDE_CODE_USE_BEDROCK','CLAUDE_CODE_USE_VERTEX','CLAUDE_CODE_USE_FOUNDRY','CLAUDE_CODE_EFFORT_LEVEL','ANTHROPIC_CUSTOM_HEADERS','CLAUDE_CODE_SUBAGENT_MODEL','ANTHROPIC_SMALL_FAST_MODEL','CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY',...['SONNET','OPUS','HAIKU','FABLE'].flatMap(a=>['','_NAME','_DESCRIPTION','_SUPPORTED_CAPABILITIES'].map(s=>'ANTHROPIC_DEFAULT_'+a+'_MODEL'+s))];
+export const claudeResetEnv=['CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT','CLAUDE_CODE_DISABLE_1M_CONTEXT','CLAUDE_CODE_AUTO_COMPACT_WINDOW','CLAUDE_CODE_MAX_OUTPUT_TOKENS','CLAUDE_AUTOCOMPACT_PCT_OVERRIDE','DISABLE_AUTO_COMPACT','DISABLE_COMPACT','CLAUDE_CODE_MAX_CONTEXT_TOKENS','ANTHROPIC_API_KEY','ANTHROPIC_AUTH_TOKEN','ANTHROPIC_BASE_URL','ANTHROPIC_MODEL','CLAUDE_CODE_OAUTH_TOKEN','CLAUDE_CODE_USE_BEDROCK','CLAUDE_CODE_USE_VERTEX','CLAUDE_CODE_USE_FOUNDRY','CLAUDE_CODE_EFFORT_LEVEL','ANTHROPIC_CUSTOM_HEADERS','CLAUDE_CODE_SUBAGENT_MODEL','ANTHROPIC_SMALL_FAST_MODEL','CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY',...['SONNET','OPUS','HAIKU','FABLE'].flatMap(a=>['','_NAME','_DESCRIPTION','_SUPPORTED_CAPABILITIES'].map(s=>'ANTHROPIC_DEFAULT_'+a+'_MODEL'+s))];
 export function claudeLaunch(shell='unix',language='en') {
  const message=language==='en'?'Prepare Claude Code in Kilo Proxy first.':'Prepara Claude Code desde Kilo Proxy primero.';
  if(shell==='powershell')return `& {

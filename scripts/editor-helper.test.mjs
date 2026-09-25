@@ -13,7 +13,7 @@ test('OpenCode and Zed export multiple exact models, names and limits without gi
   if(client==='zed'){assert.equal(data.language_models.openai_compatible['kilo-local'].available_models.length,2);assert.equal(data.agent.default_model.model,'vendor/b');assert.doesNotMatch(JSON.stringify(data),/local-only/)}
   else{assert.equal(Object.keys(data.provider['kilo-local'].models).length,2);assert.equal(data.provider['kilo-local'].options.apiKey,'local-only');assert.equal(data.model,'kilo-local/vendor/b')}
  }
- assert.equal(s.models[1].contextWindow,200000);assert.equal(editorPayload([{id:'bad',contextWindow:0}],'bad').models[0].contextWindow,0);
+ assert.equal(s.models[1].contextWindow,272000);assert.equal(editorPayload([{id:'unknown',contextWindow:0}],'unknown').models[0].contextWindow,272000);
 });
 test('Zed exports its prepared credential-versioned URL without changing other clients or exposing the local key',()=>{
  const baseURL='http://127.0.0.1:9988/v1',zedBaseURL='http://127.0.0.1:9988/zed/0123456789abcdef/v1';

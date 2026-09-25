@@ -300,7 +300,7 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 				jsonError(w, http.StatusRequestEntityTooLarge, "La petición supera 32 MiB.")
 				return
 			}
-			jsonError(w, http.StatusBadRequest, "No se pudo adaptar el esquema de herramientas para Anthropic: "+err.Error())
+			jsonError(w, http.StatusBadRequest, "Could not adapt Responses tools: "+err.Error())
 			return
 		}
 		if bridge != nil {

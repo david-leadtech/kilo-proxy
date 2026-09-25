@@ -29,7 +29,7 @@ func terminalTestApp(t *testing.T) *app {
 		return "", nil
 	}
 	a.launcher.start = func(clientLaunchPlan) error { t.Fatal("terminal command opened a new terminal"); return nil }
-	library := modelLibrary{SchemaVersion: 1, DefaultModel: "vendor/two", Models: []modelLibraryItem{{ID: "vendor/one", DisplayName: "My First", ContextWindow: 64000}, {ID: "vendor/two", DisplayName: "My Second", ContextWindow: 128000, ReasoningEffort: "high", ReasoningCustom: true, ReasoningLevels: []string{"low", "high"}}}}
+	library := modelLibrary{SchemaVersion: 1, DefaultModel: "vendor/two", Models: []modelLibraryItem{{ID: "vendor/one", DisplayName: "My First", ContextWindow: 128000}, {ID: "vendor/two", DisplayName: "My Second", ContextWindow: 128000, ReasoningEffort: "high", ReasoningCustom: true, ReasoningLevels: []string{"low", "high"}}}}
 	if _, err := a.modelLibrary.save(library, 0, false); err != nil {
 		t.Fatal(err)
 	}
@@ -185,8 +185,12 @@ func TestTerminalRuntimeDoesNotFollowRedirects(t *testing.T) {
 
 func TestTerminalPreservesUnsetLimitsAndRejectsControlErrors(t *testing.T) {
 	choices := terminalLibraryChoices(modelLibrary{Models: []modelLibraryItem{{ID: "vendor/one"}}}, []modelInfo{{ID: "vendor/one", ContextWindow: 64000, MaxOutputTokens: 4000, InputModalities: []string{"text", "image"}}})
-	if choices[0].Model.ContextWindow != 0 || choices[0].Model.MaxOutputTokens != 0 || !helperContains(choices[0].Model.InputModalities, "image") {
-		t.Fatal("metadata replaced explicit unset limits or lost image support")
+	if choices[0].Model.ContextWindow != 64000 || choices[0].Model.MaxOutputTokens != 0 || choices[0].MaximumOutputTokens != 4000 || choices[0].ContextTokens != 0 || choices[0].ContextPreset != contextPresetRecommended || !helperContains(choices[0].Model.InputModalities, "image") {
+		t.Fatal("metadata replaced saved limits, lost capacity, or lost image support")
+	}
+	resolved, resolveErr := contextPolicyForChoice(choices[0])
+	if resolveErr != nil || resolved.ContextWindow != 64000 || resolved.MaxOutputTokens != 4000 {
+		t.Fatal("unconfigured budget failed to respect catalog ceilings", resolved, resolveErr)
 	}
 	a := terminalTestApp(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { jsonError(w, 409, "unsafe\x1b]0;title\x07") }))
