@@ -168,7 +168,20 @@ func TestNativeOnboardingManualPointerWalkthrough(t *testing.T) {
 	u := nativeFreshOnboarding(t)
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 820), now: time.Now()}
 	h.frame()
-	h.click("Use an API key or enter a team ID", semantic.Button)
+	if !h.selected("Account & team", semantic.Button) {
+		t.Fatal("account step is not marked as the current setup step")
+	}
+	modelsDisabled := false
+	for _, node := range h.nodes() {
+		if node.Desc.Label == "Models" && node.Desc.Class == semantic.Button {
+			modelsDisabled = node.Desc.Disabled
+			break
+		}
+	}
+	if !modelsDisabled {
+		t.Fatal("models step was clickable before saving an account and team")
+	}
+	h.click("Use an API key or team ID instead", semantic.Button)
 	h.click("Leave blank to keep the current key", semantic.Editor)
 	h.typeText("synthetic-kilo-personal-key")
 	h.click("org_…", semantic.Editor)
@@ -179,10 +192,21 @@ func TestNativeOnboardingManualPointerWalkthrough(t *testing.T) {
 		return u.setupStep == setupModels && !u.busy["GET/api/state"] && !u.busy["POST/api/models"] && len(u.models) == 2
 	})
 	h.frame()
-	search := h.target("provider/model", semantic.Editor).Desc.Bounds
+	if !h.selected("Models", semantic.Button) {
+		t.Fatal("models step is not marked as current after saving the connection")
+	}
+	h.click("Account & team", semantic.Button)
+	if u.setupStep != setupConnect {
+		t.Fatal("reachable account step could not be reopened from the stepper")
+	}
+	h.click("Models", semantic.Button)
+	if u.setupStep != setupModels {
+		t.Fatal("reachable models step could not be reopened from the stepper")
+	}
+	search := h.target("Search models", semantic.Editor).Desc.Bounds
 	u.list("page.setup").Position.Offset = max(0, search.Min.Y-350)
 	h.frame()
-	h.click("provider/model", semantic.Editor)
+	h.click("Search models", semantic.Editor)
 	h.typeText("vendor/one")
 	if u.value("client:shared:search") != "vendor/one" {
 		t.Fatal("pointer focus and keyboard input did not reach the model search")
@@ -198,7 +222,10 @@ func TestNativeOnboardingManualPointerWalkthrough(t *testing.T) {
 	if u.setupStep != setupReady {
 		t.Fatalf("pointer Continue did not finish model selection: %s", u.notice)
 	}
-	h.click("Start proxy & go to agents", semantic.Button)
+	if !h.selected("Start", semantic.Button) {
+		t.Fatal("ready step is not marked as current")
+	}
+	h.click("Start proxy and go to agents", semantic.Button)
 	nativeTestWait(t, u, func() bool { return u.page == "agents" && nativeBool(u.state, "running") })
 	listener := nativeOnboardingListener(t, u)
 	saved, err := readSettings(u.owner.dir)
@@ -289,7 +316,7 @@ func TestNativeOnboardingLateStartPreservesReviewModels(t *testing.T) {
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 820), now: time.Now()}
 	h.frame()
 	armed.Store(true)
-	h.click("Start proxy & go to agents", semantic.Button)
+	h.click("Start proxy and go to agents", semantic.Button)
 	nativeTestWait(t, u, func() bool {
 		select {
 		case <-started:
@@ -298,9 +325,9 @@ func TestNativeOnboardingLateStartPreservesReviewModels(t *testing.T) {
 			return false
 		}
 	})
-	h.click("Review models", semantic.Button)
+	h.click("Back", semantic.Button)
 	if u.page != "setup" || u.setupStep != setupModels {
-		t.Fatal("Review models was unavailable while the start response was pending")
+		t.Fatal("Back was unavailable while the start response was pending")
 	}
 	release()
 	nativeTestWait(t, u, func() bool { return !u.busy["POST/api/start"] && nativeBool(u.state, "running") })
@@ -385,7 +412,7 @@ func TestNativeOnboardingFailedStartKeepsReadyStepAndVisibleError(t *testing.T) 
 	if !visible {
 		t.Fatalf("start failure is not visible in the setup screen: %s", u.notice)
 	}
-	h.target("Start proxy & go to agents", semantic.Button)
+	h.target("Start proxy and go to agents", semantic.Button)
 }
 
 func TestNativeOnboardingAgentsProxyPointerControls(t *testing.T) {
@@ -483,7 +510,7 @@ func TestNativeOnboardingDeviceLoginPendingCancelledAndApproved(t *testing.T) {
 		t.Fatal("SSO approval failed to preserve explicit selection between multiple teams")
 	}
 	h.frame()
-	h.click("Agents", semantic.Button)
+	h.click("Explore the app — finish later", semantic.Button)
 	h.click("Continue setup", semantic.Button)
 	if u.setupStep != setupConnect || !u.setupConnectionNeeded() {
 		t.Fatal("leaving and resuming setup bypassed saving the SSO connection")

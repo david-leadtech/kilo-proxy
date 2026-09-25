@@ -144,6 +144,7 @@ func TestNativeModelGridPointerSettingsAndResize(t *testing.T) {
 				h.frame()
 				field := nativeClientField(sharedModelKey, "anthropic/claude-sonnet-4.6", "name")
 				h.click(u.tr("Edit", "Editar"), semantic.Button)
+				h.reveal("Claude Sonnet 4.6", semantic.Editor)
 				h.click("Claude Sonnet 4.6", semantic.Editor)
 				if !h.router.Source().Focused(u.editor(field)) {
 					t.Fatal("selected card input did not receive pointer focus")
@@ -154,8 +155,9 @@ func TestNativeModelGridPointerSettingsAndResize(t *testing.T) {
 					t.Fatal("keyboard edit was lost in selected card")
 				}
 				reasoningField := nativeClientField(sharedModelKey, "anthropic/claude-sonnet-4.6", "reasoning")
-				h.click(u.value(reasoningField)+"  ▾", semantic.Button)
-				h.click("low", semantic.Button)
+				reasoningLabel := func(value string) string { return nativeModelReasoningChoices(u, []string{value})[0].Label }
+				h.click(reasoningLabel(u.value(reasoningField)), semantic.Button)
+				h.click(reasoningLabel("low"), semantic.Button)
 				if u.value(nativeClientField(sharedModelKey, "anthropic/claude-sonnet-4.6", "reasoning")) != "low" {
 					t.Fatal("reasoning choice did not stay inside selected card")
 				}

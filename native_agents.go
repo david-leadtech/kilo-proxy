@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
+	"gioui.org/font"
 	"gioui.org/layout"
 )
 
@@ -206,14 +209,26 @@ func (u *nativeUI) agentModelSummary() layout.Widget {
 			text = fmt.Sprintf(u.tr("1 shared model · Default: %s", "1 modelo compartido · Predeterminado: %s"), name)
 		}
 	}
-	widgets := []layout.Widget{u.actionRow(u.column(u.eyebrow(u.tr("YOUR MODELS", "TUS MODELOS")), u.label(text)), u.button("agents:edit-models", u.tr("Edit models", "Editar modelos"), func() { u.page = "models" }))}
+	strip := u.card(u.actionRow(u.column(u.eyebrow(u.tr("YOUR MODELS", "TUS MODELOS")), u.label(text)), u.button("agents:edit-models", u.tr("Edit models", "Editar modelos"), func() { u.page = "models" })))
+	widgets := []layout.Widget{strip}
 	if status, ready := u.libraryStatus(); !ready {
 		widgets = append(widgets, u.note(status))
 	}
 	if u.setupNeeded() {
-		widgets = append([]layout.Widget{u.card(u.actionRow(u.column(u.heading(u.tr("Finish setting up your workspace", "Termina de configurar tu espacio")), u.note(u.tr("Connect Kilo and choose at least one model. We'll guide you through it.", "Conecta Kilo y elige al menos un modelo. Te guiamos paso a paso."))), u.button("primary.agents.setup", u.tr("Continue setup", "Continuar configuración"), u.beginSetup)))}, widgets...)
+		setupCard := u.card(u.actionRow(u.column(u.heading(u.tr("Finish setting up your workspace", "Termina de configurar tu espacio")), u.note(u.tr("Connect Kilo and choose at least one model. We'll guide you through it.", "Conecta Kilo y elige al menos un modelo. Te guiamos paso a paso."))), u.primaryButton("primary.agents.setup", u.tr("Continue setup", "Continuar configuración"), u.beginSetup)))
+		widgets = append(widgets, setupCard)
 	}
 	return u.column(widgets...)
+}
+
+func agentProjectLabel(path string) string {
+	const maxRunes = 26
+	if utf8.RuneCountInString(path) <= maxRunes {
+		return path
+	}
+	runes := []rune(path)
+	keep := (maxRunes - 1) / 2
+	return string(runes[:keep]) + "…" + string(runes[len(runes)-keep:])
 }
 
 func (u *nativeUI) agentProjectPicker(key string) layout.Widget {
@@ -223,10 +238,63 @@ func (u *nativeUI) agentProjectPicker(key string) layout.Widget {
 		label = u.tr("Choosing…", "Eligiendo…")
 	}
 	project := u.agentProject(key)
-	if project == "" {
-		project = u.tr("Default project folder", "Carpeta de proyecto predeterminada")
+	projectLabel := u.note(u.tr("Default project folder", "Carpeta de proyecto predeterminada"))
+	if project != "" {
+		projectLabel = u.textStyle(14, agentProjectLabel(project), nativeText, font.Normal)
 	}
-	return u.actionRow(u.column(u.note(u.tr("Project folder", "Carpeta del proyecto")), u.label(project)), u.disabled(a.FolderBusy == "", u.button("agent:"+key+":folder", label, func() { u.chooseAgentProject(key) })))
+	return u.actionRow(u.column(u.note(u.tr("Project folder", "Carpeta del proyecto")), projectLabel), u.disabled(a.FolderBusy == "", u.iconButton("agent:"+key+":folder", label, nativeButtonSecondary, nativeIconFolder, func() { u.chooseAgentProject(key) })))
+}
+
+func (u *nativeUI) agentMonogram(key string) layout.Widget {
+	initials := ""
+	switch key {
+	case "codex":
+		initials = "CD"
+	case "codex-cli":
+		initials = "CC"
+	case "claude":
+		initials = "CL"
+	case "opencode":
+		initials = "OC"
+	case "omp":
+		initials = "OM"
+	case "zed":
+		initials = "ZE"
+	case "open-design":
+		initials = "OD"
+	case "cursor":
+		initials = "CU"
+	}
+	return func(gtx layout.Context) layout.Dimensions {
+		side := gtx.Dp(40)
+		gtx.Constraints = layout.Constraints{Min: image.Pt(side, side), Max: image.Pt(side, side)}
+		return nativeBox(gtx, nativeInk, func(gtx layout.Context) layout.Dimensions {
+			// Stack children start with a zero minimum; fill the tile so the initials center on it.
+			gtx.Constraints.Min = image.Pt(side, side)
+			return layout.Center.Layout(gtx, u.monoStyle(16, initials, nativeSurface, font.Bold))
+		})
+	}
+}
+
+func (u *nativeUI) agentPurpose(key string) string {
+	switch key {
+	case "codex":
+		return u.tr("Desktop app with shared Kilo models.", "App de escritorio con modelos Kilo.")
+	case "codex-cli":
+		return u.tr("Terminal with shared Kilo models.", "Terminal con modelos Kilo compartidos.")
+	case "claude":
+		return u.tr("Claude Code with compatible models.", "Claude Code con modelos compatibles.")
+	case "opencode":
+		return u.tr("OpenCode in your project terminal.", "OpenCode en tu terminal de proyecto.")
+	case "omp":
+		return u.tr("Oh My Pi with an isolated profile.", "Oh My Pi con un perfil aislado.")
+	case "zed":
+		return u.tr("Zed Agent with shared models.", "Zed Agent con modelos compartidos.")
+	case "open-design":
+		return u.tr("Visual coding workspace.", "Espacio visual de programación.")
+	default:
+		return u.tr("Cursor connected through your HTTPS tunnel.", "Cursor conectado mediante tu túnel HTTPS.")
+	}
 }
 
 func (u *nativeUI) agentOptions(key string) layout.Widget {
@@ -235,9 +303,6 @@ func (u *nativeUI) agentOptions(key string) layout.Widget {
 		return u.column(u.note(u.agentCompatibility(key)), u.pills(u.button("agent:open-design:detect", u.tr("Refresh detection", "Actualizar detección"), func() { u.detectLaunchers(); u.detectOpenDesign() }), u.button("agent:open-design:install", u.tr("Installation instructions", "Instrucciones de instalación"), func() { u.open(u.openDesignInstallURL()) })))
 	}
 	widgets := []layout.Widget{u.note(u.agentCompatibility(key)), u.field(agentProjectField(key), u.tr("Project folder path", "Ruta de la carpeta del proyecto"), c.LaunchInfo.Directory, false)}
-	if key != "codex" {
-		widgets = append(widgets, u.agentProjectPicker(key))
-	}
 	if len(a.Preferences.Recent) > 0 {
 		recent := []layout.Widget{}
 		for i, directory := range a.Preferences.Recent {
@@ -264,7 +329,7 @@ func (u *nativeUI) agentOptions(key string) layout.Widget {
 		}
 	})))
 	if !u.nativeLaunchAvailable(key) {
-		if reason := c.LaunchInfo.Clients[key].Reason; reason != "" {
+		if reason := nativeMessage(c.LaunchInfo.Clients[key].Reason, u.language); reason != "" {
 			widgets = append(widgets, u.note(reason))
 		}
 		url := map[string]string{"codex": "https://openai.com/codex/", "codex-cli": "https://developers.openai.com/codex/cli/", "claude": "https://code.claude.com/docs/en/overview", "opencode": "https://opencode.ai/", "omp": "https://omp.sh/", "zed": "https://zed.dev/download", "cursor": "https://cursor.com/download"}[key]
@@ -275,50 +340,77 @@ func (u *nativeUI) agentOptions(key string) layout.Widget {
 	return u.column(widgets...)
 }
 
-func (u *nativeUI) agentCard(key string, primary bool) layout.Widget {
+func (u *nativeUI) agentCard(key string) layout.Widget {
 	a, c := u.agentsState(), u.clientState()
 	name, kind := launchClientIdentity(key)
 	if key == "codex" {
 		name = "Codex"
 	}
-	status := u.tr("Checking installation…", "Comprobando instalación…")
 	available := u.nativeLaunchAvailable(key)
+	status, statusTone := u.tr("Checking installation…", "Comprobando instalación…"), nativeToneInfo
 	if c.LaunchChecked {
-		status = u.tr("Installed · Desktop", "Instalado · Escritorio")
-		if kind == "terminal" {
-			status = u.tr("Installed · Terminal", "Instalado · Terminal")
-		}
-		if !available {
-			status = u.tr("Not available on this computer", "No disponible en este equipo")
-		} else if !c.LaunchInfo.Clients[key].Available && key == "codex" {
-			status = u.tr("Custom application · Desktop", "Aplicación personalizada · Escritorio")
+		if available {
+			statusTone = nativeToneSuccess
+			status = u.tr("Installed · Desktop", "Instalado · Escritorio")
+			if kind == "terminal" {
+				status = u.tr("Installed · Terminal", "Instalado · Terminal")
+			}
+			if key == "codex" && !c.LaunchInfo.Clients[key].Available {
+				status = u.tr("Installed · Custom path", "Instalado · Ruta personalizada")
+			}
+		} else {
+			status, statusTone = u.tr("Not found", "No encontrado"), nativeToneNeutral
 		}
 	}
 	s := u.sharedClientSelection(key)
-	_, err := nativeClientPayload(key, s)
-	_, libraryReady := u.libraryStatus()
-	canOpen := available && libraryReady && u.agentConnectionReady() && len(s.Models) > 0 && err == nil && c.Launching == "" && !u.busy["POST"+nativeClientEndpoint(key)]
+	_, validation := nativeClientPayload(key, s)
+	libraryStatus, libraryReady := u.libraryStatus()
+	connectionReady := u.agentConnectionReady() && !u.connectionWorking() && !u.setupConnectionNeeded()
+	canOpen := available && libraryReady && connectionReady && len(s.Models) > 0 && validation == nil && c.Launching == "" && !u.busy["POST"+nativeClientEndpoint(key)]
 	if key == "codex" || key == "codex-cli" {
 		canOpen = canOpen && nativeClientImagesReady(s, u.models)
 	}
 	if key == "cursor" {
-		canOpen = available && libraryReady && u.agentConnectionReady() && u.agentTunnelReady() && c.Launching == ""
-		if available && !u.agentTunnelReady() {
-			status = u.tr("Installed · HTTPS tunnel required", "Instalado · Requiere túnel HTTPS")
-		}
+		canOpen = available && libraryReady && connectionReady && u.agentTunnelReady() && c.Launching == ""
 	}
 	if key == "claude" && !c.ClaudeChecked {
 		canOpen = false
-		if available {
-			status = u.tr("Installed · Checking version…", "Instalado · Comprobando versión…")
-		}
-		if a.ClaudeError != "" {
-			status = a.ClaudeError
-		}
 	}
-	canOpen = canOpen && !u.connectionWorking() && !u.setupConnectionNeeded()
 	if key == "open-design" {
 		canOpen = canOpen && u.openDesignEngineAvailable()
+	}
+	disabledReason := ""
+	switch {
+	case !c.LaunchChecked:
+		disabledReason = u.tr("Wait for installation detection to finish.", "Espera a que termine la detección de la instalación.")
+	case !available:
+		disabledReason = nativeMessage(c.LaunchInfo.Clients[key].Reason, u.language)
+		if disabledReason == "" {
+			disabledReason = u.tr("Install this app, then refresh installed apps.", "Instala esta aplicación y actualiza las aplicaciones instaladas.")
+		}
+	case !connectionReady:
+		disabledReason = u.tr("Finish setting up and saving your Kilo connection first.", "Termina de configurar y guardar tu conexión de Kilo.")
+	case !libraryReady:
+		disabledReason = libraryStatus
+	case key == "cursor" && !u.agentTunnelReady():
+		disabledReason = u.tr("Set up and connect the HTTPS tunnel before opening Cursor.", "Configura y conecta el túnel HTTPS antes de abrir Cursor.")
+	case key == "claude" && !c.ClaudeChecked:
+		disabledReason = u.tr("Wait for Claude Code version detection to finish.", "Espera a que termine la detección de la versión de Claude Code.")
+	case key == "open-design" && !c.OpenDesignChecked:
+		disabledReason = u.tr("Wait for CLI engine detection to finish.", "Espera a que termine la detección del motor CLI.")
+	case key == "open-design" && !u.openDesignEngineAvailable():
+		disabledReason = nativeMessage(c.OpenDesign.Engines[u.openDesignEngine()].Reason, u.language)
+		if disabledReason == "" {
+			disabledReason = u.tr("Install the selected CLI engine before opening Open Design.", "Instala el motor CLI seleccionado antes de abrir Open Design.")
+		}
+	case len(s.Models) == 0 && key != "cursor":
+		disabledReason = u.tr("Add at least one shared model before opening this agent.", "Añade al menos un modelo compartido antes de abrir este agente.")
+	case validation != nil:
+		disabledReason = nativeMessage(validation.Error(), u.language)
+	case (key == "codex" || key == "codex-cli") && !nativeClientImagesReady(s, u.models):
+		disabledReason = u.tr("Review image generation settings in Models before opening Codex.", "Revisa la generación de imágenes en Modelos antes de abrir Codex.")
+	case c.Launching != "" || u.busy["POST"+nativeClientEndpoint(key)]:
+		disabledReason = u.tr("Wait for the current agent operation to finish.", "Espera a que termine la operación actual del agente.")
 	}
 	label := u.tr("Open ", "Abrir ") + name
 	if key == "open-design" {
@@ -327,38 +419,38 @@ func (u *nativeUI) agentCard(key string, primary bool) layout.Widget {
 	if c.Launching == key {
 		label = a.Phase
 	}
-	controls := []layout.Widget{u.disabled(canOpen, u.button("agent:"+key+":launch", label, func() { u.launchAgent(key) })), u.button("agent:"+key+":options", u.tr("Options", "Opciones")+"  ▾", func() { u.expanded["agent:"+key+":options"] = !u.expanded["agent:"+key+":options"] })}
+	optionsID := "agent:" + key + ":options"
+	controls := []layout.Widget{
+		u.disabled(canOpen, u.primaryButton("agent:"+key+":launch", label, func() { u.launchAgent(key) })),
+		u.buttonWidget(optionsID, u.tr("Options", "Opciones"), nativeButtonGhost, nativeIconChevronRight, true, false, func() { u.expanded[optionsID] = !u.expanded[optionsID] }),
+	}
 	if key == "cursor" && !u.agentTunnelReady() {
 		controls = append(controls, u.button("agent:cursor:tunnel", u.tr("Set up tunnel", "Configurar túnel"), func() { u.agentSetup(key) }))
 	}
 	if key == "codex" && !available && c.LaunchChecked {
 		controls = append(controls, u.disabled(a.FolderBusy == "", u.button("agent:codex:locate", u.tr("Locate Codex", "Localizar Codex"), u.locateCodexApplication)))
 	}
-	widgets := []layout.Widget{u.actionRow(u.column(u.heading(name), u.note(status)), controls...)}
+	widgets := []layout.Widget{
+		u.actionRow(u.topRow(u.agentMonogram(key), u.column(u.subheading(name), u.note(u.agentPurpose(key)))), u.statusBadge(statusTone, status)),
+		layout.Spacer{Height: 4}.Layout,
+	}
 	if key == "open-design" {
 		engineName, _ := launchClientIdentity(u.openDesignEngine())
-		widgets = append(widgets, u.actionRow(u.note(u.tr("Engine: ", "Motor: ")+engineName), u.button("agent:open-design:setup", u.tr("Engine settings", "Ajustes del motor"), func() { u.agentSetup(key) })))
-	} else if primary {
+		widgets = append(widgets, u.actionRow(u.column(u.note(u.tr("Engine", "Motor")), u.label(engineName)), u.ghostButton("agent:open-design:setup", u.tr("Engine settings", "Ajustes del motor"), func() { u.agentSetup(key) })))
+	} else {
 		widgets = append(widgets, u.agentProjectPicker(key))
-	} else if project := u.agentProject(key); project != "" {
-		widgets = append(widgets, u.note(u.tr("Project: ", "Proyecto: ")+filepath.Base(project)))
 	}
-	if !available && c.LaunchChecked {
-		reason := c.LaunchInfo.Clients[key].Reason
-		if reason != "" {
-			widgets = append(widgets, u.note(reason))
-		}
+	widgets = append(widgets, layout.Spacer{Height: 4}.Layout, u.pills(controls...))
+	if disabledReason != "" {
+		widgets = append(widgets, u.hint(disabledReason))
 	}
-	if key == "zed" {
-		widgets = append(widgets, u.note(u.tr("Credentials and models are configured automatically.", "Las credenciales y los modelos se configuran automáticamente.")))
+	if key == "claude" && a.ClaudeError != "" {
+		widgets = append(widgets, u.message(nativeToneError, a.ClaudeError))
 	}
-	if len(s.Models) > 0 && err != nil && key != "cursor" {
-		widgets = append(widgets, u.note(nativeMessage(err.Error(), u.language)))
+	if len(s.Models) > 0 && validation != nil && key != "cursor" {
+		widgets = append(widgets, u.message(nativeToneError, nativeMessage(validation.Error(), u.language)))
 	}
-	if (key == "codex" || key == "codex-cli") && !nativeClientImagesReady(s, u.models) {
-		widgets = append(widgets, u.note(u.tr("Review image generation settings in Models before opening Codex.", "Revisa la generación de imágenes en Modelos antes de abrir Codex.")))
-	}
-	if u.expanded["agent:"+key+":options"] {
+	if u.expanded[optionsID] {
 		widgets = append(widgets, u.agentOptions(key))
 	}
 	return u.card(widgets...)
@@ -373,12 +465,12 @@ func (u *nativeUI) agentsPanel() layout.Widget {
 	if !c.OpenDesignDetectStarted {
 		u.detectOpenDesign()
 	}
-	widgets := []layout.Widget{u.agentModelSummary(), u.agentCard("codex", true), u.topRow(u.agentCard("claude", false), u.agentCard("opencode", false)), u.topRow(u.agentCard("omp", false), u.agentCard("codex-cli", false)), u.topRow(u.agentCard("zed", false), u.agentCard("open-design", false)), u.agentCard("cursor", false)}
+	widgets := []layout.Widget{u.agentModelSummary(), u.agentCard("codex"), u.topRow(u.agentCard("claude"), u.agentCard("opencode")), u.topRow(u.agentCard("omp"), u.agentCard("codex-cli")), u.topRow(u.agentCard("zed"), u.agentCard("open-design")), u.agentCard("cursor")}
 	if a.Error != "" {
-		widgets = append([]layout.Widget{u.note(a.Error)}, widgets...)
+		widgets = append([]layout.Widget{u.message(nativeToneError, a.Error)}, widgets...)
 	}
 	if c.LaunchError != "" {
-		widgets = append([]layout.Widget{u.note(c.LaunchError)}, widgets...)
+		widgets = append([]layout.Widget{u.message(nativeToneError, c.LaunchError)}, widgets...)
 	}
 	widgets = append(widgets, u.card(u.heading(u.tr("More integrations", "Más integraciones")), u.pills(u.button("agents:xcode", u.tr("Set up Xcode", "Configurar Xcode"), func() { u.agentSetup("xcode-chat") }), u.button("agents:other", u.tr("Other clients", "Otros clientes"), func() { u.agentSetup("other") })), u.note(u.tr("Xcode needs provider setup. Other clients can use the local OpenAI-compatible endpoint.", "Xcode requiere configurar el proveedor. Otros clientes pueden usar el endpoint local compatible con OpenAI."))))
 	return u.column(widgets...)

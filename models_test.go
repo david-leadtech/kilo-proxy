@@ -145,7 +145,7 @@ func TestPublicModelMetricsFailureRetainsGatewayCatalog(t *testing.T) {
 						}
 						return nil, context.DeadlineExceeded
 					}
-				} else if r.URL.Host != "api.kilo.ai" {
+				} else if r.URL.Host != "api.kilo.ai" && r.URL.Host != "raw.githubusercontent.com" {
 					t.Errorf("unexpected network destination %s", r.URL.Host)
 				}
 				return &http.Response{StatusCode: status, Header: header, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil

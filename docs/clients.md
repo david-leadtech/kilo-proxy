@@ -1,6 +1,6 @@
 # Client setup
 
-Use **Models** to build one automatically saved library, then **Agents** to open an installed client. Each card shows installation status and an **Open** action; **Options → Integration settings** contains manual preparation, provider setup and exports. **Activity** shows observed requests and costs, and **Settings** manages your account, connection and appearance. The first launch opens Settings when a connection has not been configured; a configured app opens Agents.
+Use **Models** to build one automatically saved library, then **Agents** to open an installed client. Each card shows installation status and an **Open** action; **Options → Integration settings** contains manual preparation, provider setup and exports. **Activity** shows observed requests and costs, and **Settings** manages your account, connection and appearance. The first launch opens the three-step setup guide when a connection has not been configured; a configured app opens Agents.
 
 The local key grants access to your organization’s credits while the proxy is running; do not commit generated credentials. The instructions below use the native interface's English labels. The optional `--browser` helper is a separate older interface with independent per-client selections and explicit preparation. It does not edit the native shared library.
 
@@ -46,7 +46,7 @@ The selector beside model search offers the same five criteria as [Kilo's model 
 
 Missing metrics sort last; an explicit zero price or score remains valid. Ties use name and model ID for a stable order. In the discovery view, **Selected only** filters selected models. Catalog sorting does not change the saved library order, default, selections, reasoning settings or prepared files. Use the library move controls to change its saved order.
 
-Rank, coding index, and speed come from [Kilo's public model statistics](https://kilo.ai/api/models/stats), matched by exact gateway model ID. Coverage varies and values are Kilo-published snapshots. The extra request sends no API key or organization header, uses a short timeout, and caches successful results for five minutes. An unavailable statistics service leaves the gateway catalog usable and retains the last successful statistics snapshot when available. Prices and availability always come from the gateway catalog. Custom gateways are not queried against Kilo's public statistics.
+Rank, coding index, and speed come from [Kilo's public model statistics](https://kilo.ai/api/models/stats), matched by exact gateway model ID. Coverage varies and values are Kilo-published snapshots. The extra request sends no API key or organization header, uses a short timeout, and caches successful results for five minutes. An unavailable statistics service leaves the gateway catalog usable and retains the last successful statistics snapshot when available. Prices and availability always come from the gateway catalog. Custom gateways are not queried against Kilo's public statistics. The catalog also requests the [recommended models list](shared-models.md#recommended-models) from GitHub under the same rules.
 
 ## Codex Desktop: a second GUI instance
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"gioui.org/layout"
+	"gioui.org/widget/material"
 )
 
 const nativeTerminalCommandsEndpoint = "/api/terminal/commands"
@@ -101,15 +102,18 @@ func (u *nativeUI) terminalCommandsPanel() layout.Widget {
 		u.requestTerminalCommands("GET")
 	}
 	checking, installing := u.busy["GET"+nativeTerminalCommandsEndpoint], u.busy["POST"+nativeTerminalCommandsEndpoint]
-	children := []layout.Widget{u.heading(u.tr("Terminal commands", "Comandos de terminal"))}
 	if s.Checked && !s.Info.Supported {
-		return u.card(append(children, u.note(u.tr("kilo-codex, kilo-claude and kilo-omp are available on macOS and Linux.", "kilo-codex, kilo-claude y kilo-omp están disponibles en macOS y Linux.")))...)
+		return nativeSettingsPanelWithGap(u.section(
+			u.tr("Terminal commands", "Comandos de terminal"),
+			u.tr("Shortcuts for using your saved Kilo Proxy connection.", "Accesos directos para usar tu conexión guardada de Kilo Proxy."),
+			u.note(u.tr("kilo-codex, kilo-claude and kilo-omp are available on macOS and Linux.", "kilo-codex, kilo-claude y kilo-omp están disponibles en macOS y Linux.")),
+		))
 	}
-	children = append(children,
-		u.note(u.tr("Use kilo-codex, kilo-claude or kilo-omp in your current terminal and project. They forward arguments and use your latest saved shared models.", "Usa kilo-codex, kilo-claude o kilo-omp en tu terminal y proyecto actuales. Pasan tus argumentos al CLI y usan los últimos modelos compartidos guardados.")),
-		u.note(u.tr("Keep Kilo Proxy open, including in the tray. The commands start its saved connection if stopped.", "Mantén Kilo Proxy abierto, también en la bandeja. Los comandos inician su conexión guardada si está detenida.")),
-		u.note(u.tr("Installs to ~/.local/bin and configures PATH for zsh, bash or fish. Install Codex CLI, Claude Code or Oh My Pi separately.", "Se instalan en ~/.local/bin y configuran PATH para zsh, bash o fish. Instala Codex CLI, Claude Code u Oh My Pi por separado.")),
-	)
+	children := []layout.Widget{
+		u.note(u.tr("Run these commands from any project terminal. They pass arguments through and use your latest saved shared models.", "Ejecuta estos comandos desde cualquier terminal de proyecto. Pasan los argumentos y usan los últimos modelos compartidos guardados.")),
+		u.note(u.tr("Keep Kilo Proxy open. The commands start its saved connection if stopped; install Codex CLI, Claude Code or Oh My Pi separately.", "Mantén Kilo Proxy abierto. Los comandos inician la conexión guardada si está detenida; instala Codex CLI, Claude Code u Oh My Pi por separado.")),
+	}
+	children = append(children, u.note(u.tr("Installs to ~/.local/bin and configures PATH for zsh, bash or fish.", "Se instalan en ~/.local/bin y configuran PATH para zsh, bash o fish.")))
 	label := u.tr("Install terminal commands", "Instalar comandos de terminal")
 	if s.Info.Installed {
 		label = u.tr("Update terminal commands", "Actualizar comandos de terminal")
@@ -118,14 +122,14 @@ func (u *nativeUI) terminalCommandsPanel() layout.Widget {
 		label = u.tr("Installing terminal commands…", "Instalando comandos de terminal…")
 	}
 	children = append(children, u.pills(
-		u.disabled(s.Checked && s.Info.Supported && !checking && !installing, u.button("terminal-commands.install", label, func() { u.requestTerminalCommands("POST") })),
+		u.disabled(s.Checked && s.Info.Supported && !checking && !installing, u.primaryButton("terminal-commands.install", label, func() { u.requestTerminalCommands("POST") })),
 		u.disabled(!checking && !installing, u.button("terminal-commands.refresh", u.tr("Check installation", "Comprobar instalación"), func() { u.requestTerminalCommands("GET") })),
 	))
 	if checking {
-		children = append(children, u.note(u.tr("Checking terminal commands…", "Comprobando comandos de terminal…")))
+		children = append(children, u.statusBadge(nativeToneInfo, u.tr("Checking terminal commands…", "Comprobando comandos de terminal…")))
 	}
 	if s.Error != "" {
-		children = append(children, u.note(nativeTerminalCommandsMessage(s.Error, u.language)))
+		children = append(children, u.message(nativeToneError, nativeTerminalCommandsMessage(s.Error, u.language)))
 	}
 	if s.Checked && s.Info.Directory != "" {
 		prefix := u.tr("Install location: ", "Carpeta de instalación: ")
@@ -138,7 +142,7 @@ func (u *nativeUI) terminalCommandsPanel() layout.Widget {
 		if s.Info.PathConfigured {
 			children = append(children, u.note(u.tr("Open a new terminal to use the commands from PATH.", "Abre una terminal nueva para usar los comandos desde PATH.")))
 		} else {
-			children = append(children, u.note(u.tr("Add the install location to your shell's PATH, or run the commands using their full paths below.", "Añade la carpeta de instalación al PATH de tu shell, o ejecuta los comandos con las rutas completas que aparecen abajo.")))
+			children = append(children, u.note(u.tr("Add the install location to your shell's PATH, or use the full paths below.", "Añade la carpeta de instalación al PATH del shell o usa las rutas completas de abajo.")))
 		}
 		if len(s.Info.StartupFiles) > 0 {
 			children = append(children, u.note(u.tr("Shell startup files: ", "Archivos de inicio del shell: ")+strings.Join(s.Info.StartupFiles, ", ")))
@@ -149,15 +153,41 @@ func (u *nativeUI) terminalCommandsPanel() layout.Widget {
 				if !s.Info.PathConfigured {
 					command = helperShellQuote(path)
 				}
-				copyAction := u.button("terminal-commands.copy."+name, u.tr("Copy ", "Copiar ")+name, func() { u.copy(command) })
-				copyButton := func(gtx layout.Context) layout.Dimensions {
-					gtx.Constraints.Min.X = min(gtx.Constraints.Max.X, gtx.Dp(164))
-					gtx.Constraints.Max.X = gtx.Constraints.Min.X
-					return copyAction(gtx)
-				}
-				children = append(children, u.actionRow(u.code("terminal-commands.command."+name, command), copyButton))
+				children = append(children, u.actionRow(
+					u.terminalCommandCode("terminal-commands.command."+name, command),
+					u.iconButton("terminal-commands.copy."+name, u.tr("Copy ", "Copiar ")+name, nativeButtonSecondary, nativeIconCopy, func() { u.copyTerminalCommand(command) }),
+				))
 			}
 		}
 	}
-	return u.card(children...)
+	return nativeSettingsPanelWithGap(u.section(u.tr("Terminal commands", "Comandos de terminal"), u.tr("Install and run shortcuts for the coding CLIs you use.", "Instala y ejecuta accesos directos para tus CLI de programación."), children...))
+}
+
+func (u *nativeUI) terminalCommandCode(id, value string) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		e := u.editor(id)
+		e.ReadOnly = true
+		e.SingleLine = false
+		e.MaxLen = 0
+		e.Mask = 0
+		if e.Text() != value {
+			e.SetText(value)
+		}
+		gtx.Constraints.Min.X = gtx.Constraints.Max.X
+		return nativeBox(gtx, nativeSurfaceAlt, func(gtx layout.Context) layout.Dimensions {
+			return layout.UniformInset(12).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				style := material.Editor(u.theme, e, "")
+				style.Font.Typeface = "Go Mono"
+				style.TextSize = 13
+				return style.Layout(gtx)
+			})
+		})
+	}
+}
+
+func (u *nativeUI) copyTerminalCommand(value string) {
+	u.copy(value)
+	if u.noticeTone == nativeToneSuccess {
+		u.setNotice(nativeToneSuccess, u.tr("Copied", "Copiado"))
+	}
 }

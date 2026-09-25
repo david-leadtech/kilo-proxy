@@ -63,13 +63,13 @@ func TestNativeLabMenuPointerAndCrossClientState(t *testing.T) {
 			h.click("Models", semantic.Button)
 			h.click("Add models", semantic.Button)
 			before, _ := json.Marshal(selection)
-			h.click("All labs  ▾", semantic.Button)
+			h.click("All labs", semantic.Button)
 			h.click("Anthropic", semantic.Button)
 			if h.u.value("models.lab") != "anthropic" || h.u.expanded["models.lab"] {
 				t.Fatal("lab selection did not apply or close menu")
 			}
-			h.click("Anthropic  ▾", semantic.Button)
-			h.click("Code Mode Rank  ▾", semantic.Button)
+			h.click("Anthropic", semantic.Button)
+			h.click("Code Mode Rank", semantic.Button)
 			if h.u.expanded["models.lab"] || !h.u.expanded["models.sort"] {
 				t.Fatal("opening sort left both menus open")
 			}
@@ -81,12 +81,12 @@ func TestNativeLabMenuPointerAndCrossClientState(t *testing.T) {
 			if h.u.value("models.lab") != "anthropic" || h.u.value("models.sort") != "speed" {
 				t.Fatal("navigation lost catalog preferences")
 			}
-			h.click("Anthropic  ▾", semantic.Button)
-			h.click("provider/model", semantic.Editor)
+			h.click("Anthropic", semantic.Button)
+			h.click("Search models", semantic.Editor)
 			if h.u.expanded["models.lab"] || !h.router.Source().Focused(h.u.editor("client:shared:search")) {
 				t.Fatal("outside click did not close labs and focus search")
 			}
-			h.click("Anthropic  ▾", semantic.Button)
+			h.click("Anthropic", semantic.Button)
 			h.router.Queue(key.Event{Name: key.NameEscape, State: key.Press})
 			h.frame()
 			h.frame()
@@ -95,7 +95,7 @@ func TestNativeLabMenuPointerAndCrossClientState(t *testing.T) {
 			}
 			h.u.models = nil
 			h.frame()
-			h.click("Anthropic  ▾", semantic.Button)
+			h.click("Anthropic", semantic.Button)
 			h.click("All labs", semantic.Button)
 			if h.u.value("models.lab") != "" {
 				t.Fatal("could not reset lab after catalog changed")

@@ -33,15 +33,15 @@ func TestNativeModelMenuFitsWindowAndIsolatesScrolling(t *testing.T) {
 			h.u.page = "models"
 			h.u.expanded["library.catalog"] = true
 			h.frame()
-			before := h.target("All labs  ▾", semantic.Button).Desc.Bounds
+			before := h.target("All labs", semantic.Button).Desc.Bounds
 			nativeMenuWheel(h, image.Pt(size.X-50, before.Min.Y-10), 40)
-			after := h.target("All labs  ▾", semantic.Button).Desc.Bounds
+			after := h.target("All labs", semantic.Button).Desc.Bounds
 			if before.Min.Y == after.Min.Y {
 				t.Fatal("fixture did not scroll the parent page before opening its menu")
 			}
-			h.click("All labs  ▾", semantic.Button)
+			h.click("All labs", semantic.Button)
 			pageBefore := h.u.list("page.models").Position
-			first := h.target("● All labs", semantic.Button).Desc.Bounds
+			first := h.target("Lab 00", semantic.Button).Desc.Bounds
 			nativeMenuWheel(h, first.Min.Add(image.Pt(12, 12)), 3000)
 			if !h.u.expanded["models.lab"] {
 				t.Fatal("scrolling labs dismissed the menu")
@@ -62,12 +62,12 @@ func TestNativeModelMenuFitsWindowAndIsolatesScrolling(t *testing.T) {
 			if h.u.value("models.lab") != "z-ai" {
 				t.Fatal("the final lab was not selectable after scrolling")
 			}
-			h.click("Z.ai  ▾", semantic.Button)
+			h.click("Z.ai", semantic.Button)
 			nativeMenuWheel(h, image.Pt(size.X-40, after.Min.Y-10), -30)
 			if h.u.expanded["models.lab"] {
 				t.Fatal("scrolling outside the menu did not dismiss it")
 			}
-			h.click("Z.ai  ▾", semantic.Button)
+			h.click("Z.ai", semantic.Button)
 			h.size.X += 40
 			h.frame()
 			if h.u.expanded["models.lab"] {

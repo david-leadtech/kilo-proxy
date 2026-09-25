@@ -16,23 +16,24 @@ import (
 )
 
 type modelInfo struct {
-	CodeModeRank     *float64 `json:"codeModeRank"`
-	CodingIndex      *float64 `json:"codingIndex"`
-	Speed            *float64 `json:"speed"`
-	ReasoningEfforts []string `json:"reasoningEfforts,omitempty"`
-	ID               string   `json:"id"`
-	Name             string   `json:"name"`
-	Provider         string   `json:"provider"`
-	ContextWindow    int      `json:"contextWindow,omitempty"`
-	MaxOutputTokens  int      `json:"maxOutputTokens,omitempty"`
-	InputModalities  []string `json:"inputModalities,omitempty"`
-	OutputModalities []string `json:"outputModalities,omitempty"`
-	Tools            *bool    `json:"tools"`
-	Reasoning        *bool    `json:"reasoning"`
-	InputPrice       *float64 `json:"inputPrice"`
-	OutputPrice      *float64 `json:"outputPrice"`
-	MayTrain         *bool    `json:"mayTrain"`
-	ExpirationDate   string   `json:"expirationDate,omitempty"`
+	CodeModeRank     *float64             `json:"codeModeRank"`
+	CodingIndex      *float64             `json:"codingIndex"`
+	Speed            *float64             `json:"speed"`
+	ReasoningEfforts []string             `json:"reasoningEfforts,omitempty"`
+	ID               string               `json:"id"`
+	Name             string               `json:"name"`
+	Provider         string               `json:"provider"`
+	ContextWindow    int                  `json:"contextWindow,omitempty"`
+	MaxOutputTokens  int                  `json:"maxOutputTokens,omitempty"`
+	InputModalities  []string             `json:"inputModalities,omitempty"`
+	OutputModalities []string             `json:"outputModalities,omitempty"`
+	Tools            *bool                `json:"tools"`
+	Reasoning        *bool                `json:"reasoning"`
+	InputPrice       *float64             `json:"inputPrice"`
+	OutputPrice      *float64             `json:"outputPrice"`
+	MayTrain         *bool                `json:"mayTrain"`
+	ExpirationDate   string               `json:"expirationDate,omitempty"`
+	Recommendation   *modelRecommendation `json:"recommendation,omitempty"`
 }
 type catalogError struct {
 	status  int
@@ -94,11 +95,15 @@ func (a *app) fetchModels(ctx context.Context, requireAccount bool) ([]modelInfo
 	// Public rankings enrich available gateway models; they never determine
 	// availability, model identity, organization pricing, or capabilities.
 	metrics := a.publicModelMetrics(ctx)
+	recommendations := a.modelRecommendations(ctx)
 	for i := range models {
 		if metric, ok := metrics[models[i].ID]; ok {
 			models[i].CodeModeRank = metric.codeModeRank
 			models[i].CodingIndex = metric.codingIndex
 			models[i].Speed = metric.speed
+		}
+		if recommendation, ok := recommendations[models[i].ID]; ok {
+			models[i].Recommendation = &recommendation
 		}
 	}
 	a.mu.Lock()

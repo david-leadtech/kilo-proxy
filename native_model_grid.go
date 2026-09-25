@@ -48,9 +48,14 @@ func nativeModelGridRow(columns, gap int, cards []layout.Widget) layout.Widget {
 }
 
 func (u *nativeUI) modelGrid(id string, ids []string, cards []layout.Widget) layout.Widget {
+	return u.modelGridLayout(id, ids, cards, len(cards) > 6)
+}
+
+// modelGridLayout lays cards in responsive columns. A scrolling grid caps its
+// height; a short curated list passes scroll=false so every card stays visible.
+func (u *nativeUI) modelGridLayout(id string, ids []string, cards []layout.Widget, scroll bool) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		gap := gtx.Dp(12)
-		scroll := len(cards) > 6
 		width := gtx.Constraints.Max.X
 		if scroll {
 			width -= gtx.Dp(14)
@@ -99,14 +104,11 @@ func (u *nativeUI) modelGrid(id string, ids []string, cards []layout.Widget) lay
 }
 
 func (u *nativeUI) modelPriceCells(m modelInfo) layout.Widget {
-	cell := func(label string, price *float64) layout.Widget {
-		return u.column(u.eyebrow(label), u.textStyle(18, nativeTokenPrice(price), nativeColor(0x293b26), font.SemiBold))
-	}
 	return func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{}.Layout(gtx,
-			layout.Flexed(1, cell(u.tr("Input / 1M", "Entrada / 1M"), m.InputPrice)),
-			layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
-			layout.Flexed(1, cell(u.tr("Output / 1M", "Salida / 1M"), m.OutputPrice)),
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+			layout.Flexed(1, u.textStyle(18, nativeTokenPrice(m.InputPrice)+" / "+nativeTokenPrice(m.OutputPrice), nativeInk, font.SemiBold)),
+			layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+			layout.Rigid(u.note(u.tr("USD / 1M", "USD / 1M"))),
 		)
 	}
 }
