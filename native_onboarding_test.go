@@ -31,7 +31,8 @@ func nativeFreshOnboarding(t *testing.T) *nativeUI {
 	u.refreshState()
 	nativeTestWait(t, u, func() bool { return !u.busy["GET/api/state"] && nativeString(u.state, "orgId") == "" })
 	u.setValue("connection.key", "")
-	u.setChecked("connection.remember", false)
+	// A fresh install starts with Remember checked.
+	u.setChecked("connection.remember", nativeRememberDefault(false, false))
 	u.beginSetup()
 	return u
 }
@@ -186,7 +187,9 @@ func TestNativeOnboardingManualPointerWalkthrough(t *testing.T) {
 	h.typeText("synthetic-kilo-personal-key")
 	h.click("org_…", semantic.Editor)
 	h.typeText("e2e-team")
-	h.click("Remember my login in the system credential store", semantic.CheckBox)
+	if !u.checked("connection.remember") {
+		t.Fatal("remember must start checked for a first login")
+	}
 	h.click("Save & choose models", semantic.Button)
 	nativeTestWait(t, u, func() bool {
 		return u.setupStep == setupModels && !u.busy["GET/api/state"] && !u.busy["POST/api/models"] && len(u.models) == 2
@@ -203,10 +206,10 @@ func TestNativeOnboardingManualPointerWalkthrough(t *testing.T) {
 	if u.setupStep != setupModels {
 		t.Fatal("reachable models step could not be reopened from the stepper")
 	}
-	search := h.target("Search models", semantic.Editor).Desc.Bounds
+	search := h.target("Search by name, lab or ID", semantic.Editor).Desc.Bounds
 	u.list("page.setup").Position.Offset = max(0, search.Min.Y-350)
 	h.frame()
-	h.click("Search models", semantic.Editor)
+	h.click("Search by name, lab or ID", semantic.Editor)
 	h.typeText("vendor/one")
 	if u.value("client:shared:search") != "vendor/one" {
 		t.Fatal("pointer focus and keyboard input did not reach the model search")
@@ -611,8 +614,8 @@ func TestNativeOnboardingDeviceLoginPendingCancelledAndApproved(t *testing.T) {
 	h.click("Save & choose models", semantic.Button)
 	nativeTestWait(t, u, func() bool { return u.setupStep == setupModels && !u.busy["GET/api/state"] })
 	saved, err := readSettings(u.owner.dir)
-	if err != nil || saved.OrgID != "e2e-team" || saved.Remember {
-		t.Fatalf("selected SSO team was not saved, or remember was enabled implicitly: %+v, %v", saved, err)
+	if err != nil || saved.OrgID != "e2e-team" || !saved.Remember {
+		t.Fatalf("selected SSO team was not saved, or the default remember choice was lost: %+v, %v", saved, err)
 	}
 	u.owner.mu.Lock()
 	effectiveKey := u.owner.apiKey

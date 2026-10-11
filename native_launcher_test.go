@@ -236,10 +236,10 @@ func TestNativeLaunchPreparesEveryClientAndKeepsCommandsSeparate(t *testing.T) {
 }
 
 func TestNativeLaunchPreservesEditsWhilePreparing(t *testing.T) {
-	for _, field := range []string{"model", "directory", "appPath"} {
+	for _, field := range []string{"model", "directory", "folder", "appPath"} {
 		t.Run(field, func(t *testing.T) {
 			key := "codex"
-			if field == "directory" {
+			if field == "directory" || field == "folder" {
 				key = "codex-cli"
 			}
 			u, r := nativeLaunchTestUI(t, key, true, false)
@@ -251,7 +251,10 @@ func TestNativeLaunchPreservesEditsWhilePreparing(t *testing.T) {
 			case "model":
 				u.setValue(nativeClientField(sharedModelKey, "vendor/one", "name"), "Newest name")
 			case "directory":
-				u.setValue("clients-project-directory", t.TempDir())
+				u.setValue(agentProjectField(key), t.TempDir())
+			case "folder":
+				// The general folder applies to every harness without an override.
+				u.agentsState().Preferences.Folder = t.TempDir()
 			case "appPath":
 				u.setValue("clients-launch-app-path", "/different/Codex.app")
 			}
@@ -487,7 +490,7 @@ func TestNativeLaunchPointerProjectControls(t *testing.T) {
 				u.setChecked("client:codex:selected", true)
 				h := &nativePointerHarness{t: t, u: u, size: size, now: time.Now()}
 				h.frame()
-				label := u.tr("Open", "Abrir")
+				label := u.tr("Open Codex", "Abrir Codex")
 				nativeScrollClientControlIntoView(h, label, semantic.Button)
 				button := h.target(label, semantic.Button)
 				if !button.Desc.Bounds.In(image.Rectangle{Max: size}) {
@@ -538,7 +541,7 @@ func TestNativeClosedCatalogControlsStayInsidePage(t *testing.T) {
 	u.models = nativeGridModels()
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(720, 700), now: time.Now()}
 	h.frame()
-	bounds := h.target("All labs", semantic.Button).Desc.Bounds
+	bounds := h.target("Filters", semantic.Button).Desc.Bounds
 	u.list("page.models").Position.Offset = bounds.Min.Y + bounds.Size().Y/2 - 40
 	h.frame()
 	offset := u.list("page.models").Position.Offset
@@ -554,7 +557,7 @@ func TestNativeClosedCatalogControlsStayInsidePage(t *testing.T) {
 	h.router.Queue(pointer.Event{Kind: pointer.Release, Source: pointer.Mouse, Position: p})
 	h.frame()
 	h.frame()
-	if u.expanded["models.lab"] {
+	if u.uxmMenuOpen("models.filters") {
 		t.Fatal("scrolled-out filter trigger intercepted a click in the fixed header")
 	}
 }

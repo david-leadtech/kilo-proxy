@@ -120,7 +120,7 @@ func (u *nativeUI) setupConnectionContinue() {
 		}
 		u.setNotice(nativeToneNeutral, "")
 		u.setSetupStep(setupModels)
-		u.expanded["library.catalog"] = len(u.library.selection.Models) == 0
+		u.expanded["library.catalog"] = false
 		u.models, u.catalogCached = nil, false
 		// Fetch after the saved connection revision reaches the UI, so a
 		// previous account's catalog cannot win a concurrent refresh.
@@ -335,7 +335,8 @@ func (u *nativeUI) setupStepCircle(step int) layout.Widget {
 			}
 		case step == u.setupStep:
 			square(0, nativeInk)
-			content = u.monoStyle(12, fmt.Sprint(step+1), nativeSurface, font.Bold)
+			square(gtx.Dp(nativeLine), nativeCitrus)
+			content = u.monoStyle(12, fmt.Sprint(step+1), nativeInk, font.Bold)
 		default:
 			square(0, nativeInk)
 			square(gtx.Dp(nativeLine), nativeBg)
@@ -366,22 +367,13 @@ func (u *nativeUI) setupPanel() layout.Widget {
 	var content layout.Widget
 	switch u.setupStep {
 	case setupModels:
-		count := len(u.library.selection.Models)
-		tone := nativeToneWarning
-		if count > 0 {
-			tone = nativeToneSuccess
+		if u.setupContinueWhenSaved {
+			if _, ready := u.libraryStatus(); ready && len(u.library.selection.Models) > 0 {
+				u.setupContinueWhenSaved = false
+				u.setupModelsContinue()
+			}
 		}
-		badge := u.statusBadge(tone, fmt.Sprintf(u.tr("%d selected", "%d seleccionados"), count))
-		introChildren := []layout.Widget{badge}
-		if count > 0 {
-			introChildren = append(introChildren, u.sharedDefaultPicker())
-		}
-		intro := u.section(u.tr("Choose your models", "Elige tus modelos"), u.tr("Your agents will share this curated model list.", "Tus agentes compartirán esta lista de modelos."), introChildren...)
-		children := []layout.Widget{intro}
-		if count == 0 {
-			children = append(children, u.hint(u.tr("Choose at least one model to continue.", "Elige al menos un modelo para continuar.")))
-		}
-		content = u.column(append(children, u.modelsPanel())...)
+		content = u.setupModelsStep()
 	case setupReady:
 		account := nativeString(u.state, "accountEmail")
 		if account == "" {
@@ -423,7 +415,7 @@ func (u *nativeUI) setupPanel() layout.Widget {
 			u.setupSummaryRowWidget(u.tr("Connected accounts", "Cuentas conectadas"), account),
 			u.setupSummaryRowWidget(u.tr("Models", "Modelos"), modelCount),
 			u.setupSummaryRowWidget(u.tr("Default model", "Modelo predeterminado"), defaultModel),
-			u.pills(u.button("setup.connection-settings", u.tr("Connection settings", "Ajustes de conexión"), func() { u.page = "settings" })),
+			u.pills(u.button("setup.connection-settings", u.tr("Connection settings", "Ajustes de conexión"), func() { u.page, u.settingsTab = "settings", "account" })),
 		)
 		content = u.column(u.banner(nativeToneSuccess, u.tr("You're ready", "Todo está listo")), summary)
 	default:
@@ -453,8 +445,7 @@ func (u *nativeUI) setupFooter() layout.Widget {
 		}
 	case setupModels:
 		back = u.button("setup.back-account", u.tr("Back", "Atrás"), func() { u.setSetupStep(setupConnect) })
-		_, ready := u.libraryStatus()
-		primary = u.disabled(ready && len(u.library.selection.Models) > 0, u.primaryButton("primary.setup.models-next", u.tr("Continue", "Continuar"), u.setupModelsContinue))
+		primary = u.uxmSetupPrimary()
 	case setupReady:
 		back = u.button("setup.back-models", u.tr("Back", "Atrás"), func() { u.setSetupStep(setupModels) })
 		label := u.tr("Start proxy and go to agents", "Arrancar proxy e ir a agentes")
@@ -525,7 +516,7 @@ func (u *nativeUI) setupConnectionPanel() layout.Widget {
 	if u.expanded["setup.manual"] {
 		widgets = append(widgets, u.disabled(editable, u.field("connection.key", u.tr("Personal API key", "API key personal"), u.tr("Leave blank to keep the current key", "Deja vacío para mantener la clave"), true)), u.disabled(editable, u.field("connection.org", u.tr("Organization ID", "ID de organización"), "org_…", false)))
 	} else if hasKey && u.value("connection.org") != "" {
-		widgets = append(widgets, u.note(u.tr("Selected team ID: ", "ID de equipo seleccionado: ")+u.value("connection.org")))
+		widgets = append(widgets, u.note(u.tr("Selected team: ", "Equipo seleccionado: ")+u.teamName(u.value("connection.org"))))
 	}
 	widgets = append(widgets, u.disabled(editable, u.check("connection.remember", u.tr("Remember my login in the system credential store", "Recordar mi sesión en el almacén del sistema"), nil)), u.hint(u.tr("Remember saves your login in the system credential store, so you stay signed in after quitting.", "Recordar guarda tu inicio de sesión en el almacén del sistema para mantener la sesión al volver a abrir la aplicación.")))
 	if hasKey || u.expanded["setup.manual"] {

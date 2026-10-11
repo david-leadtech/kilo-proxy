@@ -68,6 +68,7 @@ func TestNativeRecommendedModelsKeepChosenDefault(t *testing.T) {
 	}
 	// Unchecking a recommendation removes only that model.
 	h.frame()
+	h.reveal("Claude Sonnet 4.6", semantic.CheckBox)
 	h.click("Claude Sonnet 4.6", semantic.CheckBox)
 	if s.choice("anthropic/claude-sonnet-4.6") != nil || len(s.Models) != 3 {
 		t.Fatalf("unchecking did not remove the recommendation: %v", s.ids())
@@ -85,20 +86,29 @@ func TestNativeSetupShowsEveryRecommendedModelAndChoosesDefault(t *testing.T) {
 		u.models[i].Recommendation = &modelRecommendation{Rank: i + 1, Default: i == 0}
 	}
 	last := u.models[len(u.models)-1]
-	h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 820), now: time.Now()}
+	h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 1500), now: time.Now()}
 	h.frame()
-	h.click("Add all (12)", semantic.Button)
+	h.click("Filters", semantic.Button)
+	u.clickable("client:shared:select-all").Click()
+	h.frame()
 	s := u.library.selection
 	if len(s.Models) != 12 || s.Initial != u.models[0].ID {
 		t.Fatalf("add all: %v default %s", s.ids(), s.Initial)
 	}
 	h.frame()
-	h.click(u.models[0].Name, semantic.Button)
-	h.click(u.models[2].Name, semantic.Button)
+	// Back on the compact list, the star on a row is the only way to choose the default.
+	h.click("Done", semantic.Button)
+	if _, ok := u.buttons["setup.default:"+u.models[2].ID]; !ok {
+		t.Fatal("setup list offers no default action for a selected model")
+	}
+	u.clickable("setup.default:" + u.models[2].ID).Click()
+	h.frame()
 	if s.Initial != u.models[2].ID {
-		t.Fatalf("setup default picker did not change the default: %s", s.Initial)
+		t.Fatalf("setup default star did not change the default: %s", s.Initial)
 	}
 	// The last recommended card is laid out in the page, not hidden in a nested scroll.
+	u.expanded["library.catalog"] = true
+	h.frame()
 	h.reveal(last.Name, semantic.CheckBox)
 	h.click(last.Name, semantic.CheckBox)
 	if s.choice(last.ID) != nil {
@@ -129,20 +139,40 @@ func TestNativeOnboardingShowsRecommendedModelsAfterConnection(t *testing.T) {
 		return u.setupStep == setupModels && !u.busy["GET/api/state"] && !u.busy["POST/api/models"] && len(u.models) == 2
 	})
 	h.frame()
-	if !u.expanded["library.catalog"] {
-		t.Fatal("setup no longer opens the catalog after the connection step")
+	if u.expanded["library.catalog"] || !h.selected("Recommended", semantic.RadioButton) {
+		t.Fatal("setup does not start from the recommended set after the connection step")
 	}
 	nativeGridCapture(t, h, "setup-recommended-after-connection")
 	// Two of the three published IDs exist in this team's catalog.
-	h.click("Add all (2)", semantic.Button)
+	h.click("Use recommended & continue", semantic.Button)
+	nativeTestWait(t, u, func() bool {
+		h.frame()
+		return u.setupStep == setupReady
+	})
 	s := u.library.selection
-	if !slices.Equal(s.ids(), []string{"vendor/one", "anthropic/claude-sonnet-4.6"}) || s.Initial != "anthropic/claude-sonnet-4.6" {
-		t.Fatalf("wizard recommendations added %v with default %s", s.ids(), s.Initial)
+	if !slices.Equal(s.ids(), []string{"vendor/one", "anthropic/claude-sonnet-4.6"}) || s.Initial != "anthropic/claude-sonnet-4.6" || u.library.startingPack != modelLibraryStartRecommended {
+		t.Fatalf("wizard recommendations added %v with default %s from %q", s.ids(), s.Initial, u.library.startingPack)
 	}
-	nativeTestWait(t, u, func() bool { _, ready := u.libraryStatus(); return ready })
+}
+
+// One click accepts the recommendations, keeps the published default and
+// advances once the library is saved.
+func TestNativeSetupUseRecommendedAndContinue(t *testing.T) {
+	u := nativeTestUI(t)
+	u.page, u.setupStep = "setup", setupModels
+	u.models = nativeGridModels()
+	for i := range u.models[:4] {
+		u.models[i].Recommendation = &modelRecommendation{Rank: i + 1, Default: i == 1}
+	}
+	h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 820), now: time.Now()}
 	h.frame()
-	h.click("Continue", semantic.Button)
-	if u.setupStep != setupReady {
-		t.Fatal("recommended models did not satisfy the models step")
+	h.click("Use recommended & continue", semantic.Button)
+	nativeTestWait(t, u, func() bool {
+		h.frame()
+		return u.setupStep == setupReady
+	})
+	s := u.library.selection
+	if len(s.Models) != 4 || s.Initial != u.models[1].ID {
+		t.Fatalf("recommended set not applied: %v default %s", s.ids(), s.Initial)
 	}
 }

@@ -15,10 +15,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"gioui.org/font"
 	"gioui.org/io/semantic"
 	"gioui.org/layout"
+	"gioui.org/op/clip"
+	"gioui.org/op/paint"
 	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget"
@@ -34,6 +37,8 @@ type nativeUI struct {
 	catalogGeneration   uint64
 	catalogCached       bool
 	catalogFetchedAt    time.Time
+	teamNameAsked       string                    // team whose name was already requested in the background
+	appIcons            map[string]*nativeAppIcon // application icons by bundle path, loaded in the background
 	library             *nativeLibrary
 	packs               *nativePackUI
 	agents              *nativeAgents
@@ -54,7 +59,6 @@ type nativeUI struct {
 	contextRemovalTag   int
 
 	imageDependencyDismissed    bool
-	imageSettingsFocus          bool
 	updateRevision              uint64
 	updateRequestFailed         bool
 	packageUpdateConfirmVersion string
@@ -81,16 +85,25 @@ type nativeUI struct {
 	client, language, page, notice string
 	noticeTone                     nativeTone
 	authenticated, laidOut         bool
-	lastOrg                        string
-	trace                          *requestTrace
-	traceStage                     string
+	sidebarVisible                 bool
+	settingsTab                    string
+	uxSettings                     *uxsSettingsState
+	// setupContinueWhenSaved advances setup once accepted recommendations are saved.
+	setupContinueWhenSaved bool
+	lastOrg                string
+	trace                  *requestTrace
+	traceStage             string
 }
+
+// nativeRememberDefault keeps a saved login's choice. Without a saved login the
+// box starts checked, so people who sign in stay signed in after quitting.
+func nativeRememberDefault(remember, hasKey bool) bool { return remember || !hasKey }
 
 func newNativeUI(owner *app, invalidate func()) *nativeUI {
 	t := material.NewTheme()
 	t.Shaper = text.NewShaper(text.WithCollection(nativeFonts()))
 	t.TextSize = 14
-	t.Face = "Inter"
+	t.Face = nativeSansFace
 	t.Bg, t.Fg = nativeBg, nativeText
 	t.ContrastBg, t.ContrastFg = nativeInk, nativeSurface
 	u := &nativeUI{owner: owner, invalidate: invalidate, theme: t, updates: make(chan func(), 128), editors: map[string]*widget.Editor{}, buttons: map[string]*widget.Clickable{}, checks: map[string]*widget.Bool{}, lists: map[string]*widget.List{}, expanded: map[string]bool{}, busy: map[string]bool{}, state: map[string]any{}, client: "codex", page: "agents", traceStage: "request"}
@@ -101,7 +114,7 @@ func newNativeUI(owner *app, invalidate func()) *nativeUI {
 	catalog := readNativeCachedCatalog(owner.dir, owner.catalogScopeLocked())
 	u.models, u.catalogFetchedAt = catalog.Models, catalog.FetchedAt
 	u.catalogCached = len(u.models) > 0
-	u.setChecked("connection.remember", owner.config.Remember)
+	u.setChecked("connection.remember", nativeRememberDefault(owner.config.Remember, owner.apiKey != ""))
 	owner.mu.Unlock()
 	u.initModelLibrary()
 	if u.setupNeeded() {
@@ -186,10 +199,13 @@ func (u *nativeUI) label(s string) layout.Widget {
 	return u.textStyle(14, s, nativeText, font.Normal)
 }
 func (u *nativeUI) note(s string) layout.Widget {
-	return u.textStyle(12, s, nativeTextMuted, font.Normal)
+	return u.textStyle(13, s, nativeTextMuted, font.Normal)
 }
+
+// heading is the section title (Geist); Geist Mono is reserved for page titles,
+// eyebrows, disclosures and status so each typeface has one job.
 func (u *nativeUI) heading(s string) layout.Widget {
-	return u.monoStyle(17, s, nativeText, font.Bold)
+	return u.textStyle(18, s, nativeText, font.SemiBold)
 }
 func (u *nativeUI) subheading(s string) layout.Widget {
 	return u.textStyle(14, s, nativeText, font.SemiBold)
@@ -223,35 +239,42 @@ func (u *nativeUI) buttonWidget(id, label string, kind nativeButtonKind, icon *w
 				}
 			}
 		}
+		inline := kind == nativeButtonGhost || kind == nativeButtonLink || kind == nativeButtonDisclosure
+		expanded := false
+		if kind == nativeButtonDisclosure {
+			// For a disclosure "selected" means expanded; it never takes the selection colour.
+			expanded, selected = selected, false
+		}
 		background, foreground, border, borderWidth := nativeSurface, nativeInk, nativeBorderStrong, nativeLine
 		switch kind {
 		case nativeButtonPrimary:
 			background, foreground, border = nativeAccent, nativeSurface, nativeAccent
-		case nativeButtonGhost:
-			background, border = color.NRGBA{}, color.NRGBA{}
 		case nativeButtonDanger:
 			foreground, border = nativeErrorFG, nativeErrorLine
+		}
+		if inline {
+			background, border = color.NRGBA{}, color.NRGBA{}
 		}
 		if selected {
 			background, foreground, border, borderWidth = nativeSelected, nativeInk, nativeInk, nativeLineHeavy
 		}
 		if !gtx.Enabled() {
 			foreground = nativeTextDisabled
-			if kind != nativeButtonGhost {
-				background, border = nativeSurfaceAlt, color.NRGBA{}
+			if !inline {
+				background, border = nativeDisabledBG, color.NRGBA{}
 			}
 		} else if b.Hovered() {
-			switch kind {
-			case nativeButtonPrimary:
+			switch {
+			case kind == nativeButtonPrimary:
 				background = nativeAccentHover
-			case nativeButtonDanger:
+			case kind == nativeButtonDanger:
 				background = nativeErrorBG
+			case inline:
+				background = nativeIvory
+			case selected:
+				background = nativeSelected
 			default:
-				if selected {
-					background = nativeSelected
-				} else {
-					background = nativeSurfaceAlt
-				}
+				background = nativeSurfaceAlt
 			}
 		}
 		if selected && icon == nil {
@@ -262,38 +285,75 @@ func (u *nativeUI) buttonWidget(id, label string, kind nativeButtonKind, icon *w
 			weight = font.SemiBold
 		}
 		inset := layout.Inset{Top: 9, Bottom: 9, Left: 14, Right: 14}
+		if inline {
+			inset.Left, inset.Right = 4, 4
+		}
 		gtx.Constraints.Min.Y = max(gtx.Constraints.Min.Y, gtx.Dp(36))
+		text := u.textStyle(13, label, foreground, weight)
+		if kind == nativeButtonDisclosure {
+			sign := "+ "
+			if expanded {
+				sign = "− "
+			}
+			// Short labels read as brutalist tags; long phrases stay legible in Geist.
+			if utf8.RuneCountInString(label) <= 16 {
+				text = u.monoStyle(13, sign+strings.ToUpper(label), foreground, font.Bold)
+			} else {
+				text = u.textStyle(13, sign+label, foreground, font.SemiBold)
+			}
+		}
+		if inline {
+			text = nativeUnderlined(text, foreground)
+		}
 		buttonBackground := material.ButtonLayout(u.theme, b)
 		buttonBackground.Background, buttonBackground.CornerRadius = background, 0
-		return widget.Border{Color: border, Width: borderWidth}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return buttonBackground.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				semantic.LabelOp(label).Add(gtx.Ops)
-				if selected {
-					semantic.SelectedOp(true).Add(gtx.Ops)
-				}
-				return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					iconWidget := func(gtx layout.Context) layout.Dimensions {
-						if icon == nil {
-							return layout.Dimensions{}
+		body := func(gtx layout.Context) layout.Dimensions {
+			return widget.Border{Color: border, Width: borderWidth}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return buttonBackground.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					semantic.LabelOp(label).Add(gtx.Ops)
+					if selected || expanded {
+						semantic.SelectedOp(true).Add(gtx.Ops)
+					}
+					return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						iconWidget := func(gtx layout.Context) layout.Dimensions {
+							if icon == nil {
+								return layout.Dimensions{}
+							}
+							gtx.Constraints.Min = image.Pt(gtx.Dp(16), gtx.Dp(16))
+							return icon.Layout(gtx, foreground)
 						}
-						gtx.Constraints.Min = image.Pt(gtx.Dp(16), gtx.Dp(16))
-						return icon.Layout(gtx, foreground)
-					}
-					iconGap := func(gtx layout.Context) layout.Dimensions {
-						if icon == nil {
-							return layout.Dimensions{}
+						iconGap := func(gtx layout.Context) layout.Dimensions {
+							if icon == nil {
+								return layout.Dimensions{}
+							}
+							return layout.Spacer{Width: 7}.Layout(gtx)
 						}
-						return layout.Spacer{Width: 7}.Layout(gtx)
-					}
-					// Plain text: a material.Button here would lay out the same Clickable twice.
-					textWidget := u.textStyle(13, label, foreground, weight)
-					if iconAfter {
-						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, layout.Rigid(textWidget), layout.Rigid(iconGap), layout.Rigid(iconWidget))
-					}
-					return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, layout.Rigid(iconWidget), layout.Rigid(iconGap), layout.Rigid(textWidget))
+						// Plain text: a material.Button here would lay out the same Clickable twice.
+						if iconAfter {
+							return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, layout.Rigid(text), layout.Rigid(iconGap), layout.Rigid(iconWidget))
+						}
+						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx, layout.Rigid(iconWidget), layout.Rigid(iconGap), layout.Rigid(text))
+					})
 				})
 			})
-		})
+		}
+		if kind == nativeButtonPrimary && gtx.Enabled() && !selected {
+			// The hard shadow marks the one action that matters on a surface.
+			return nativeHardShadowSized(gtx, nativePrimaryShadow, body)
+		}
+		return body(gtx)
+	}
+}
+
+// nativeUnderlined draws a permanent 1dp underline so inline controls read as
+// clickable before any hover.
+func nativeUnderlined(content layout.Widget, c color.NRGBA) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		dims := content(gtx)
+		y := dims.Size.Y + gtx.Dp(2)
+		paint.FillShape(gtx.Ops, c, clip.Rect{Min: image.Pt(0, y), Max: image.Pt(dims.Size.X, y+gtx.Dp(1))}.Op())
+		dims.Size.Y += gtx.Dp(3)
+		return dims
 	}
 }
 func (u *nativeUI) disabled(enabled bool, child layout.Widget) layout.Widget {
@@ -318,7 +378,7 @@ func (u *nativeUI) field(id, label, placeholder string, secret bool) layout.Widg
 			border, width = nativeInk, nativeLineHeavy
 		}
 		if !gtx.Enabled() {
-			background = nativeSurfaceAlt
+			background = nativeDisabledBG
 		}
 		return nativeBox(gtx, background, func(gtx layout.Context) layout.Dimensions {
 			return widget.Border{Color: border, Width: width}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -423,14 +483,15 @@ func (u *nativeUI) alignedRow(alignment layout.Alignment, children ...layout.Wid
 		return u.column(rows...)(gtx)
 	}
 }
+
+// card groups the controls for one thing (an agent, a notice). It is flat:
+// the hard shadow is reserved for primary actions.
 func (u *nativeUI) card(children ...layout.Widget) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
-		return nativeHardShadow(gtx, func(gtx layout.Context) layout.Dimensions {
-			return nativeBox(gtx, nativeSurface, func(gtx layout.Context) layout.Dimensions {
-				return widget.Border{Color: nativeBorder, Width: nativeLine}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					gtx.Constraints.Min.X = gtx.Constraints.Max.X
-					return layout.UniformInset(nativeSpace24).Layout(gtx, u.column(children...))
-				})
+		return nativeBox(gtx, nativeSurface, func(gtx layout.Context) layout.Dimensions {
+			return widget.Border{Color: nativeBorder, Width: nativeLine}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min.X = gtx.Constraints.Max.X
+				return layout.UniformInset(nativeSpace20).Layout(gtx, u.column(children...))
 			})
 		})
 	}
@@ -458,7 +519,7 @@ func (u *nativeUI) code(id, value string) layout.Widget {
 		gtx.Constraints.Max.Y = gtx.Dp(300)
 		return widget.Border{Color: nativeBorderStrong, Width: 1}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			style := material.Editor(u.theme, e, "")
-			style.Font.Typeface = "Go Mono"
+			style.Font.Typeface = nativeMonoFace
 			style.TextSize = 12
 			return layout.UniformInset(12).Layout(gtx, style.Layout)
 		})
@@ -682,7 +743,7 @@ func (u *nativeUI) acceptState(raw json.RawMessage) {
 	}
 	if first {
 		u.setValue("connection.port", fmt.Sprint(state["port"]))
-		u.setChecked("connection.remember", nativeBool(state, "remember"))
+		u.setChecked("connection.remember", nativeRememberDefault(nativeBool(state, "remember"), nativeBool(state, "hasKey")))
 		if warning := nativeString(state, "warning"); warning != "" {
 			u.setNotice(nativeToneWarning, nativeMessage(warning, u.language))
 		}
@@ -823,132 +884,6 @@ func (u *nativeUI) saveConnection(done func()) {
 		}
 	})
 }
-func (u *nativeUI) kiloConnectionPanel() layout.Widget {
-	auth := nativeMap(u.state["auth"])
-	pending := nativeString(auth, "status") == "pending" || nativeString(auth, "status") == "starting"
-	running := nativeBool(u.state, "running")
-	connectionBusy := false
-	for _, path := range []string{"/api/config", "/api/start", "/api/stop", "/api/forget", "/api/auth/start", "/api/auth/cancel", "/api/auth/organizations"} {
-		if u.busy["POST"+path] {
-			connectionBusy = true
-		}
-	}
-	editable := !running && !pending && !connectionBusy
-	hasKey := nativeBool(u.state, "hasKey")
-	account := []layout.Widget{}
-	if hasKey {
-		account = append(account, u.statusBadge(nativeToneSuccess, u.tr("Signed in", "Sesión iniciada")))
-		email := nativeString(u.state, "accountEmail")
-		if email == "" {
-			email = u.tr("Kilo credential connected", "Credencial de Kilo conectada")
-		}
-		account = append(account, u.label(email))
-		teamID := u.value("connection.org")
-		teamName := teamID
-		for _, raw := range nativeArray(u.state, "organizations") {
-			org := nativeMap(raw)
-			if nativeString(org, "id") == teamID && nativeString(org, "name") != "" {
-				teamName = nativeString(org, "name")
-				break
-			}
-		}
-		if teamName != "" {
-			account = append(account, u.note(u.tr("Team: ", "Equipo: ")+teamName))
-		}
-		account = append(account, u.pills(u.disabled(editable, u.dangerButton("connection.forget", u.tr("Sign out", "Cerrar sesión"), func() {
-			u.call("POST", "/api/forget", map[string]any{}, func(json.RawMessage) { u.setValue("connection.key", ""); u.refreshState() })
-		}))))
-	} else {
-		account = append(account, u.disabled(editable, u.primaryButton("connection.login", u.tr("Sign in with Kilo / SSO", "Iniciar sesión con Kilo / SSO"), u.beginKiloLogin)))
-	}
-	if pending {
-		account = append(account,
-			u.label(u.tr("Authorize this device in Kilo:", "Autoriza este dispositivo en Kilo:")+" "+nativeString(auth, "code")),
-			u.pills(
-				u.button("connection.verify", u.tr("Open authorization page", "Abrir autorización"), func() { u.open(nativeString(auth, "verificationUrl")) }),
-				u.button("connection.cancel", u.tr("Cancel login", "Cancelar inicio de sesión"), func() { u.call("POST", "/api/auth/cancel", map[string]any{}, u.acceptState) }),
-			),
-		)
-	}
-	if msg := nativeString(auth, "message"); msg != "" {
-		if nativeString(auth, "status") == "error" || nativeString(auth, "status") == "failed" {
-			account = append(account, u.message(nativeToneError, nativeMessage(msg, u.language)))
-		} else {
-			account = append(account, u.note(nativeMessage(msg, u.language)))
-		}
-	}
-	account = append(account, u.disabled(editable, u.disclosure("connection.reveal", u.tr("Use an API key instead", "Usar una API key"))))
-	if u.expanded["connection.reveal"] {
-		account = append(account, u.disabled(editable, u.field("connection.key", u.tr("Personal API key", "API key personal"), u.tr("Leave blank to keep the current key", "Deja vacío para mantener la clave"), true)))
-	}
-
-	teamChoices := []nativeChoice{}
-	for _, raw := range nativeArray(u.state, "organizations") {
-		org := nativeMap(raw)
-		id, name := nativeString(org, "id"), nativeString(org, "name")
-		if name == "" {
-			name = id
-		}
-		teamChoices = append(teamChoices, nativeChoice{Value: id, Label: name, Caption: id})
-	}
-	if len(teamChoices) > 0 {
-		account = append(account, u.optionCards("team.", teamChoices, u.value("connection.org"), editable, func(id string) { u.setValue("connection.org", id) }))
-	}
-	loadTeams := u.disabled(editable, u.button("connection.teams", u.tr("Load my teams", "Cargar mis equipos"), func() {
-		u.call("POST", "/api/auth/organizations", map[string]any{"apiKey": u.value("connection.key")}, u.acceptState)
-	}))
-	if len(teamChoices) == 0 {
-		account = append(account, u.disabled(editable, u.actionRow(u.field("connection.org", u.tr("Organization ID", "ID de organización"), "org_…", false), loadTeams)))
-	} else {
-		account = append(account, u.pills(loadTeams))
-	}
-	account = append(account,
-		u.disabled(editable, u.disclosure("connection.advanced", u.tr("Advanced", "Avanzado"))),
-	)
-	if u.expanded["connection.advanced"] {
-		account = append(account, u.disabled(editable, u.field("connection.port", u.tr("Local port", "Puerto local"), "8877", false)))
-	}
-	account = append(account,
-		u.disabled(editable, u.check("connection.remember", u.tr("Remember upstream key in the system credential store", "Recordar la clave de Kilo en el almacén del sistema"), nil)),
-		u.hint(u.tr("Turn this off if you want to enter your Kilo key again after quitting.", "Desactívalo si quieres volver a introducir tu clave de Kilo al salir y abrir la aplicación.")),
-		u.pills(
-			u.disabled(editable, u.primaryButton("connection.save-start", u.tr("Save & start", "Guardar y arrancar"), func() { u.submitConnection(true) })),
-			u.disabled(editable, u.button("connection.save", u.tr("Save connection", "Guardar conexión"), func() { u.submitConnection(false) })),
-			u.disabled(running, u.button("connection.stop", u.tr("Stop proxy", "Detener proxy"), func() { u.call("POST", "/api/stop", map[string]any{}, u.acceptState) })),
-		),
-		u.pills(u.button("connection.check", u.tr("Check gateway", "Comprobar gateway"), func() {
-			revision := nativeNumber(u.state, "catalogRevision")
-			u.call("POST", "/api/check", map[string]any{}, func(raw json.RawMessage) {
-				if !u.applyModels(raw, revision, "catalog") {
-					return
-				}
-				u.setNotice(nativeToneSuccess, u.tr("Gateway reached. Model listing does not verify organization credit or generation permissions.", "Gateway accesible. El catálogo no verifica saldo ni permisos de generación."))
-			})
-		})),
-		u.subheading(u.tr("Your local endpoint", "Tu endpoint local")),
-		u.label(nativeString(u.state, "baseURL")),
-		u.pills(
-			u.button("connection.copy-url", u.tr("Copy base URL", "Copiar URL base"), func() { u.copy(nativeString(u.state, "baseURL")) }),
-			u.button("connection.copy-key", u.tr("Copy local API key", "Copiar API key local"), func() { u.copy(nativeString(u.state, "localKey")) }),
-		),
-		u.note(u.tr("The local key authenticates your tools. Your personal Kilo key stays on this device.", "La clave local autentica tus herramientas. Tu clave personal de Kilo permanece en este equipo.")),
-		u.pills(u.buttonWidget("connection.clients", u.tr("Go to agents", "Ir a agentes"), nativeButtonGhost, nativeIconChevronRight, true, false, func() {
-			u.page = "agents"
-			if len(u.models) == 0 {
-				u.refreshModels()
-			}
-		})),
-	)
-	if !editable {
-		account = append(account, u.hint(u.tr("Stop the proxy or wait for the current connection action to finish before editing these settings.", "Detén el proxy o espera a que termine la acción de conexión para editar estos ajustes.")))
-	}
-	return nativeSettingsPanelWithGap(u.section(
-		u.tr("Kilo account", "Cuenta de Kilo"),
-		u.tr("Sign in and choose the team Kilo Proxy uses for upstream requests.", "Inicia sesión y elige el equipo que Kilo Proxy usará para las peticiones."),
-		account...,
-	))
-}
-
 func nativeSettingsPanelWithGap(panel layout.Widget) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		return layout.Inset{Bottom: 8}.Layout(gtx, panel)
