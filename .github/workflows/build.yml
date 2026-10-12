@@ -232,6 +232,9 @@ jobs:
           - runner: macos-15-intel
             system: darwin
             arch: amd64
+            # This race suite exceeds the default 10m package budget on Intel.
+            test_timeout: 20m
+            job_timeout: 30
           - runner: ubuntu-24.04
             system: linux
             arch: amd64
@@ -239,7 +242,7 @@ jobs:
             system: linux
             arch: arm64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
+    timeout-minutes: ${{ matrix.job_timeout || 15 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -252,7 +255,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test the console runtime and service plans
-        run: go test -race -tags headless ./...
+        env:
+          KILO_TEST_TIMEOUT: ${{ matrix.test_timeout || '10m' }}
+        run: go test -v -race -tags headless -timeout "$KILO_TEST_TIMEOUT" ./...
       - name: Vet the pure-Go console build
         env:
           CGO_ENABLED: '0'

@@ -4,11 +4,17 @@ package main
 
 import (
 	"encoding/json"
+	"image"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -240,6 +246,12 @@ func TestNativeClientsWidgetActionsPrepareEveryEditor(t *testing.T) {
 					t.Fatal("Codex CLI export included desktop queue mode")
 				}
 			}
+			if key == "opencode" {
+				// The first client frame starts an asynchronous settings read.
+				// Wait for its real callback before clicking the enabled control.
+				nativeTestWait(t, u, u.openCodePreferencesReady)
+				nativeTestFrame(t, u)
+			}
 			u.clickable("client:" + key + ":prepare").Click()
 			nativeTestFrame(t, u)
 			nativeTestWait(t, u, func() bool { return s.Saved != "" })
@@ -290,6 +302,87 @@ func TestNativeClientsWidgetActionsPrepareEveryEditor(t *testing.T) {
 			}
 			if stored := u.owner.modelLibrary.snapshot().Library; stored.DefaultModel != "vendor/one" || len(stored.Models) != 2 || nativeSavedLibraryItem(t, stored, "vendor/one").DisplayName != "Short Native" {
 				t.Fatalf("preparation changed the shared library: %#v", stored)
+			}
+		})
+	}
+}
+
+func TestNativeOpenCodePrepareWaitsForConfirmedPreferences(t *testing.T) {
+	for _, language := range []string{"en", "es"} {
+		t.Run(language, func(t *testing.T) {
+			u := nativeTestUI(t)
+			u.setLanguage(language)
+			nativeTestWait(t, u, func() bool {
+				return u.language == language && u.languageTarget == "" && len(u.busy) == 0
+			})
+			model := nativeClientModelsForTest()[0]
+			shared := nativeSeedSharedForTest(t, u, model)
+			shared.choice(model.ID).DisplayName = "Slow load model"
+			u.seedClientChoice(sharedModelKey, *shared.choice(model.ID))
+			u.persistLibraryEdits()
+			u.flushModelLibrary()
+			entered, release := make(chan struct{}, 1), make(chan struct{})
+			var once sync.Once
+			unblock := func() { once.Do(func() { close(release) }) }
+			var prepares atomic.Int32
+			handler := u.owner.adminHandler()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet && r.URL.Path == nativeOpenCodePreferencesEndpoint {
+					select {
+					case entered <- struct{}{}:
+					default:
+					}
+					select {
+					case <-release:
+					case <-r.Context().Done():
+						return
+					}
+				}
+				if r.Method == http.MethodPost && r.URL.Path == nativeClientEndpoint("opencode") {
+					prepares.Add(1)
+				}
+				handler.ServeHTTP(w, r)
+			}))
+			t.Cleanup(func() { unblock(); server.Close() })
+			u.owner.adminHost = strings.TrimPrefix(server.URL, "http://")
+			u.page, u.client = "clients", "opencode"
+			h := &nativePointerHarness{t: t, u: u, size: image.Pt(1280, 5000), now: time.Now()}
+			h.frame()
+			nativeTestWait(t, u, func() bool {
+				select {
+				case <-entered:
+					return true
+				default:
+					return false
+				}
+			})
+			h.frame()
+			s := u.sharedClientSelection("opencode")
+			detail := u.openCodeDetail("opencode", s)
+			if u.openCodePreferencesReady() || detail.canPrepare == nil || *detail.canPrepare || !nativeUpdateHasText(h, u.tr("Loading version…", "Cargando versión…")) {
+				t.Fatal("pending preferences did not expose a loading state with preparation disabled")
+			}
+			u.clickable("client:opencode:prepare").Click()
+			h.frame()
+			if prepares.Load() != 0 || s.Saved != "" {
+				t.Fatal("a click while settings were loading reached profile preparation")
+			}
+			unblock()
+			nativeTestWait(t, u, u.openCodePreferencesReady)
+			h.frame()
+			detail = u.openCodeDetail("opencode", s)
+			if detail.canPrepare == nil || !*detail.canPrepare || nativeUpdateHasText(h, u.tr("Loading version…", "Cargando versión…")) {
+				t.Fatal("confirmed preferences did not enable preparation and clear loading")
+			}
+			u.clickable("client:opencode:prepare").Click()
+			h.frame()
+			nativeTestWait(t, u, func() bool { return s.Saved != "" && !u.openCodePreferencesBusy() })
+			if prepares.Load() != 1 {
+				t.Fatalf("the enabled control prepared %d times; want exactly once", prepares.Load())
+			}
+			data, err := os.ReadFile(s.Path)
+			if err != nil || !strings.Contains(string(data), "Slow load model") || !strings.Contains(string(data), "vendor/one") {
+				t.Fatalf("the confirmed control did not save the chosen model: %v", err)
 			}
 		})
 	}

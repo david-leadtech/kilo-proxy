@@ -4,6 +4,12 @@ package main
 
 import (
 	"image"
+	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -34,6 +40,87 @@ func nativeScrollImageSetting(h *nativePointerHarness, label string) {
 	}
 }
 
+// The CLI and T3 blocks precede Images in Settings and change height when
+// their first responses arrive. Resolve those real requests and lay out their
+// confirmed state before capturing pointer coordinates in the Images block.
+func nativeImageSettingsReady(h *nativePointerHarness) {
+	h.t.Helper()
+	nativeTestWait(h.t, h.u, func() bool {
+		return h.u.cliPreferencesReady() && h.u.agentsState().T3Code.PreferencesState.Loaded && !h.u.busy["GET"+nativeT3CodePreferencesEndpoint] && !h.u.t3CodePreferencesBusy()
+	})
+	h.frame()
+}
+
+func TestNativeImageTransportSettingsWaitForPrecedingPreferences(t *testing.T) {
+	for _, lang := range []string{"en", "es"} {
+		t.Run(lang, func(t *testing.T) {
+			u := nativeTestUI(t)
+			u.page, u.settingsTab = "settings", "images"
+			u.setLanguage(lang)
+			nativeTestWait(t, u, func() bool {
+				return u.language == lang && u.languageTarget == "" && !u.busy["POST/api/language"] && !u.busy["GET/api/state"]
+			})
+			upstream, err := url.Parse("http://" + u.owner.adminHost)
+			if err != nil {
+				t.Fatal(err)
+			}
+			gate := make(chan struct{})
+			var release sync.Once
+			entered := make(chan string, 2)
+			proxy := httputil.NewSingleHostReverseProxy(upstream)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet && (r.URL.Path == nativeCLIPreferencesEndpoint || r.URL.Path == nativeT3CodePreferencesEndpoint) {
+					entered <- r.URL.Path
+					select {
+					case <-gate:
+					case <-r.Context().Done():
+						return
+					}
+				}
+				proxy.ServeHTTP(w, r)
+			}))
+			u.owner.adminHost = strings.TrimPrefix(server.URL, "http://")
+			t.Cleanup(server.Close)
+			t.Cleanup(func() { release.Do(func() { close(gate) }) })
+			h := &nativePointerHarness{t: t, u: u, size: image.Pt(780, 700), now: time.Now()}
+			h.frame()
+			seen := make(map[string]bool)
+			nativeTestWait(t, u, func() bool {
+				select {
+				case path := <-entered:
+					seen[path] = true
+				default:
+				}
+				return len(seen) == 2
+			})
+			if u.cliPreferencesReady() || u.agentsState().T3Code.PreferencesState.Loaded {
+				t.Fatal("held preferences were marked loaded")
+			}
+			change := u.tr("Change", "Cambiar")
+			nativeScrollImageSetting(h, change)
+			pendingBounds := h.target(change, semantic.Button).Desc.Bounds
+			release.Do(func() { close(gate) })
+			// This wait drains responses without laying out. The router still
+			// contains coordinates from the pending Settings blocks.
+			nativeTestWait(t, u, func() bool {
+				return u.cliPreferencesReady() && u.agentsState().T3Code.PreferencesState.Loaded && !u.busy["GET"+nativeT3CodePreferencesEndpoint]
+			})
+			nativeImageSettingsReady(h)
+			confirmedBounds := h.target(change, semantic.Button).Desc.Bounds
+			pendingCenter := image.Pt(pendingBounds.Min.X+pendingBounds.Dx()/2, pendingBounds.Min.Y+pendingBounds.Dy()/2)
+			if pendingCenter.In(confirmedBounds) {
+				t.Fatal("held Settings responses did not move the button away from its previous pointer target")
+			}
+			t.Logf("Change moved after preferences loaded: %v -> %v", pendingBounds, confirmedBounds)
+			nativeScrollImageSetting(h, change)
+			h.click(change, semantic.Button)
+			if !u.expanded["images.change"] {
+				t.Fatal("Change did not open after preceding Settings responses loaded")
+			}
+		})
+	}
+}
+
 func TestNativeImageTransportSettingsPointerAndPersistence(t *testing.T) {
 	for _, size := range []image.Point{{1180, 820}, {780, 700}, {720, 700}} {
 		for _, lang := range []string{"en", "es"} {
@@ -49,6 +136,7 @@ func TestNativeImageTransportSettingsPointerAndPersistence(t *testing.T) {
 				})
 				h := &nativePointerHarness{t: t, u: u, size: size, now: time.Now()}
 				h.frame()
+				nativeImageSettingsReady(h)
 				// The method list opens from the row's Change link.
 				change := u.tr("Change", "Cambiar")
 				nativeScrollImageSetting(h, change)
