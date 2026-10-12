@@ -1,0 +1,248 @@
+//go:build desktop
+
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"path/filepath"
+	"strings"
+
+	"gioui.org/layout"
+)
+
+const nativeCLIPreferencesEndpoint = "/api/clients/cli/preferences"
+
+type nativeCLIPreferencesState struct {
+	Preferences       cliPreferences
+	Requested, Loaded bool
+	Generation        uint64
+	Pending           *cliPreferences
+	Error             string
+	Changed           bool
+}
+
+func nativeCLIPathClient(key string) bool {
+	switch key {
+	case "codex-cli", "claude", "t3-code", "synara", "open-design", "xcode-codex", "xcode-claude":
+		return true
+	}
+	return false
+}
+
+func nativeCLIPathValue(p cliPreferences, client string) string {
+	if client == "claude" {
+		return p.ClaudeExecutable
+	}
+	return p.CodexExecutable
+}
+
+func nativeCLIPathField(client string) string { return "cli-executable-" + client }
+
+func (u *nativeUI) cliPreferencesBusy() bool {
+	return u.busy["GET"+nativeCLIPreferencesEndpoint] || u.busy["POST"+nativeCLIPreferencesEndpoint]
+}
+
+func (u *nativeUI) cliPathDirty() bool {
+	s := &u.clientState().CLIPreferences
+	return s.Loaded && (strings.TrimSpace(u.value(nativeCLIPathField("codex-cli"))) != s.Preferences.CodexExecutable || strings.TrimSpace(u.value(nativeCLIPathField("claude"))) != s.Preferences.ClaudeExecutable)
+}
+
+func (u *nativeUI) cliPreferencesReady() bool {
+	s := &u.clientState().CLIPreferences
+	return s.Loaded && s.Preferences.Version == 1 && s.Pending == nil && !u.cliPreferencesBusy() && !u.cliPathDirty()
+}
+
+func (u *nativeUI) acceptCLIPreferences(next cliPreferences, discardDraft bool) {
+	s := &u.clientState().CLIPreferences
+	changed := s.Loaded && s.Preferences != next
+	claudeChanged := s.Loaded && s.Preferences.ClaudeExecutable != next.ClaudeExecutable
+	for _, client := range []string{"codex-cli", "claude"} {
+		id := nativeCLIPathField(client)
+		if discardDraft || !s.Loaded || strings.TrimSpace(u.value(id)) == nativeCLIPathValue(s.Preferences, client) {
+			u.setValue(id, nativeCLIPathValue(next, client))
+		}
+	}
+	s.Preferences, s.Loaded = next, true
+	if claudeChanged {
+		c := u.clientState()
+		c.Claude, c.ClaudeChecked, c.ClaudeDetectStarted = claudeCapabilities{}, false, false
+		c.Xcode.Claude, c.XcodeChecked, c.XcodeDetectStarted = claudeCapabilities{}, false, false
+		if !u.busy["GET/api/claude/info"] {
+			u.detectAgentCapabilities()
+		}
+	}
+	if changed {
+		u.clientState().OpenDesignChecked, u.clientState().OpenDesignDetectStarted = false, false
+		u.detectOpenDesign()
+		for key, selection := range u.clientState().Selections {
+			if nativeCLIPathClient(key) {
+				selection.Saved = ""
+			}
+		}
+		u.agentsState().T3Code.Info.Prepared = false
+		u.agentsState().Synara.Info.Prepared = false
+	}
+}
+
+func (u *nativeUI) refreshCLIPreferencesAfter(done func(error)) {
+	finish := func(err error) {
+		if done != nil {
+			done(err)
+		}
+	}
+	s := &u.clientState().CLIPreferences
+	if u.cliPreferencesBusy() {
+		finish(errors.New(u.tr("Wait for CLI settings to finish loading or saving.", "Espera a que terminen de cargarse o guardarse los ajustes de las CLI.")))
+		return
+	}
+	s.Requested, s.Error = true, ""
+	s.Generation++
+	generation := s.Generation
+	u.clientRequest("GET", nativeCLIPreferencesEndpoint, nil, func(raw json.RawMessage, err error) {
+		if generation != s.Generation {
+			finish(errors.New(u.launchSettingsChangedMessage()))
+			return
+		}
+		if err != nil {
+			s.Error = nativeMessage(err.Error(), u.language)
+			finish(err)
+			return
+		}
+		var current cliPreferences
+		if json.Unmarshal(raw, &current) != nil || current.Version != 1 {
+			s.Error = u.tr("Could not read CLI executable settings. Reload to try again.", "No se pudieron leer las rutas de las CLI. Carga los ajustes para reintentarlo.")
+			finish(errors.New(s.Error))
+			return
+		}
+		u.acceptCLIPreferences(current, true)
+		s.Pending = nil
+		finish(nil)
+	})
+}
+
+func (u *nativeUI) verifyCLIPreferencesAfter(expected cliPreferences, done func(error)) {
+	s := &u.clientState().CLIPreferences
+	if !u.cliPreferencesReady() {
+		done(errors.New(u.tr("Load or finish saving CLI executable settings before opening.", "Carga o termina de guardar las rutas de las CLI antes de abrir.")))
+		return
+	}
+	generation := s.Generation
+	u.clientRequest("GET", nativeCLIPreferencesEndpoint, nil, func(raw json.RawMessage, err error) {
+		if generation != s.Generation || s.Pending != nil || u.cliPathDirty() {
+			done(errors.New(u.launchSettingsChangedMessage()))
+			return
+		}
+		if err != nil {
+			s.Error = nativeMessage(err.Error(), u.language)
+			done(err)
+			return
+		}
+		var current cliPreferences
+		if json.Unmarshal(raw, &current) != nil || current.Version != 1 {
+			done(errors.New(u.tr("Could not read CLI executable settings.", "No se pudieron leer las rutas de las CLI.")))
+			return
+		}
+		changed := current != expected
+		u.acceptCLIPreferences(current, false)
+		if changed {
+			s.Generation++
+			u.detectLaunchers()
+			done(errors.New(u.launchSettingsChangedMessage()))
+			return
+		}
+		done(nil)
+	})
+}
+
+func (u *nativeUI) saveCLIPreferences(next cliPreferences) {
+	s := &u.clientState().CLIPreferences
+	if !s.Loaded || u.cliPreferencesBusy() || u.clientState().Launching != "" || next.Version != 1 {
+		return
+	}
+	s.Pending, s.Error = &next, ""
+	s.Generation++
+	generation := s.Generation
+	u.clientRequest("POST", nativeCLIPreferencesEndpoint, next, func(raw json.RawMessage, err error) {
+		if generation != s.Generation {
+			return
+		}
+		if err != nil {
+			s.Error = nativeMessage(err.Error(), u.language)
+			return
+		}
+		var confirmed cliPreferences
+		if json.Unmarshal(raw, &confirmed) != nil || confirmed != next {
+			s.Error = u.tr("CLI settings did not confirm the saved paths. Reload before opening.", "No se confirmaron las rutas guardadas de las CLI. Carga los ajustes antes de abrir.")
+			return
+		}
+		u.acceptCLIPreferences(confirmed, false)
+		s.Pending, s.Changed = nil, true
+		u.detectLaunchers()
+	})
+}
+
+func (u *nativeUI) saveCLIExecutable(client string, automatic bool) {
+	s := &u.clientState().CLIPreferences
+	path := strings.TrimSpace(u.value(nativeCLIPathField(client)))
+	if automatic {
+		path = ""
+		u.setValue(nativeCLIPathField(client), "")
+	}
+	if path != "" && !filepath.IsAbs(path) {
+		s.Error = u.tr("Enter an absolute path to the CLI executable, or leave it empty for automatic detection.", "Introduce una ruta absoluta al ejecutable CLI, o déjala vacía para la detección automática.")
+		return
+	}
+	next := s.Preferences
+	if client == "claude" {
+		next.ClaudeExecutable = path
+	} else {
+		next.CodexExecutable = path
+	}
+	u.saveCLIPreferences(next)
+}
+
+func (u *nativeUI) cliPreferencesPanel() layout.Widget {
+	s := &u.clientState().CLIPreferences
+	if !s.Requested {
+		u.refreshCLIPreferencesAfter(nil)
+	}
+	editable := s.Loaded && s.Pending == nil && !u.cliPreferencesBusy() && u.clientState().Launching == ""
+	rows := []layout.Widget{uxhCell(u.note(u.tr("Choose an installed CLI, including a custom version. Empty paths use the current verified Kilo copy first, then the system installation. These paths also apply to T3 Code, Synara and Open Design. Accounts and chats are kept.", "Elige una CLI instalada, incluida una versión personalizada. Las rutas vacías usan primero la copia Kilo actual verificada y después la instalación del sistema. Estas rutas también se aplican a T3 Code, Synara y Open Design. Se conservan las cuentas y los chats.")))}
+	for _, choice := range []nativeChoice{{Value: "codex-cli", Label: "Codex CLI"}, {Value: "claude", Label: "Claude Code"}} {
+		client, label := choice.Value, choice.Label
+		id := nativeCLIPathField(client)
+		dirty := s.Loaded && strings.TrimSpace(u.value(id)) != nativeCLIPathValue(s.Preferences, client)
+		rows = append(rows, uxhCell(u.column(
+			u.disabled(editable, u.field(id, label+u.tr(" executable path (optional)", " · ruta del ejecutable (opcional)"), u.tr("Absolute path; empty = automatic detection", "Ruta absoluta; vacía = detección automática"), false)),
+			u.pills(u.disabled(editable && dirty, u.button("cli-executable-save:"+client, u.tr("Save path", "Guardar ruta")+" · "+label, func() { u.saveCLIExecutable(client, false) })), u.disabled(editable && (dirty || nativeCLIPathValue(s.Preferences, client) != ""), u.button("cli-executable-auto:"+client, u.tr("Automatic detection", "Detección automática")+" · "+label, func() { u.saveCLIExecutable(client, true) }))),
+		)))
+		info := u.clientState().LaunchInfo.Clients[client]
+		if info.Path != "" {
+			rows = append(rows, uxhCell(u.note(u.tr("Resolved executable: ", "Ejecutable detectado: ")+info.Path)))
+		}
+	}
+	status := ""
+	switch {
+	case u.busy["POST"+nativeCLIPreferencesEndpoint]:
+		status = u.tr("Saving CLI paths…", "Guardando rutas de las CLI…")
+	case !s.Loaded:
+		status = u.tr("Loading CLI paths…", "Cargando rutas de las CLI…")
+	case u.cliPathDirty():
+		status = u.tr("Save the executable paths before preparing or opening a harness.", "Guarda las rutas de los ejecutables antes de preparar o abrir un harness.")
+	case s.Changed:
+		status = u.tr("Paths saved. Close the affected Kilo workspace and prepare again. Chats are kept.", "Rutas guardadas. Cierra el espacio Kilo afectado y prepara de nuevo. Los chats se conservan.")
+	}
+	if status != "" {
+		rows = append(rows, uxhCell(u.note(status)))
+	}
+	if s.Error != "" {
+		rows = append(rows, uxhCell(u.message(nativeToneError, s.Error)))
+		if s.Pending != nil {
+			next := *s.Pending
+			rows = append(rows, uxhCell(u.button("cli-preferences-retry", u.tr("Retry saving", "Reintentar guardado"), func() { u.saveCLIPreferences(next) })))
+		}
+	}
+	rows = append(rows, uxhCell(u.disabled(!u.cliPreferencesBusy(), u.button("cli-preferences-reload", u.tr("Reload paths", "Cargar rutas"), func() { u.refreshCLIPreferencesAfter(nil) }))))
+	return u.uxhBlock(u.tr("CLI installations", "Instalaciones de las CLI"), "", rows...)
+}

@@ -11,21 +11,25 @@ import (
 const t3CodeDownloadURL = "https://github.com/pingdotgg/t3code/releases"
 
 type nativeT3CodeInfo struct {
-	Prepared            bool          `json:"prepared"`
-	Library             *modelLibrary `json:"library"`
-	Version             string        `json:"version"`
-	ProtocolV2          bool          `json:"protocolV2"`
-	ClaudeModelDefaults bool          `json:"claudeModelDefaults"`
-	Message             string        `json:"message"`
+	Prepared              bool                       `json:"prepared"`
+	Library               *modelLibrary              `json:"library"`
+	Version               string                     `json:"version"`
+	ProtocolV2            bool                       `json:"protocolV2"`
+	ClaudeModelDefaults   bool                       `json:"claudeModelDefaults"`
+	Message               string                     `json:"message"`
+	Preferences           nativeT3CodePreferences    `json:"preferences"`
+	EffectiveCodexModels  []nativeT3CodeModelSummary `json:"effectiveCodexModels"`
+	EffectiveClaudeModels []nativeT3CodeModelSummary `json:"effectiveClaudeModels"`
 }
 
 type nativeT3CodeState struct {
-	Info       nativeT3CodeInfo
-	Requested  bool
-	Loaded     bool
-	Generation uint64
-	Connection [32]byte
-	Error      string
+	Info             nativeT3CodeInfo
+	Requested        bool
+	Loaded           bool
+	Generation       uint64
+	Connection       [32]byte
+	Error            string
+	PreferencesState nativeT3CodePreferencesState
 }
 
 func (u *nativeUI) acceptT3CodeProfile(data json.RawMessage, connection [32]byte) {
@@ -35,6 +39,9 @@ func (u *nativeUI) acceptT3CodeProfile(data json.RawMessage, connection [32]byte
 	state.Info, state.Error = nativeT3CodeInfo{}, ""
 	if err := json.Unmarshal(data, &state.Info); err != nil {
 		state.Error = u.tr("Could not read T3 Code settings. Refresh to try again.", "No se pudieron leer los ajustes de T3 Code. Actualiza para reintentarlo.")
+	}
+	if state.Info.Prepared && nativeT3CodePreferencesEqual(state.PreferencesState.Preferences, state.Info.Preferences) {
+		state.PreferencesState.RequiresPreparation = false
 	}
 }
 
@@ -48,7 +55,7 @@ func (u *nativeUI) refreshT3CodeProfile() {
 	state.Generation++
 	generation, connection := state.Generation, u.launchConnectionFingerprint()
 	u.clientRequest("GET", endpoint, nil, func(data json.RawMessage, err error) {
-		if state.Generation != generation {
+		if state.Generation != generation || connection != u.launchConnectionFingerprint() {
 			return
 		}
 		if err != nil {
@@ -62,7 +69,10 @@ func (u *nativeUI) refreshT3CodeProfile() {
 
 func (u *nativeUI) t3CodePrepared(s *nativeClientSelection) bool {
 	state := &u.agentsState().T3Code
-	if !state.Loaded || !state.Info.Prepared || state.Info.Library == nil || state.Connection != u.launchConnectionFingerprint() {
+	if !state.Loaded || !state.Info.Prepared || state.Info.Library == nil || state.Connection != u.launchConnectionFingerprint() || u.t3CodePreferencesBusy() || state.PreferencesState.Pending != nil {
+		return false
+	}
+	if prefs := &state.PreferencesState; prefs.Loaded && state.Info.Preferences.Version == 1 && !nativeT3CodePreferencesEqual(prefs.Preferences, state.Info.Preferences) {
 		return false
 	}
 	payload, err := nativeClientPayload("t3-code", s)
@@ -80,14 +90,20 @@ func (u *nativeUI) t3CodeDetail(s *nativeClientSelection) uxhDetail {
 	if !state.Requested {
 		u.refreshT3CodeProfile()
 	}
-	_, validation := nativeClientPayload(key, s)
+	if !state.PreferencesState.Requested {
+		u.refreshT3CodePreferences()
+	}
+	payload, validation := nativeClientPayload(key, s)
+	if validation == nil && state.PreferencesState.Loaded {
+		validation = nativeT3CodePreferenceLibraryError(state.PreferencesState.Preferences, payload.(map[string]any)["library"].(modelLibrary))
+	}
 	libraryStatus, libraryReady := u.libraryStatus()
-	working := u.clientState().Launching != "" || u.busy["POST"+nativeClientEndpoint(key)]
+	working := u.clientState().Launching != "" || u.busy["POST"+nativeClientEndpoint(key)] || u.t3CodePreferencesBusy() || u.busy["GET"+nativeT3CodePreferencesEndpoint] || !state.PreferencesState.Loaded || state.PreferencesState.Pending != nil
 	canPrepare := libraryReady && u.agentConnectionReady() && !u.setupConnectionNeeded() && !u.connectionWorking() && len(s.Models) > 0 && validation == nil && !working
 	d := uxhDetail{canPrepare: &canPrepare}
-	d.prepareNote = u.tr("Prepare or open T3 Code · Kilo to apply the current shared models.", "Prepara o abre T3 Code · Kilo para aplicar los modelos compartidos actuales.")
+	d.prepareNote = u.tr("Prepare or open T3 Code · Kilo to apply your saved accounts and models.", "Prepara o abre T3 Code · Kilo para aplicar las cuentas y modelos guardados.")
 	if u.t3CodePrepared(s) {
-		d.prepareNote = u.tr("Four agents prepared for the current shared models.", "Cuatro agentes preparados con los modelos compartidos actuales.")
+		d.prepareNote = u.tr("Your saved T3 accounts and models are prepared.", "Las cuentas y modelos guardados de T3 están preparados.")
 	}
 	if validation != nil {
 		d.status = append(d.status, u.hint(nativeMessage(validation.Error(), u.language)))
@@ -100,12 +116,18 @@ func (u *nativeUI) t3CodeDetail(s *nativeClientSelection) uxhDetail {
 	} else if state.Info.Message != "" {
 		d.status = append(d.status, u.note(nativeMessage(state.Info.Message, u.language)))
 	}
-	chatHelp := u.tr("Start a new chat to switch between normal and Kilo when this T3 build keeps an existing chat’s agent.", "Inicia un chat nuevo para cambiar entre normal y Kilo si esta compilación de T3 conserva el agente de un chat existente.")
-	if state.Info.ProtocolV2 {
-		chatHelp = u.tr("This T3 build can change agents between turns in the same chat. T3 transfers a summary when switching providers; previous reasoning, tool results and attachments are not transferred. Each agent keeps its own CLI profile. This build uses its built-in catalog for Claude effort, so Claude · Kilo uses compatible levels saved in Kilo Models. Close and reopen the Kilo workspace after changing them; Claude Code 2.1.251 or newer is required for these levels.", "Esta compilación de T3 permite cambiar de agente entre turnos en el mismo chat. T3 transfiere un resumen al cambiar de proveedor; no transfiere el razonamiento anterior, los resultados de herramientas ni los adjuntos. Cada agente conserva su propio perfil CLI. Esta compilación usa el catálogo incluido para el esfuerzo de Claude, por lo que Claude · Kilo usa los niveles compatibles guardados en Modelos de Kilo. Cierra y reabre el espacio Kilo tras cambiarlos; requieren Claude Code 2.1.251 o posterior.")
+	if state.PreferencesState.Error != "" {
+		d.status = append(d.status, u.hint(state.PreferencesState.Error))
 	}
-	d.blocks = append(d.blocks, u.uxhBlock(u.tr("Agents", "Agentes"), u.tr("Choose one of these four options for each new chat.", "Elige una de estas cuatro opciones para cada chat nuevo."), uxhMultiAgentRows(u, u.tr("Kilo agents show a green KP badge on T3's provider rail and composer icons.", "Los agentes Kilo muestran una insignia verde KP en los iconos de la barra de proveedores y del compositor de T3."))...))
-	requirements := u.tr("Detects installed T3 Code release channels, including alpha, beta and nightly. Preparation checks the installed integration contract. Requires Codex CLI and Claude Code.", "Detecta canales instalados de T3 Code, incluidos alpha, beta y nightly. La preparación comprueba el contrato de integración instalado. Requiere Codex CLI y Claude Code.")
+	chatHelp := u.tr("Start a new chat to switch accounts when this T3 build keeps an existing chat’s agent.", "Inicia un chat nuevo para cambiar de cuenta si esta compilación de T3 conserva el agente de un chat existente.")
+	if state.Info.ProtocolV2 {
+		chatHelp = u.tr("This T3 build can change agents between turns in the same chat. T3 transfers a summary when switching providers; previous reasoning, tool results and attachments are not transferred. Each agent keeps its own CLI profile.", "Esta compilación de T3 permite cambiar de agente entre turnos en el mismo chat. T3 transfiere un resumen al cambiar de proveedor; no transfiere el razonamiento anterior, los resultados de herramientas ni los adjuntos. Cada agente conserva su propio perfil CLI.")
+	}
+	d.blocks = append(d.blocks, u.uxhBlock(u.tr("Accounts and models", "Cuentas y modelos"), "",
+		u.note(u.tr("Choose which accounts and models T3 offers in Kilo Settings. Kilo accounts have a green KP badge in T3.", "Elige qué cuentas y modelos ofrece T3 en Ajustes de Kilo. Las cuentas Kilo llevan una insignia verde KP en T3.")),
+		u.button("client:t3-code:settings", u.tr("T3 Code settings", "Ajustes de T3 Code"), func() { u.page, u.settingsTab = "settings", "t3-code" }),
+	))
+	requirements := u.tr("Detects installed T3 Code release channels, including alpha, beta and nightly. Preparation checks the installed integration contract and the CLIs required by your enabled accounts.", "Detecta canales instalados de T3 Code, incluidos alpha, beta y nightly. La preparación comprueba el contrato instalado y los CLI que requieren las cuentas activadas.")
 	if state.Info.Version != "" {
 		requirements += u.tr(" Detected: ", " Detectado: ") + state.Info.Version + "."
 	}
@@ -114,8 +136,8 @@ func (u *nativeUI) t3CodeDetail(s *nativeClientSelection) uxhDetail {
 	if u.expanded[notesID] {
 		notes = append(notes,
 			u.note(chatHelp),
-			u.note(u.tr("Claude · Kilo starts with your prepared shared models. Preparation hides the built-in Claude entries. An older chat using a hidden model falls back to your shared default; check the selected model before continuing.", "Claude · Kilo empieza con tus modelos compartidos preparados. La preparación oculta las entradas de Claude incluidas en T3. Un chat antiguo que usaba un modelo oculto pasa a tu modelo compartido inicial; revisa el modelo elegido antes de continuar.")),
-			u.note(u.tr("Your regular T3 Code workspace and its chats stay separate and can remain open. Normal agents use their existing CLI sessions, not the Desktop apps. Quit only T3 Code · Kilo before changing models or the connection, then reopen it.", "Tu espacio T3 Code habitual y sus chats siguen separados y pueden permanecer abiertos. Los agentes normales usan sus sesiones CLI existentes, no las apps Desktop. Cierra solo T3 Code · Kilo antes de cambiar los modelos o la conexión y vuelve a abrirlo.")),
+			u.note(u.tr("Claude Kilo offers Opus 5.5, Sonnet 5.5 and Fable 5.1 by default, with T3's native reasoning selector. Choose shared models instead in Settings. Available levels depend on the installed T3 and Claude Code versions.", "Claude Kilo ofrece Opus 5.5, Sonnet 5.5 y Fable 5.1 por defecto, con el selector nativo de razonamiento de T3. Puedes elegir los modelos compartidos en Ajustes. Los niveles disponibles dependen de las versiones instaladas de T3 y Claude Code.")),
+			u.note(u.tr("Your regular T3 Code workspace and its chats stay separate and can remain open. Codex and Claude use their existing CLI sessions, not Desktop app logins. Close only T3 Code · Kilo, then prepare again after changing accounts or models. Your chats are kept; check the selected account and model before continuing an older chat.", "Tu espacio T3 Code habitual y sus chats siguen separados y pueden permanecer abiertos. Codex y Claude usan sus sesiones CLI existentes, no los inicios de sesión de las apps Desktop. Cierra solo T3 Code · Kilo y prepara de nuevo tras cambiar cuentas o modelos. Tus chats se conservan; revisa la cuenta y el modelo elegidos antes de continuar un chat antiguo.")),
 		)
 	}
 	d.advanced = append(d.advanced,

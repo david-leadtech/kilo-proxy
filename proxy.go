@@ -60,8 +60,15 @@ type app struct {
 	openDesignLaunchUntil     time.Time
 	openMausBotCheckRunning   func(openMausBotPaths) (bool, error)
 	openMausBotLaunchUntil    time.Time
+	openCodeVersionProbe      func(string) (string, error) // Synthetic test fixtures only.
+	openCodePathsMu           sync.RWMutex
+	openCodeExecutables       [2]string
+	cliPathsMu                sync.RWMutex
+	cliExecutables            [2]string
+	t3CodeProbeClaude         func(string, clientLaunchRuntime) claudeCapabilities // Synthetic test fixtures only.
 	t3CodeCheckRunning        func(string) (bool, error)
 	t3CodeLaunchUntil         time.Time
+	t3CodeAssets              *t3CodeRuntimeAssets
 	synaraCheckRunning        func(string) (bool, error)
 	synaraCheckEnvironment    func() error
 	synaraAdapterSource       func() (string, error) // Test override; never accepted from clients or settings.
@@ -137,6 +144,8 @@ func newApp(dir string, vault credentialVault) (*app, error) {
 	tr.Proxy = nil
 	tr.ResponseHeaderTimeout = 120 * time.Second
 	a := &app{dir: dir, config: cfg, vault: vault, adminToken: randomKey(""), upstream: u, transport: tr, quit: make(chan struct{})}
+	a.openCodeExecutables = [2]string{cfg.OpenCode1Executable, cfg.OpenCode2Executable}
+	a.cliExecutables = [2]string{cfg.CodexCLIExecutable, cfg.ClaudeCodeExecutable}
 	a.updates = newReleaseUpdateChecker(version)
 	a.chatgpt = newChatGPTConnection(vault, cfg.VaultID, tr, dir)
 	a.modelLibrary = newModelLibraryStore(dir)
@@ -270,6 +279,10 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 			r = r.Clone(context.WithValue(r.Context(), synaraRequestContextKey{}, true))
 			r.URL.Path = "/v1/messages"
 		}
+		if t3CodeInferencePath(r) {
+			r = r.Clone(context.WithValue(r.Context(), t3CodeRequestContextKey{}, true))
+			r.URL.Path = "/v1/messages"
+		}
 		if prefix := zedProxyPrefix(localKey); r.URL.RawPath == "" && strings.HasPrefix(r.URL.Path, prefix+"/v1/") {
 			r = r.Clone(r.Context())
 			r.URL.Path = strings.TrimPrefix(r.URL.Path, prefix)
@@ -355,6 +368,16 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 		}
 		var aliasErr error
 		r, aliasErr = a.prepareSynaraRequest(r)
+		if aliasErr != nil {
+			status := http.StatusBadRequest
+			var oversized *http.MaxBytesError
+			if errors.As(aliasErr, &oversized) {
+				status = http.StatusRequestEntityTooLarge
+			}
+			jsonError(w, status, aliasErr.Error())
+			return
+		}
+		r, aliasErr = a.prepareT3CodeRequest(r)
 		if aliasErr != nil {
 			status := http.StatusBadRequest
 			var oversized *http.MaxBytesError

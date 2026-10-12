@@ -40,7 +40,13 @@ func (u *nativeUI) detectOpenDesign() {
 	}
 	c.OpenDesignDetectStarted = true
 	before := u.value("open-design-engine")
+	cliGeneration, openCodeGeneration := c.CLIPreferences.Generation, c.OpenCodePreferences.Generation
 	u.clientRequest("GET", openDesignProfileEndpoint, nil, func(data json.RawMessage, err error) {
+		if cliGeneration != c.CLIPreferences.Generation || openCodeGeneration != c.OpenCodePreferences.Generation {
+			c.OpenDesignDetectStarted = false
+			u.detectOpenDesign()
+			return
+		}
 		if err == nil {
 			err = json.Unmarshal(data, &c.OpenDesign)
 		}

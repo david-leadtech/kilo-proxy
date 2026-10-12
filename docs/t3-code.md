@@ -1,38 +1,42 @@
 # T3 Code
 
-Kilo Proxy opens **T3 Code · Kilo**, a separate T3 Code workspace with four agent options:
+Kilo Proxy opens **T3 Code · Kilo**, a separate T3 Code workspace. In **Settings → T3 Code**, choose which direct and Kilo connections it offers:
 
 | Agent | Models and connection | Login |
 | --- | --- | --- |
-| Codex · Normal | Codex's normal model catalog | Your existing Codex CLI login |
-| Kilo Proxy · Codex | Kilo Proxy's shared models, through the local proxy | Private Kilo CLI profile |
-| Claude · Normal | Claude's normal model catalog | Your existing Claude Code login |
-| Kilo Proxy · Claude | Compatible shared models, through the local proxy | Private Kilo CLI profile |
+| Codex | Codex's normal model catalog | Your existing Codex CLI login |
+| Kilo Proxy · Codex | OpenAI/ChatGPT models from your shared selection, or all shared models | Private Kilo CLI profile |
+| Claude | Claude's normal model catalog | Your existing Claude Code login |
+| Kilo Proxy · Claude | Opus 5.5, Sonnet 5.5 and Fable 5.1, or all shared models | Private Kilo CLI profile |
 
-The Kilo agents have a green **KP** badge on T3's provider rail and composer icons. Normal agents keep their usual icons; small model-row logos retain T3's design, with the **Kilo Proxy** label identifying the Kilo connection.
+The Kilo agents have a green **KP** badge on T3's provider rail and composer icons. Direct agents keep their usual icons; small model-row logos retain T3's design, with the **Kilo Proxy** label identifying the Kilo connection.
 
 This integration uses **Codex CLI and Claude Code**, rather than either Desktop application. A Desktop app login alone does not establish a CLI login.
+
+The CLI executable choices in Kilo Settings are shared with T3 and the other integrations. Automatic detection uses Kilo's verified installed copy first, including a custom version installed through Kilo, then the system installation when there is no managed copy. Set an absolute executable path for Codex CLI or Claude Code to use a particular external installation instead. An unavailable explicit path stops preparation or opening; it does not silently switch to another version. Installing or updating a Kilo copy does not erase an explicit path. Restore automatic detection to follow Kilo's installed copy again. The Codex Desktop application path is a separate setting.
+
+OpenCode has an independent optional executable path for each major version in its Kilo settings. T3 uses the path for its chosen OpenCode major. Changing a resolved CLI path requires preparing the closed private T3 workspace again. Direct and Kilo accounts use the same chosen executable while retaining their separate login/configuration homes.
 
 ## Requirements
 
 - Install [T3 Code Desktop](https://github.com/pingdotgg/t3code/releases), using stable, alpha, beta, nightly or another release channel. Kilo Proxy checks the installed package identity and integration contract; versions and commits are informational, not an allowlist.
 - On Linux, use an extracted AppImage installation so the executable and its package metadata are accessible to the launcher.
-- Install Codex CLI and Claude Code so Kilo Proxy can find their executables.
-- Sign in to the CLIs normally to use the normal agent options.
-- Connect Kilo Proxy to your provider and save 1–32 shared models in **Models**. T3 accepts at most 32 custom models per agent; preparation rejects larger libraries so the initial model cannot silently disappear.
+- Install the CLI for each enabled connection. Claude Opus 5.5 requires Claude Code 2.1.280+, Sonnet 5.5 requires 2.1.284+, and Fable 5.1 requires 2.1.257+. The default three-model selection therefore needs 2.1.284 or newer.
+- Sign in to the CLIs normally to use the direct connections.
+- Connect Kilo Proxy to your provider and save shared models in **Models**. Each enabled Kilo connection supports at most 32 effective models. The official Codex option filters the shared selection to exact `openai/` and `chatgpt/` IDs; the official Claude option resolves its three models from the connected catalog. Missing or ambiguous Claude IDs produce an error rather than falling back to another model.
 
 The preparation step checks the installed T3 Code contract before writing its private settings. An incompatible or incomplete installation produces an explicit error instead of modifying your usual T3 Code workspace.
 
 The launcher recognizes channel names in the system and user application directories, including alpha, beta and nightly. Known nightly installations take priority, followed by stable and other installed channels. Linux also checks the installed `t3code` / `t3-code` executable and extracted app directories. The settings page shows the detected version.
 
-After updating T3 or installing Kilo Proxy 0.57.0, close **T3 Code · Kilo**, refresh detection and prepare or open it again. Your private chats are retained. Preparation records the installed desktop and backend source digests, so an in-place rebuild with the same version also requires preparation again. These structural checks catch incompatible settings or isolation contracts; they cannot guarantee compatibility with every future upstream change.
+After updating T3 or installing Kilo Proxy 0.61.2, close **T3 Code · Kilo**, refresh detection and prepare or open it again. Your private chats are retained. Preparation records the installed desktop and backend source digests, so an in-place rebuild with the same version also requires preparation again. These structural checks catch incompatible settings or isolation contracts; they cannot guarantee compatibility with every future upstream change.
 
 T3 builds using Orchestrator V2 have their own database migration. On first opening the private Kilo workspace, T3 makes a one-time copy of its V1 database into a separate V2 database. The V1 database is retained, but new chats and changes do not synchronize between them. This applies only to Kilo's private workspace; the launcher does not open your regular T3 data directory. Use web/mobile clients compatible with the installed T3 server protocol.
 
 ## Open the workspace
 
 1. In Kilo Proxy, open **Agents → T3 Code · Kilo**.
-2. Select **Open T3 Code · Kilo**. Kilo Proxy prepares the four agents with the saved shared models and starts the proxy first.
+2. Select **Open T3 Code · Kilo**. Kilo Proxy prepares the connections with the saved T3 settings and starts the proxy first.
 3. Create a new chat in T3 Code and select an agent.
 
 On the T3 Code settings page, **Advanced → Prepare without opening** performs the same preparation without starting T3 Code. The local web interface also offers a **T3 Code · Kilo** integration tab.
@@ -45,19 +49,21 @@ Close **T3 Code · Kilo** before changing shared models or the proxy connection,
 
 ## Models, reasoning and chats
 
-Manage the Kilo agents' models in Kilo Proxy's shared **Models** library. The normal agents keep their own model catalogs.
+Use **Settings → T3 Code** in Kilo Proxy to enable the direct Codex and Claude connections independently, enable either Kilo connection, and select its model scope. Direct connections retain their CLI's own catalog and login. Other native T3 providers are opt-in and appear only when the installed T3 build includes their server driver.
 
-Preparation configures the private Desktop model picker for **Kilo Proxy · Claude**: it hides the built-in Claude entries that are not exact IDs in your shared library and orders your prepared models with the shared default first. Choose the model by its saved display name; the request keeps its exact gateway ID, such as `anthropic/claude-opus-5.5`. Normal agents keep their own catalogs and preferences.
+**Kilo Proxy · Claude** defaults to **Claude Opus 5.5, Claude Sonnet 5.5 and Claude Fable 5.1**. These retain T3's native model identities and thinking controls. A dedicated local Messages route maps each identity to its exact prepared gateway ID. Selecting Sonnet cannot silently send Opus, and a model outside the prepared selection is rejected. The general Messages API and other clients are unchanged. Compatible saved reasoning defaults remain per model; levels selected for a turn remain under T3's native controls.
 
-Close **T3 Code · Kilo** and reopen it from Kilo Proxy to apply this picker policy to an older workspace. A chat, project or draft using a hidden built-in model falls back to the shared default shown in the composer; review or change the selected model before continuing. Preparation also includes Claude entries from T3’s private cached manifest. T3 can refresh that manifest independently of its app version; if a new built-in entry appears, close and reopen the Kilo workspace to prepare again. This policy belongs to the Desktop client preferences; independently connected web/mobile clients keep their own picker preferences.
+Choose **All shared models** to expose additional models selected in Kilo Proxy's **Models** page. Models outside T3's native Claude catalog can have fewer controls; listing them does not establish protocol, tool or reasoning support. Codex retains the reasoning levels advertised for each effective model.
 
-Kilo Proxy · Codex exposes the supported reasoning levels for each model. In T3 builds using Orchestrator V1, Kilo Proxy · Claude exposes only the levels supported by its Claude Code driver and the model; its options can be narrower than Codex's. Model listing does not establish support for generation, tool use or every reasoning level. The selected provider must support the protocol and features used by the agent.
+Preparation creates a private Desktop asset view that filters both the Kilo model picker and its Models settings to the prepared selection. Native model objects and thinking capabilities are retained. New models discovered by the CLI remain excluded from Kilo until explicitly selected and prepared; they do not invalidate an existing workspace. Direct accounts retain their full native catalogs. Duplicate disabled native Codex/Claude rows are hidden when their managed direct account is present, retaining existing provider IDs and chats. Original application files are verified and left unchanged. Independently connected web/mobile clients retain their own picker preferences.
+
+In **Settings → T3 Code**, OpenCode, Cursor, Grok, Antigravity, Muse Code and Pi are optional native providers. Only drivers supported by the detected T3 package can be enabled. Their own authentication and catalogs remain under T3. OpenCode is optional independently of the standalone OpenCode harness. Select **OpenCode 1** or **OpenCode 2**, using a compatible installed executable. OpenCode 2 uses a separate HOME and XDG profile so it cannot migrate the normal OpenCode 1 database. Its login is separate. Kilo does not run both versions against the same state. Unsupported T3 builds or an incorrect CLI major version produce an explicit preparation error.
 
 In T3 builds using Orchestrator V1, a chat keeps its agent and native session. To switch between a normal agent and a Kilo agent, create a new chat. Model changes within a compatible agent follow T3 Code's own session and resume behavior.
 
 T3 builds using the supported Orchestrator V2 contract can switch agents between turns in the same chat. Each normal or Kilo agent keeps its own CLI home and connection. T3 hands off a bounded summary when switching providers; previous reasoning, tool results and attachments are not transferred. Use a new chat when you need to keep work completely separate.
 
-The supported Orchestrator V2 contract resolves Claude effort through its built-in catalog rather than custom gateway IDs. For **Kilo Proxy · Claude**, choose compatible reasoning defaults in Kilo Proxy’s **Models**, then close and reopen the private T3 workspace. Kilo prepares per-model Claude Code settings and hides the ineffective T3 effort selector. These defaults require Claude Code **2.1.251 or newer**; preparation rejects a configured compatible effort with an older CLI. Automatic and unsupported Claude levels do not receive a native effort override. Saved Claude reasoning defaults also require provider-qualified gateway IDs, such as `anthropic/claude-opus-4-6`: T3 can apply its own builtin effort for unqualified IDs, so preparation rejects that combination. IDs of the same Claude family/version cannot have conflicting prepared efforts, because Claude Code keys its defaults by family/version. Codex’s T3 reasoning selector remains available.
+The Orchestrator V2 contract resolves Claude thinking through T3's native catalog. Kilo therefore keeps native Claude identities in the picker and CLI while translating them only at its scoped HTTP endpoint. Update Claude Code when the installed T3 model catalog requires a newer CLI. Exact gateway spelling, model availability and supported thinking levels are checked independently; no family-wide fallback changes the selected model.
 
 ## Troubleshooting
 

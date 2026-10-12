@@ -38,7 +38,13 @@ func TestManagedClaude55LaunchChecksEveryModelAndPreservesPreparation(t *testing
 					t.Fatal(err)
 				}
 			}
-			writeVersion("2.1.267")
+			compatible, downgraded, minimum := "2.1.267", "2.1.266", claude55EffortMinVersion
+			if client == "t3-code" {
+				// Native T3 identities require the CLI release introducing Opus
+				// 5.5, beyond the general Claude per-model effort minimum.
+				compatible, downgraded, minimum = "2.1.280", "2.1.279", "2.1.280"
+			}
+			writeVersion(compatible)
 			library := modelLibrary{SchemaVersion: 1, DefaultModel: "anthropic/claude-opus-5.5", Models: []modelLibraryItem{
 				{ID: "anthropic/claude-opus-4-6", ReasoningEffort: "low", ReasoningCustom: true, ReasoningLevels: []string{"low", "high"}, ContextWindow: 200000, MaxOutputTokens: 4096},
 				{ID: "anthropic/claude-opus-5.5", ReasoningEffort: "high", ReasoningCustom: true, ReasoningLevels: []string{"low", "high"}, ContextWindow: 200000, MaxOutputTokens: 4096},
@@ -72,9 +78,9 @@ func TestManagedClaude55LaunchChecksEveryModelAndPreservesPreparation(t *testing
 			}
 			starts := 0
 			a.launcher.start = func(clientLaunchPlan) error { starts++; return nil }
-			writeVersion("2.1.266")
+			writeVersion(downgraded)
 			response := adminRequest(a, "clients/launch", `{"client":"`+client+`"}`)
-			if response.Code != 409 || !strings.Contains(response.Body.String(), claude55EffortMinVersion) {
+			if response.Code != 409 || !strings.Contains(response.Body.String(), minimum) {
 				t.Fatal("first compatible model hid a later unsupported 5.5 default", response.Code, response.Body.String())
 			}
 			if starts != 0 || a.proxyListener != nil || !a.t3CodeLaunchUntil.IsZero() || !a.synaraLaunchUntil.IsZero() {

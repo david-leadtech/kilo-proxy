@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -121,11 +122,50 @@ func TestT3CodeIncludesRefreshedPrivateClaudeManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 	binary, _ := a.launcher.resolve("t3-code", "")
-	if a.t3CodeReady(mustReadT3CodePrepared(t, a), binary, *a.launcher) {
-		t.Fatal("a new cached builtin did not require preparing its visibility")
+	saved := mustReadT3CodePrepared(t, a)
+	if !a.t3CodeReady(saved, binary, *a.launcher) {
+		t.Fatal("an upstream manifest refresh invalidated the closed private picker policy")
+	}
+	for _, id := range saved.Runtime.ModelAllowlist[t3CodeClaudeProxyID] {
+		if id == "claude-opus-6" || id == "claude-sonnet-6" {
+			t.Fatal("upstream manifest expanded the prepared Kilo policy")
+		}
+	}
+	// Exercise the actual immutable private projection: newly refreshed builtins
+	// stay outside Kilo while direct accounts retain their original model objects.
+	asset, err := readT3CodeRuntimeAsset(saved.Runtime, saved.Runtime.ModelsAsset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if node, err := exec.LookPath("node"); err == nil {
+		selected, _ := json.Marshal(saved.Runtime.ModelAllowlist[t3CodeClaudeProxyID])
+		script := string(asset) + `
+const selected=` + string(selected) + `;const models=[...selected.map(slug=>({slug})),{slug:"claude-opus-6"},{slug:"claude-sonnet-6"}];const result=project([{instanceId:"kilo_claude_proxy",driver:"claudeAgent",models},{instanceId:"kilo_claude_normal",driver:"claudeAgent",models}]);if(result[0].models.length!==selected.length||result[0].models.some(m=>!selected.includes(m.slug))||result[1].models!==models)throw Error("refreshed models escaped instance policy");`
+		command := exec.Command(node, "--input-type=module", "--eval", script)
+		command.Env = []string{"HOME=" + t.TempDir(), "PATH=" + filepath.Dir(node), "LANG=C"}
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("%v %s", err, output)
+		}
+	}
+	data, _ := readCatalogFile(paths.ClientSettings)
+	var document map[string]json.RawMessage
+	var preferences map[string]json.RawMessage
+	var claude map[string]json.RawMessage
+	_ = json.Unmarshal(data, &document)
+	_ = json.Unmarshal(document["providerModelPreferences"], &preferences)
+	_ = json.Unmarshal(preferences[t3CodeClaudeProxyID], &claude)
+	claude["hiddenModels"] = json.RawMessage(`[]`)
+	preferences[t3CodeClaudeProxyID], _ = json.Marshal(claude)
+	document["providerModelPreferences"], _ = json.Marshal(preferences)
+	data, _ = json.Marshal(document)
+	if err := os.WriteFile(paths.ClientSettings, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if a.t3CodeReady(saved, binary, *a.launcher) {
+		t.Fatal("upstream refresh bypassed an alteration of owned hidden-model preferences")
 	}
 	prepareT3CodeFixture(t, a)
-	data, _ := readCatalogFile(paths.ClientSettings)
+	data, _ = readCatalogFile(paths.ClientSettings)
 	if !bytes.Contains(data, []byte(`"claude-opus-6"`)) || !bytes.Contains(data, []byte(`"claude-sonnet-6"`)) || bytes.Contains(data, []byte(`"vendor/not-claude"`)) {
 		t.Fatal("cached manifest policy was not restricted to Claude builtins", string(data))
 	}

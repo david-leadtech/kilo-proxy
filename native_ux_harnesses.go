@@ -59,7 +59,7 @@ func uxhName(key string) string {
 func uxhMonogramText(key string) string {
 	return map[string]string{
 		"codex": "CX", "claude-desktop": "CD", "synara": "SY", "t3-code": "T3", "openmausbot": "MB",
-		"claude": ">CC", "codex-cli": ">CX", "opencode": ">OC", "zed": "ZD", "open-design": "OD", "omp": ">PI",
+		"claude": ">CC", "codex-cli": ">CX", "opencode": ">OC", "opencode2": ">OC", "zed": "ZD", "open-design": "OD", "omp": ">PI",
 		"xcode": "XC", "generic": "API",
 	}[key]
 }

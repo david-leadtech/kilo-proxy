@@ -3,13 +3,15 @@ import assert from 'node:assert/strict';
 import {createT3CodeHelper, t3CodePrepared} from '../ui/t3-code-helper.mjs';
 
 const saved = () => ({revision:2,library:{schemaVersion:1,defaultModel:'vendor/second',models:[{id:'vendor/first',displayName:'Friendly',reasoningEffort:'high'},{id:'vendor/second'}]}});
+const preferences = () => ({version:1,codex:true,claude:true,kiloCodex:true,kiloClaude:true,codexModels:'shared',claudeModels:'shared',providers:[],openCode2:false});
+const preferencesResponse = () => ({preferences:preferences(),supportedProviders:[],openCode2Supported:false,requiresPreparation:false});
 const tick = () => new Promise(resolve => setImmediate(resolve));
-function fixture(t, api) {
+function fixture(t, api, options = {}) {
  const previous=globalThis.document,nodes=new Map();
- const element=()=>({children:[],textContent:'',classList:{toggle(){}},replaceChildren(){this.children=[];},append(item){this.children.push(item);},addEventListener(){}});
+ const element=()=>({children:[],textContent:'',value:'',checked:false,disabled:false,hidden:false,listeners:{},classList:{toggle(){}},replaceChildren(){this.children=[];},append(item){this.children.push(item);},addEventListener(name,callback){this.listeners[name]=callback;},dispatch(name){this.listeners[name]?.({target:this});}});
  globalThis.document={getElementById(id){if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);},createElement:element};
  t.after(()=>{globalThis.document=previous;});
- const helper=createT3CodeHelper({api,onChange(){}});
+ const helper=createT3CodeHelper({api:async(path,body)=>path==='clients/t3-code/preferences'?(options.preferencesAPI ? options.preferencesAPI(body) : preferencesResponse()):api(path,body),onChange(){}});
  helper.render({state:{connectionReady:true,baseURL:'http://127.0.0.1:8877/v1',localKey:'private-local-secret'},language:'en'});
  return {helper,nodes};
 }
@@ -39,25 +41,25 @@ test('T3 refuses a library exceeding its 32 custom-model limit before writing', 
  assert.match(helper.launchState().reason, /32 modelos compartidos/);
 });
 
-test('four agents use an immutable common-library snapshot without exposing credentials or profile paths',async t=>{
+test('enabled accounts use an immutable common-library snapshot without exposing credentials or profile paths',async t=>{
  const source=saved(),calls=[];
- const {helper,nodes}=fixture(t,async(path,body)=>{calls.push({path,body});return path==='model-library'?source:{prepared:true,library:structuredClone(source.library),profileDir:'/private/profile/secret',version:'0.0.45'};});
+ const {helper,nodes}=fixture(t,async(path,body)=>{calls.push({path,body});return path==='model-library'?source:{prepared:true,preferences:preferences(),library:structuredClone(source.library),profileDir:'/private/profile/secret',version:'0.0.45'};});
  await tick();
  assert.equal(helper.launchState().valid,true);
  assert.equal(helper.launchState().ready,false);
  await helper.launchState().prepare();
  const sent=calls.find(call=>call.body);
  assert.equal(sent.path,'clients/t3-code');
- assert.deepEqual(sent.body,{library:source.library});
+ assert.deepEqual(sent.body,{library:source.library,preferences:preferences()});
  source.library.models[0].displayName='Changed later';
  assert.equal(sent.body.library.models[0].displayName,'Friendly');
  assert.equal(calls.filter(call=>call.path==='model-library'&&call.body).length,0);
- assert.deepEqual(nodes.get('t3-code-models').children.map(node=>node.textContent),['vendor/second','Friendly · vendor/first']);
- assert.deepEqual(nodes.get('t3-code-agents').children.map(node=>node.textContent.split(' · ').slice(0,2).join(' · ')),['Codex · Normal','Kilo Proxy · Codex','Claude · Normal','Kilo Proxy · Claude']);
+ assert.deepEqual(nodes.get('t3-code-models').children.map(node=>node.textContent),[]);
+ assert.deepEqual(nodes.get('t3-code-agents').children.map(node=>node.textContent.split(' · ').slice(0,2).join(' · ')),['Codex · Existing Codex CLI login','Kilo Proxy · Codex','Claude · Existing Claude Code login','Kilo Proxy · Claude']);
  assert.match(nodes.get('t3-code-intro').textContent,/Green KP badges.*provider rail and composer/);
- assert.match(nodes.get('t3-code-compatibility').textContent,/new chat to switch between normal and Kilo/);
+ assert.match(nodes.get('t3-code-compatibility').textContent,/new chat to switch accounts/);
  assert.match(nodes.get('t3-code-requirements').textContent,/not Desktop app logins/);
- assert.match(nodes.get('t3-code-prepared').textContent,/Four agents prepared/);
+ assert.match(nodes.get('t3-code-prepared').textContent,/saved T3 accounts and models are prepared/);
  assert.doesNotMatch([...nodes.values()].map(node=>node.textContent).join(' '),/private-local-secret|\/private\/profile\/secret/);
 });
 
@@ -78,9 +80,9 @@ test('concurrent library changes block prepare or launch and a failed refresh cl
 
 test('connection edits invalidate prepared status and disconnect blocks preparation',async t=>{
  const source=saved();const writes=[];
- const {helper,nodes}=fixture(t,async(path,body)=>{if(body)writes.push(body);return path==='model-library'?source:{prepared:true,library:source.library};});
+ const {helper,nodes}=fixture(t,async(path,body)=>{if(body)writes.push(body);return path==='model-library'?source:{prepared:true,preferences:preferences(),library:source.library};});
  await tick();
- assert.match(nodes.get('t3-code-prepared').textContent,/Four agents prepared/);
+ assert.match(nodes.get('t3-code-prepared').textContent,/saved T3 accounts and models are prepared/);
  helper.render({state:{connectionReady:true,baseURL:'http://127.0.0.1:9999/v1',localKey:'different'},language:'es'});
  assert.match(nodes.get('t3-code-prepared').textContent,/Prepara o abre/);
  assert.equal(nodes.get('t3-code-agents').children.length,4);
@@ -94,7 +96,7 @@ test('connection edits invalidate prepared status and disconnect blocks preparat
 
 test('nightly guidance shows the detected version and explains handoff in both languages',async t=>{
  const source=saved(),version='9.0.0-beta.2';
- const {helper,nodes}=fixture(t,async path=>path==='model-library'?source:{prepared:true,library:source.library,version,protocolV2:true});
+ const {helper,nodes}=fixture(t,async path=>path==='model-library'?source:{prepared:true,preferences:preferences(),library:source.library,version,protocolV2:true});
  await tick();
  assert.match(nodes.get('t3-code-requirements').textContent,/Detected: 9\.0\.0-beta\.2/);
  assert.match(nodes.get('t3-code-compatibility').textContent,/change agents between turns/);
@@ -115,4 +117,94 @@ test('preparation and installation guidance translates to Spanish',async t=>{
  fail=true;
  await assert.rejects(helper.launchState().prepare(),/Quit the T3 Code/);
  assert.match(nodes.get('t3-code-status').textContent,/Cierra la ventana Kilo de T3 Code/);
+});
+
+test('settings save a concrete account policy once, disable editing while pending, and expose only supported providers', async t => {
+ let current=preferences(), release, posted=[];
+ const support=[{id:'cursor',label:'Cursor'},{id:'opencode',label:'OpenCode'}];
+ const {helper,nodes}=fixture(t, async path => path==='model-library'?saved():{preferences:structuredClone(current),prepared:true,library:saved().library,effectiveCodexModels:[{id:'openai/gpt-fixture',name:'Fixture GPT'}],effectiveClaudeModels:[{id:'anthropic/claude-opus-5.5',name:'Claude Opus 5.5'}]}, {preferencesAPI:async body=>{
+  if(body){posted.push(structuredClone(body));await new Promise(resolve=>{release=resolve;});current=structuredClone(body);}
+  return {preferences:structuredClone(current),requiresPreparation:!!body,supportedProviders:support,openCode2Supported:true};
+ }});
+ await tick();
+ assert.deepEqual(nodes.get('t3-code-provider-options').children.map(label=>label.children[1].textContent),['Cursor','OpenCode']);
+ assert.equal(nodes.get('t3-code-opencode-version-field').hidden,false);
+ assert.equal(nodes.get('t3-code-opencode-version').disabled,true);
+ assert.deepEqual(nodes.get('t3-code-models').children.map(row=>row.textContent),['Kilo Proxy · Codex · Fixture GPT · openai/gpt-fixture','Kilo Proxy · Claude · Claude Opus 5.5 · anthropic/claude-opus-5.5']);
+ const codex=nodes.get('t3-code-account-codex');codex.checked=false;codex.dispatch('change');
+ assert.equal(posted.length,1);assert.equal(posted[0].codex,false);assert.equal(posted[0].claude,true);
+ assert.equal(codex.checked,false);assert.equal(helper.preferences().codex,true);
+ assert.equal(nodes.get('t3-code-account-claude').disabled,true);
+ assert.equal(helper.launchState().valid,false);
+ await helper.savePreferences({...current,claude:false});assert.equal(posted.length,1);
+ release();await tick();await tick();
+ assert.equal(helper.preferences().codex,false);
+ assert.equal(nodes.get('t3-code-account-codex').checked,false);
+ assert.equal(nodes.get('t3-code-account-claude').disabled,false);
+ assert.doesNotMatch(nodes.get('t3-code-agents').children.map(row=>row.textContent).join(' '),/Normal/);
+ assert.equal(nodes.get('t3-code-agents').children.length,3);
+});
+
+test('a failed settings save retains the confirmed policy and retries exactly the requested policy', async t=>{
+ let current=preferences(),fail=true,writes=[];
+ const {helper,nodes}=fixture(t,async path=>path==='model-library'?saved():{preferences:current,library:saved().library,prepared:true},{preferencesAPI:async body=>{
+  if(body){writes.push(structuredClone(body));if(fail)throw new Error('synthetic disk unavailable');current=structuredClone(body);}
+  return {preferences:current,supportedProviders:[],openCode2Supported:false,requiresPreparation:true};
+ }});
+ await tick();
+ await helper.savePreferences({...current,claude:false});
+ assert.equal(helper.preferences().claude,true);
+ assert.equal(nodes.get('t3-code-settings-retry').hidden,false);
+ assert.match(nodes.get('t3-code-settings-status').textContent,/disk unavailable/);
+ assert.equal(helper.launchState().valid,false);
+ fail=false;nodes.get('t3-code-settings-retry').dispatch('click');await tick();await tick();
+ assert.equal(helper.preferences().claude,false);
+ assert.deepEqual(writes[1],writes[0]);
+ assert.equal(nodes.get('t3-code-settings-retry').hidden,true);
+});
+
+test('settings edits elsewhere invalidate a preparation snapshot before writing', async t=>{
+ let current=preferences(),writes=[];
+ const {helper}=fixture(t,async(path,body)=>{if(body)writes.push(body);return path==='model-library'?saved():{prepared:true,preferences:current,library:saved().library};},{preferencesAPI:async()=>({preferences:structuredClone(current),supportedProviders:[],requiresPreparation:false})});
+ await tick();current.claude=false;
+ await assert.rejects(helper.launchState().prepare(),/settings changed/);
+ assert.equal(writes.length,0);
+ assert.equal(helper.preferences().claude,false);
+});
+
+test('OpenCode selects one version and disabling its provider clears OpenCode 2 without changing other providers',async t=>{
+ let current={...preferences(),providers:['cursor','opencode'],openCode2:true},writes=[];
+ const {helper,nodes}=fixture(t,async path=>path==='model-library'?saved():{prepared:false,preferences:current,library:saved().library},{preferencesAPI:async body=>{if(body){writes.push(structuredClone(body));current=structuredClone(body);}return {preferences:current,supportedProviders:[{id:'opencode',label:'OpenCode'}],openCode2Supported:true};}});
+ await tick();assert.equal(nodes.get('t3-code-opencode-version').value,'2');assert.equal(nodes.get('t3-code-opencode-version').disabled,false);
+ const checkbox=nodes.get('t3-code-provider-options').children[0].children[0];checkbox.checked=false;checkbox.dispatch('change');await tick();await tick();
+ assert.deepEqual(writes[0].providers,['cursor']);assert.equal(writes[0].openCode2,false);
+ assert.equal(helper.preferences().openCode2,false);
+ assert.equal(nodes.get('t3-code-opencode-version').disabled,true);
+ helper.render({state:{connectionReady:true},language:'es'});
+ assert.match(nodes.get('t3-code-settings-help').textContent,/se conservan tus chats/);
+ assert.match(nodes.get('t3-code-codex-official').textContent,/OpenAI y ChatGPT/);
+ assert.match(nodes.get('t3-code-settings-status').textContent,/Ajustes guardados/);
+});
+
+test('official mode does not reject an unrelated shared library over the per-account custom limit',async t=>{
+ const source=saved();source.library.models=Array.from({length:40},(_,i)=>({id:'vendor/model-'+i}));source.library.defaultModel='vendor/model-0';
+ const prefs={...preferences(),codexModels:'official',claudeModels:'official'};
+ const {helper}=fixture(t,async path=>path==='model-library'?source:{prepared:false,preferences:prefs,library:source.library},{preferencesAPI:async()=>({preferences:prefs,supportedProviders:[],requiresPreparation:true})});
+ await tick();assert.equal(helper.launchState().valid,true);
+});
+
+test('saved choices absent from a newer build stay visible until disabled, without enabling unknown providers or OpenCode 2',async t=>{
+ let current={...preferences(),providers:['cursor','opencode'],openCode2:true},writes=[];
+ const {helper,nodes}=fixture(t,async path=>path==='model-library'?saved():{prepared:false,preferences:current,library:saved().library},{preferencesAPI:async body=>{if(body){writes.push(structuredClone(body));current=structuredClone(body);}return {preferences:current,supportedProviders:[{id:'opencode',label:'OpenCode'},{id:'unknown',label:'Unknown provider'}],openCode2Supported:false};}});
+ await tick();
+ assert.deepEqual(nodes.get('t3-code-provider-options').children.map(label=>label.children[1].textContent),['OpenCode','Cursor · unavailable in this build']);
+ assert.equal(nodes.get('t3-code-opencode-version').value,'2');assert.equal(nodes.get('t3-code-opencode-version-2').disabled,true);
+ assert.match(nodes.get('t3-code-opencode-help').textContent,/cannot use the saved OpenCode 2 choice/);
+ const cursor=nodes.get('t3-code-provider-options').children[1].children[0];assert.equal(cursor.checked,true);assert.equal(cursor.disabled,false);cursor.checked=false;cursor.dispatch('change');await tick();await tick();
+ assert.deepEqual(writes[0].providers,['opencode']);assert.equal(writes[0].openCode2,true);
+ nodes.get('t3-code-opencode-version').value='1';nodes.get('t3-code-opencode-version').dispatch('change');await tick();await tick();
+ assert.equal(writes[1].openCode2,false);assert.equal(nodes.get('t3-code-opencode-version-field').hidden,true);
+ nodes.get('t3-code-opencode-version').value='2';nodes.get('t3-code-opencode-version').dispatch('change');await tick();assert.equal(writes.length,2);
+ assert.deepEqual(nodes.get('t3-code-provider-options').children.map(label=>label.children[1].textContent),['OpenCode']);
+ helper.render({state:{connectionReady:true},language:'es'});assert.doesNotMatch(nodes.get('t3-code-agents').children.map(node=>node.textContent).join(' '),/Cursor|Unknown/);
 });

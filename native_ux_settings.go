@@ -19,7 +19,7 @@ import (
 )
 
 // Settings is one scrollable page: a sticky section index on the left and a
-// bordered block per topic. Every change saves itself; connection changes
+// bordered block per topic. Executable paths save explicitly; connection changes
 // briefly stop and restart a running proxy because the local API only edits a
 // stopped connection.
 
@@ -51,13 +51,15 @@ var uxsSections = []uxsSection{
 	{"accounts", "Accounts", "Cuentas"},
 	{"connection", "Connection", "Conexión"},
 	{"preferences", "Preferences", "Preferencias"},
+	{"cli-tools", "CLI installations", "Instalaciones CLI"},
+	{"t3-code", "T3 Code", "T3 Code"},
 	{"images", "Large images", "Imágenes grandes"},
 	{"terminal", "Terminal commands", "Comandos de terminal"},
 	{"updates", "Updates", "Actualizaciones"},
 }
 
 // uxsLegacyTabs maps the former tab names, still used by links elsewhere, to blocks.
-var uxsLegacyTabs = map[string]string{"account": "accounts", "accounts": "accounts", "connection": "connection", "images": "images", "preferences": "preferences", "terminal": "terminal", "updates": "updates"}
+var uxsLegacyTabs = map[string]string{"account": "accounts", "accounts": "accounts", "connection": "connection", "images": "images", "preferences": "preferences", "cli-tools": "cli-tools", "t3-code": "t3-code", "terminal": "terminal", "updates": "updates"}
 
 func (u *nativeUI) uxs() *uxsSettingsState {
 	if u.uxSettings == nil {
@@ -71,7 +73,7 @@ func (u *nativeUI) uxsPageLead() ([2]string, bool) {
 	if u.page != "settings" && u.page != "connection" {
 		return [2]string{}, false
 	}
-	return [2]string{"Everything saves automatically. None of this is needed to get started.", "Todo se guarda solo. Nada de esto hace falta para empezar."}, true
+	return [2]string{"Manage your connection, CLI installations and preferences.", "Gestiona la conexión, las instalaciones de las CLI y tus preferencias."}, true
 }
 
 // uxsBlock is a bordered box with an ivory header (title + muted subtitle) and rows.
@@ -466,6 +468,8 @@ func (u *nativeUI) uxsSettingsPage() layout.Widget {
 		{"accounts", u.uxsAccountsBlock()},
 		{"connection", u.uxsConnectionBlock()},
 		{"preferences", u.appearancePanel()},
+		{"cli-tools", u.cliPreferencesPanel()},
+		{"t3-code", u.t3CodePreferencesPanel()},
 		{"images", u.imageTransportPanel()},
 		{"terminal", u.terminalCommandsPanel()},
 		{"updates", u.updatesPanel()},

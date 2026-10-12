@@ -174,6 +174,10 @@ func (u *nativeUI) launchConnectionFingerprint() [32]byte {
 // as its exported payload so neither a newer library nor a malformed numeric
 // edit can silently replace what the user asked to open while disk IO is busy.
 func (u *nativeUI) launchSettingsFingerprint(key, directoryField string) [32]byte {
+	return u.launchSettingsFingerprintWithPreferences(key, directoryField, true)
+}
+
+func (u *nativeUI) launchSettingsFingerprintWithPreferences(key, directoryField string, includePreferences bool) [32]byte {
 	s := u.sharedClientSelection(key)
 	u.syncClientSelection(key, s)
 	base, local, _ := u.clientBase()
@@ -185,7 +189,24 @@ func (u *nativeUI) launchSettingsFingerprint(key, directoryField string) [32]byt
 	if key == "codex" {
 		appPath = u.value("clients-launch-app-path")
 	}
-	data, _ := json.Marshal([]any{nativeSelectionFingerprint(key, s, base, local, u.clientCaps(key)), u.modelLibraryValue(), limits, u.uxhLaunchDirectory(key, directoryField), appPath, u.launchConnectionFingerprint()})
+	values := []any{nativeSelectionFingerprint(key, s, base, local, u.clientCaps(key)), u.modelLibraryValue(), limits, u.uxhLaunchDirectory(key, directoryField), appPath, u.launchConnectionFingerprint()}
+	if nativeCLIPathClient(key) && includePreferences {
+		prefs := &u.clientState().CLIPreferences
+		values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation, u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")))
+	}
+	if key == "t3-code" && includePreferences {
+		paths := &u.clientState().OpenCodePreferences
+		values = append(values, paths.Loaded, paths.Preferences.Executable1, paths.Preferences.Executable2, u.value(nativeOpenCodePathField(1)), u.value(nativeOpenCodePathField(2)))
+	}
+	if key == "t3-code" && includePreferences {
+		prefs := &u.agentsState().T3Code.PreferencesState
+		values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending)
+	}
+	if (key == "opencode" || key == "opencode2") && includePreferences {
+		prefs := &u.clientState().OpenCodePreferences
+		values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation)
+	}
+	data, _ := json.Marshal(values)
 	return sha256.Sum256(data)
 }
 
@@ -201,6 +222,103 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 	c := u.clientState()
 	if c.Launching != "" || key == "claude-desktop" && u.busy["POST/api/claude-desktop/options"] {
 		return
+	}
+	if nativeCLIPathClient(key) {
+		prefs := &c.CLIPreferences
+		if u.cliPreferencesBusy() || prefs.Pending != nil || u.cliPathDirty() {
+			u.setNotice(nativeToneWarning, u.tr("Load or finish saving CLI executable settings before opening.", "Carga o termina de guardar las rutas de las CLI antes de abrir."))
+			return
+		}
+		if !prefs.Loaded {
+			before := u.launchSettingsFingerprintWithPreferences(key, directoryField, false)
+			c.Launching = key
+			u.refreshCLIPreferencesAfter(func(err error) {
+				c.Launching = ""
+				if err != nil {
+					u.noticeError(err)
+					return
+				}
+				if before != u.launchSettingsFingerprintWithPreferences(key, directoryField, false) {
+					u.noticeError(errors.New(u.launchSettingsChangedMessage()))
+					return
+				}
+				u.launchClientFrom(key, directoryField)
+			})
+			return
+		}
+		if key == "t3-code" && !c.OpenCodePreferences.Loaded {
+			before := u.launchSettingsFingerprintWithPreferences(key, directoryField, false)
+			c.Launching = key
+			u.refreshOpenCodePreferencesAfter(func(err error) {
+				c.Launching = ""
+				if err != nil {
+					u.noticeError(err)
+					return
+				}
+				if before != u.launchSettingsFingerprintWithPreferences(key, directoryField, false) {
+					u.noticeError(errors.New(u.launchSettingsChangedMessage()))
+					return
+				}
+				u.launchClientFrom(key, directoryField)
+			})
+			return
+		}
+	}
+	if key == "opencode" || key == "opencode2" {
+		prefs := &c.OpenCodePreferences
+		if u.openCodePreferencesBusy() || prefs.Pending != nil {
+			u.setNotice(nativeToneWarning, u.tr("Wait for OpenCode settings to finish, or retry the unconfirmed version choice.", "Espera a que terminen los ajustes de OpenCode o reintenta la versión no confirmada."))
+			return
+		}
+		if !prefs.Loaded {
+			before := u.launchSettingsFingerprintWithPreferences(key, directoryField, false)
+			c.Launching, a.Phase = key, u.tr("Loading OpenCode preferences…", "Cargando preferencias de OpenCode…")
+			u.refreshOpenCodePreferencesAfter(func(err error) {
+				c.Launching, a.Phase = "", ""
+				if err != nil {
+					u.noticeError(err)
+					return
+				}
+				if before != u.launchSettingsFingerprintWithPreferences(key, directoryField, false) {
+					u.setNotice(nativeToneWarning, u.launchSettingsChangedMessage())
+					return
+				}
+				u.launchClientFrom(key, directoryField)
+			})
+			return
+		}
+		if key == "opencode" && u.openCodeClientKey() == "opencode2" {
+			u.launchClientFrom("opencode2", directoryField)
+			return
+		}
+		if key != u.openCodeClientKey() {
+			u.setNotice(nativeToneWarning, u.launchSettingsChangedMessage())
+			return
+		}
+	}
+	if key == "t3-code" {
+		prefs := &a.T3Code.PreferencesState
+		if u.t3CodePreferencesBusy() || prefs.Pending != nil || u.busy["GET"+nativeT3CodePreferencesEndpoint] {
+			u.setNotice(nativeToneWarning, u.tr("Wait for T3 Code settings to finish, or retry the unconfirmed change in Settings.", "Espera a que terminen los ajustes de T3 Code o reintenta el cambio no confirmado en Ajustes."))
+			return
+		}
+		if !prefs.Loaded {
+			before := u.launchSettingsFingerprintWithPreferences(key, directoryField, false)
+			c.Launching, a.Phase = key, u.tr("Loading T3 Code preferences…", "Cargando preferencias de T3 Code…")
+			u.refreshT3CodePreferencesAfter(func(err error) {
+				c.Launching, a.Phase = "", ""
+				if err != nil {
+					u.noticeError(err)
+					return
+				}
+				if before != u.launchSettingsFingerprintWithPreferences(key, directoryField, false) {
+					u.setNotice(nativeToneWarning, u.launchSettingsChangedMessage())
+					return
+				}
+				u.launchClientFrom(key, directoryField)
+			})
+			return
+		}
 	}
 	if err := u.packReadinessError(key); err != nil {
 		u.noticeError(err)

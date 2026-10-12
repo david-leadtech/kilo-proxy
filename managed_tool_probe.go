@@ -78,10 +78,7 @@ func managedToolProbeOutput(ctx context.Context, binary string) (string, error) 
 	}
 	probe, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	command := exec.CommandContext(probe, binary, "--version")
-	command.Dir = scratch
-	command.WaitDelay = time.Second
-	command.Env = []string{
+	environment := []string{
 		"HOME=" + scratch, "USERPROFILE=" + scratch, "PATH=" + path, "LANG=C", "LC_ALL=C",
 		"CODEX_HOME=" + scratch, "CLAUDE_CONFIG_DIR=" + scratch, "CLAUDE_SECURESTORAGE_CONFIG_DIR=" + scratch,
 		"XDG_CONFIG_HOME=" + scratch, "XDG_DATA_HOME=" + scratch, "XDG_STATE_HOME=" + scratch, "XDG_CACHE_HOME=" + scratch,
@@ -91,10 +88,16 @@ func managedToolProbeOutput(ctx context.Context, binary string) (string, error) 
 		// Native CLIs may require Windows' loader directory. No other ambient state
 		// is inherited, and Windows never gets managed installation actions.
 		if system := os.Getenv("SystemRoot"); filepath.IsAbs(system) && !strings.ContainsAny(system, "\x00\r\n") {
-			command.Env = append(command.Env, "SystemRoot="+system)
+			environment = append(environment, "SystemRoot="+system)
 		}
 	}
-	hideOpenDesignProbeWindow(command)
+	command, cleanup, err := managedToolProbeCommand(probe, binary, environment)
+	if err != nil {
+		return "", err
+	}
+	defer cleanup()
+	command.Dir = scratch
+	command.WaitDelay = time.Second
 	output := &managedToolOutput{limit: 16 << 10}
 	command.Stdout, command.Stderr = output, io.Discard
 	if command.Run() != nil || output.exceeded || probe.Err() != nil {

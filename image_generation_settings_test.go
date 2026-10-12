@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -68,11 +69,11 @@ func TestImageGenerationSettingsIndependentPersistence(t *testing.T) {
 			}
 		}
 		before.ImageGeneration = images
-		if a.config != before {
+		if !reflect.DeepEqual(a.config, before) {
 			t.Fatal("saving images changed unrelated configuration")
 		}
 		loaded, err := readSettings(a.dir)
-		if err != nil || loaded != before {
+		if err != nil || !reflect.DeepEqual(loaded, before) {
 			t.Fatalf("image preference did not survive reload: %v", err)
 		}
 		if a.proxyServer != server || a.active != 1 || a.imageGenerationActive != 1 {
@@ -137,7 +138,7 @@ func TestImageGenerationSettingsStrictInputAndAuthentication(t *testing.T) {
 			if w.Code != tc.status {
 				t.Fatalf("status %d, want %d", w.Code, tc.status)
 			}
-			if a.config != before {
+			if !reflect.DeepEqual(a.config, before) {
 				t.Fatal("rejected input changed settings")
 			}
 			if _, err := os.Stat(filepath.Join(a.dir, "settings.json")); !os.IsNotExist(err) {
@@ -160,7 +161,7 @@ func TestImageGenerationSettingsWriteFailureRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := imageGenerationSettingsRequest(a, "POST", `{"enabled":true,"provider":"chatgpt","model":"vendor/old"}`, nil)
-	if w.Code != 500 || a.config != before {
+	if w.Code != 500 || !reflect.DeepEqual(a.config, before) {
 		t.Fatal("failed persistence applied settings", w.Code)
 	}
 	if got, err := os.ReadFile(marker); err != nil || string(got) != "unchanged" {

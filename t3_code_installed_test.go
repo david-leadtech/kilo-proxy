@@ -25,6 +25,15 @@ import (
 // Opt in to the installed T3 server and native CLIs. Every provider home is a
 // disposable fixture, and every inference upstream is synthetic localhost.
 func TestT3CodeInstalledFourAgents(t *testing.T) {
+	t3CodeInstalledAgents(t, false)
+}
+
+func TestT3CodeInstalledOfficialClaudeModels(t *testing.T) {
+	t3CodeInstalledAgents(t, true)
+}
+
+func t3CodeInstalledAgents(t *testing.T, officialClaude bool) {
+	t.Helper()
 	installed := os.Getenv("KILO_TEST_T3_APP")
 	if installed == "" {
 		t.Skip("set KILO_TEST_T3_APP to an installed T3 desktop application")
@@ -45,13 +54,24 @@ func TestT3CodeInstalledFourAgents(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt := clientLaunchRuntime{platform: runtime.GOOS, home: realHome, resolve: resolveLaunchClient}
-	codex, err := resolveOpenDesignCLI("codex-cli", rt)
-	if err != nil {
-		t.Fatal(err)
+	codex := os.Getenv("KILO_TEST_T3_CODEX_BINARY")
+	if codex == "" {
+		codex, err = resolveOpenDesignCLI("codex-cli", rt)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
-	claude, err := resolveLaunchClient("claude", "")
-	if err != nil {
-		t.Fatal(err)
+	claude := os.Getenv("KILO_TEST_T3_CLAUDE_BINARY")
+	if claude == "" {
+		claude, err = resolveLaunchClient("claude", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, executable := range []string{codex, claude} {
+		if !filepath.IsAbs(executable) {
+			t.Fatal("installed T3 acceptance requires absolute CLI paths")
+		}
 	}
 	node, err := exec.LookPath("node")
 	if err != nil {
@@ -59,6 +79,12 @@ func TestT3CodeInstalledFourAgents(t *testing.T) {
 	}
 	a := launchTestApp(t)
 	a.config.Language = "en"
+	a.config.T3Code = normalizeT3CodePreferences(t3CodePreferences{})
+	a.config.T3Code.CodexModels = "shared"
+	a.config.T3Code.ClaudeModels = "shared"
+	if officialClaude {
+		a.config.T3Code.ClaudeModels = "official"
+	}
 	a.config.LocalKey = "synthetic-t3-local"
 	a.chatgpt.creds = chatGPTCredentials{Access: "synthetic-t3-chatgpt-access", Refresh: "synthetic-refresh", Account: "synthetic-t3-account", Expires: time.Now().Add(time.Hour).Unix()}
 	a.chatgpt.state = chatGPTState{Status: "idle"}
@@ -93,6 +119,8 @@ func TestT3CodeInstalledFourAgents(t *testing.T) {
 	const claudeModel = "anthropic/claude-opus-4-6"
 	const claudePickerModel = "anthropic/claude-opus-5.5"
 	const claudeLowModel = "anthropic/claude-sonnet-4-6"
+	const claudeOfficialLowModel = "anthropic/claude-sonnet-5.5"
+	const claudeOfficialFableModel = "anthropic/claude-fable-5.1"
 	const chatgptModel = "chatgpt/gpt-synthetic-high"
 	const responseText = "SYNTHETIC_T3_OK"
 	// Put the shared default after index zero so the picker acceptance can prove
@@ -115,6 +143,20 @@ func TestT3CodeInstalledFourAgents(t *testing.T) {
 		library.Models = append(library.Models, modelLibraryItem{ID: claudeLowModel, ReasoningEffort: "low", ReasoningCustom: true, ReasoningLevels: []string{"low", "medium", "high"}, ContextWindow: 128000, MaxOutputTokens: 4096})
 		catalog = append(catalog, modelInfo{ID: claudeLowModel, Name: "Synthetic Claude Low", ContextWindow: 128000, MaxOutputTokens: 4096, ReasoningEfforts: []string{"low", "medium", "high"}})
 	}
+	if officialClaude {
+		// A saved CLI default must not override a lower effort selected for
+		// this same native model in a later T3 turn.
+		library.Models[1].ReasoningEffort = "high"
+		// These two models deliberately do not belong to shared Models. The
+		// official Claude instance must resolve them from its scoped catalog.
+		catalog = append(catalog,
+			modelInfo{ID: claudeOfficialLowModel, Name: "Synthetic Gateway Sonnet 5.5", ContextWindow: 128000, MaxOutputTokens: 4096},
+			modelInfo{ID: claudeOfficialFableModel, Name: "Synthetic Gateway Fable 5.1", ContextWindow: 128000, MaxOutputTokens: 4096})
+	}
+	policy, err := deriveT3CodeModelPolicy(a.config.T3Code, library, catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := a.modelLibrary.save(library, 0, false); err != nil {
 		t.Fatal(err)
 	}
@@ -132,6 +174,7 @@ func TestT3CodeInstalledFourAgents(t *testing.T) {
 	counts := map[string]int{}
 	toolResults := map[string]bool{}
 	pickerRequests := 0
+	var claudeRequests []map[string]string
 	count := func(route string) int {
 		mu.Lock()
 		defer mu.Unlock()
@@ -211,7 +254,7 @@ func TestT3CodeInstalledFourAgents(t *testing.T) {
 			}
 			respond(w, r, body, t3CodeCodexProxyID)
 		case "/api/gateway/messages", "/api/gateway/messages/count_tokens":
-			if body["model"] == claudePickerModel {
+			if !officialClaude && body["model"] == claudePickerModel {
 				// Routing and auth are asserted for 5.5; effort is deliberately
 				// unspecified, unlike the separate known High/Low regressions.
 				if r.URL.Path == "/api/gateway/messages" {
@@ -227,7 +270,27 @@ func TestT3CodeInstalledFourAgents(t *testing.T) {
 			mu.Lock()
 			previousRequests := counts[t3CodeClaudeProxyID]
 			mu.Unlock()
-			if installation.ProtocolV2 && previousRequests == 2 {
+			if officialClaude {
+				expectedModel = claudePickerModel
+				if previousRequests == 2 {
+					expectedModel, expectedEffort = claudeOfficialLowModel, "low"
+				} else if previousRequests == 4 {
+					expectedEffort = "low"
+				} else if previousRequests >= 6 && previousRequests <= 8 {
+					expectedModel, expectedEffort = claudeOfficialFableModel, "medium"
+				} else if previousRequests >= 9 {
+					expectedModel, expectedEffort = claudePickerModel, "medium"
+					if previousRequests == 10 {
+						expectedEffort = "high"
+					}
+					if previousRequests == 11 {
+						expectedModel, expectedEffort = claudeOfficialLowModel, "low"
+					}
+					if previousRequests == 12 {
+						expectedModel, expectedEffort = claudeOfficialFableModel, "high"
+					}
+				}
+			} else if installation.ProtocolV2 && previousRequests == 2 {
 				expectedEffort = "low"
 				expectedModel = claudeLowModel
 			}
@@ -235,6 +298,9 @@ func TestT3CodeInstalledFourAgents(t *testing.T) {
 				t.Errorf("Kilo Claude lost exact model: expected %s, got %v", expectedModel, body["model"])
 			}
 			if r.URL.Path == "/api/gateway/messages" {
+				mu.Lock()
+				claudeRequests = append(claudeRequests, map[string]string{"model": stringValue(body["model"]), "effort": stringValue(object(body["output_config"])["effort"])})
+				mu.Unlock()
 				if object(body["output_config"])["effort"] != expectedEffort {
 					t.Errorf("Kilo Claude reasoning mismatch at request %d: expected %s, output_config=%v thinking=%v", previousRequests+1, expectedEffort, body["output_config"], body["thinking"])
 				}
@@ -343,28 +409,66 @@ func TestT3CodeInstalledFourAgents(t *testing.T) {
 			t.Fatalf("cannot prepare temporary T3 project: %v %s", err, output)
 		}
 	}
-	claudeOptions := map[string]any{"effort": "high"}
-	if installation.ProtocolV2 {
-		claudeOptions = nil
-	}
-	libraryIDs := make([]string, 0, len(library.Models))
-	for _, model := range library.Models {
+	pickerLibrary := t3CodeClaudePickerLibrary(policy.ClaudeLibrary, policy.ClaudeRoutes)
+	libraryIDs := make([]string, 0, len(pickerLibrary.Models))
+	for _, model := range pickerLibrary.Models {
 		libraryIDs = append(libraryIDs, model.ID)
 	}
+	claudeSelection := map[string]any{"id": t3CodeClaudeProxyID, "model": t3CodeNativeClaudeModelID(claudeModel), "options": map[string]any{"effort": "high"}}
+	if installation.ProtocolV2 || officialClaude {
+		alternate := claudeLowModel
+		if officialClaude {
+			claudeSelection["model"] = t3CodeNativeClaudeModelID(claudePickerModel)
+			claudeSelection["extraEfforts"] = []string{"low", "high"}
+			alternate = claudeOfficialLowModel
+		}
+		claudeSelection["alternateModel"] = t3CodeNativeClaudeModelID(alternate)
+		claudeSelection["alternateOptions"] = map[string]any{"effort": "low"}
+	}
+	instances := []map[string]any{
+		{"id": t3CodeCodexNormalID, "model": codexModel, "options": map[string]any{"reasoningEffort": "high"}},
+		{"id": t3CodeCodexProxyID, "model": codexModel, "options": map[string]any{"reasoningEffort": "high"}},
+		{"id": t3CodeClaudeNormalID, "model": claudeModel},
+		claudeSelection,
+	}
+	if officialClaude {
+		instances = append(instances, map[string]any{"id": t3CodeClaudeProxyID, "model": t3CodeNativeClaudeModelID(claudeOfficialFableModel), "options": map[string]any{"effort": "medium"}})
+	}
+	instances = append(instances, map[string]any{"id": t3CodeCodexProxyID, "model": chatgptModel, "options": map[string]any{"reasoningEffort": "high"}})
 	fixture := map[string]any{
 		"binary": plan.Executable, "entry": filepath.Join(installed, "Contents", "Resources", "app.asar", "apps", "server", "dist", "bin.mjs"),
 		"version": version, "protocolV2": installation.ProtocolV2,
 		"baseDir": paths.Data, "home": paths.UIHome, "project": project, "env": env, "expectedResponse": responseText,
 		"verifyModelPicker": os.Getenv("KILO_TEST_T3_PICKER") == "1", "clientSettingsPath": paths.ClientSettings,
 		"artifactsDirectory": os.Getenv("KILO_TEST_T3_ARTIFACTS"),
-		"libraryModels":      libraryIDs, "defaultModel": library.DefaultModel,
-		"instances": []map[string]any{
-			{"id": t3CodeCodexNormalID, "model": codexModel, "options": map[string]any{"reasoningEffort": "high"}},
-			{"id": t3CodeCodexProxyID, "model": codexModel, "options": map[string]any{"reasoningEffort": "high"}},
-			{"id": t3CodeClaudeNormalID, "model": claudeModel},
-			{"id": t3CodeClaudeProxyID, "model": claudeModel, "options": claudeOptions, "alternateModel": claudeLowModel},
-			{"id": t3CodeCodexProxyID, "model": chatgptModel, "options": map[string]any{"reasoningEffort": "high"}},
+		"libraryModels":      libraryIDs, "defaultModel": pickerLibrary.DefaultModel,
+		"officialClaude": officialClaude, "instances": instances,
+		"uiClaudeModels": []map[string]string{
+			{"model": t3CodeNativeClaudeModelID(claudePickerModel), "effort": "high"},
+			{"model": t3CodeNativeClaudeModelID(claudeOfficialLowModel), "effort": "low"},
+			{"model": t3CodeNativeClaudeModelID(claudeOfficialFableModel), "effort": "high"},
 		},
+	}
+	if a.t3CodeAssets != nil {
+		fixture["runtimeAssetsURL"] = a.t3CodeAssets.URL
+		t.Cleanup(func() { a.t3CodeAssets.Close() })
+		prepared, err := a.readT3CodePrepared()
+		if err != nil {
+			t.Fatal(err)
+		}
+		fixture["runtimeAssetFiles"] = prepared.Runtime.Files
+		if os.Getenv("KILO_TEST_T3_PICKER") == "1" {
+			baseline, err := prepareT3CodeRuntime(paths.Root, installed, runtime.GOOS)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assets, err := startT3CodeRuntimeAssets(baseline)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { assets.Close() })
+			fixture["baselineAssetsURL"], fixture["baselineAssetFiles"] = assets.URL, baseline.Files
+		}
 	}
 	data, _ := json.Marshal(fixture)
 	manifest := filepath.Join(t.TempDir(), "fixture.json")
@@ -385,6 +489,9 @@ func TestT3CodeInstalledFourAgents(t *testing.T) {
 	command.WaitDelay = 3 * time.Second
 	output, err := command.CombinedOutput()
 	if err != nil || !strings.Contains(string(output), "Installed T3 four-agent acceptance passed") {
+		mu.Lock()
+		t.Logf("Synthetic upstream counts: %v; Claude requests: %v", counts, claudeRequests)
+		mu.Unlock()
 		t.Fatalf("installed T3 acceptance failed: %v\n%s", err, output)
 	}
 	mu.Lock()
@@ -398,8 +505,38 @@ func TestT3CodeInstalledFourAgents(t *testing.T) {
 			t.Errorf("%s did not complete its safe file-read roundtrip", id)
 		}
 	}
-	if os.Getenv("KILO_TEST_T3_PICKER") == "1" && pickerRequests != 5 {
+	if !officialClaude && os.Getenv("KILO_TEST_T3_PICKER") == "1" && pickerRequests != 5 {
 		t.Errorf("Opus 5.5 exact gateway requests = %d, want history + three UI continuations + promoted draft (5)", pickerRequests)
+	}
+	if officialClaude {
+		want := []map[string]string{
+			{"model": claudePickerModel, "effort": "high"}, {"model": claudePickerModel, "effort": "high"},
+			{"model": claudeOfficialLowModel, "effort": "low"}, {"model": claudePickerModel, "effort": "high"},
+			{"model": claudePickerModel, "effort": "low"}, {"model": claudePickerModel, "effort": "high"},
+			{"model": claudeOfficialFableModel, "effort": "medium"}, {"model": claudeOfficialFableModel, "effort": "medium"}, {"model": claudeOfficialFableModel, "effort": "medium"},
+		}
+		if len(claudeRequests) < len(want) {
+			t.Errorf("official Claude requests missing: got %v", claudeRequests)
+		} else {
+			for i, expected := range want {
+				if claudeRequests[i]["model"] != expected["model"] || claudeRequests[i]["effort"] != expected["effort"] {
+					t.Errorf("official Claude request %d = %v, want %v", i+1, claudeRequests[i], expected)
+				}
+			}
+		}
+		if os.Getenv("KILO_TEST_T3_PICKER") == "1" {
+			ui := []map[string]string{{"model": claudePickerModel, "effort": "medium"}, {"model": claudePickerModel, "effort": "high"}, {"model": claudeOfficialLowModel, "effort": "low"}, {"model": claudeOfficialFableModel, "effort": "high"}, {"model": claudePickerModel, "effort": "medium"}}
+			want = append(want, ui...)
+			if len(claudeRequests) != len(want) {
+				t.Errorf("official Claude request count=%d, want %d", len(claudeRequests), len(want))
+			}
+			for i := 9; i < len(claudeRequests) && i < len(want); i++ {
+				if claudeRequests[i]["model"] != want[i]["model"] || claudeRequests[i]["effort"] != want[i]["effort"] {
+					t.Errorf("UI Claude request %d=%v, want %v", i+1, claudeRequests[i], want[i])
+				}
+			}
+		}
+		t.Logf("Official Claude upstream request evidence: %v", claudeRequests)
 	}
 	mu.Unlock()
 	for path, before := range normalFiles {

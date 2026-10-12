@@ -40,6 +40,11 @@ func (r *nativeLaunchRecorder) unblock()   { r.once.Do(func() { close(r.release)
 func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nativeUI, *nativeLaunchRecorder) {
 	t.Helper()
 	u := nativeTestUI(t)
+	u.owner.openCodeVersionProbe = func(string) (string, error) { return "1.19.0", nil }
+	if key == "t3-code" {
+		u.owner.config.T3Code = normalizeT3CodePreferences(t3CodePreferences{})
+		u.owner.config.T3Code.CodexModels, u.owner.config.T3Code.ClaudeModels = "shared", "shared"
+	}
 	if key == "t3-code" || key == "synara" {
 		t.Setenv("CODEX_HOME", filepath.Join(u.owner.editorTestRoot, ".codex"))
 		t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(u.owner.editorTestRoot, ".claude"))
@@ -182,6 +187,14 @@ func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nat
 		nativeTestWait(t, u, func() bool { return u.clientState().OpenDesignChecked })
 	}
 	u.page = "clients"
+	if nativeCLIPathClient(key) {
+		u.refreshCLIPreferencesAfter(nil)
+		nativeTestWait(t, u, func() bool { return u.clientState().CLIPreferences.Loaded })
+	}
+	if key == "opencode" || key == "opencode2" || key == "t3-code" {
+		u.refreshOpenCodePreferencesAfter(nil)
+		nativeTestWait(t, u, func() bool { return u.clientState().OpenCodePreferences.Loaded })
+	}
 	return u, recorder
 }
 

@@ -80,6 +80,14 @@ func resolveLaunchClient(id, custom string) (string, error) {
 		home, _ := os.UserHomeDir()
 		return resolveSynara(runtime.GOOS, home, os.Getenv("LOCALAPPDATA"))
 	}
+	if id == "opencode2" {
+		for _, name := range []string{"opencode2", "opencode-v2", "opencode"} {
+			if path := launchLookPath(name); path != "" {
+				return path, nil
+			}
+		}
+		return "", missing
+	}
 	if kind == "terminal" {
 		if id == "omp" {
 			if path, err := exec.LookPath("omp"); err == nil && filepath.IsAbs(path) {

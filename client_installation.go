@@ -8,6 +8,8 @@ func launchClientInstallURL(id string) string {
 		return "https://developers.openai.com/codex/cli/"
 	case "claude":
 		return "https://code.claude.com/docs/en/setup#install-claude-code"
+	case "opencode2":
+		return "https://dev.opencode.ai/v2/docs/"
 	case "opencode":
 		return "https://opencode.ai/docs/#install"
 	case "omp":

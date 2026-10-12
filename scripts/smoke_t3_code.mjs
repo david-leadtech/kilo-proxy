@@ -13,7 +13,7 @@ assert.equal(typeof fixture.version, 'string');
 assert.equal(typeof fixture.protocolV2, 'boolean');
 const v2 = fixture.protocolV2;
 const listener = createServer();
-await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve));
+await new Promise(resolve => listener.listen(Number(fixture.env.T3CODE_PORT ?? 0), '127.0.0.1', resolve));
 const port = listener.address().port;
 await new Promise(resolve => listener.close(resolve));
 const credential = randomBytes(32).toString('hex');
@@ -73,6 +73,15 @@ const stopSession = async threadId => {
     if (session.status === 'stopped') continue;
     await dispatch({ type: 'provider-session.detach', threadId, providerSessionId: session.id });
   }
+};
+const awaitStopped = async threadId => {
+  for (let i = 0; i < 80; i++) {
+    const stopped = await snapshot(threadId);
+    if (v2 ? stopped.projection.providerSessions.every(session => session.status === 'stopped') :
+      !stopped.session || stopped.session.status === 'stopped') return;
+    await pause(100);
+  }
+  assert.fail(`Native session did not stop for ${threadId}`);
 };
 const permissionDetail = (thread, activity) => {
   if (!v2) return activity.payload;
@@ -160,18 +169,24 @@ try {
       if (variable.sensitive) assert.equal(variable.value, '', `Secret exposed by T3 for ${id}`);
     }
   }
-  const config = await rpc('server.getConfig', {});
+  let config;
+  for (let attempt = 0; attempt < 120; attempt++) {
+    config = await rpc('server.getConfig', {});
+    if (fixture.instances.every(({ id }) => config.providers.some(provider =>
+      provider.instanceId === id && provider.enabled && provider.installed))) break;
+    await pause(250);
+  }
   for (const { id, model } of fixture.instances) {
     const provider = config.providers.find(value => value.instanceId === id);
     assert.ok(provider?.enabled && provider?.installed, `Agent unavailable: ${id}: ${JSON.stringify(provider)}`);
     if (id.endsWith('_proxy')) assert.ok(provider.models.some(value => value.slug === model || value.id === model), `Missing exact model ${model}: ${JSON.stringify(provider.models)}`);
     if (v2 && id === 'kilo_claude_proxy') {
-      const custom = fixture.instances.find(instance => instance.id === id);
-      for (const slug of [custom.model, custom.alternateModel]) {
+      const custom = fixture.instances.find(instance => instance.id === id && instance.model === model);
+      for (const slug of [custom.model, custom.alternateModel].filter(Boolean)) {
         const model = provider.models.find(model => model.slug === slug || model.id === slug);
         assert.ok(model, `Missing exact Claude prepared model ${slug}`);
-        assert.ok(!model.capabilities?.optionDescriptors?.some(option => option.id === 'effort'),
-          `Nightly advertised an unsupported Claude effort control for ${slug}`);
+        assert.ok(model.capabilities?.optionDescriptors?.some(option => option.id === 'effort'),
+          `Nightly lost the native Claude effort control for ${slug}`);
       }
     }
   }
@@ -183,7 +198,7 @@ try {
   if (v2) await rpc('projects.mutate', { ...project, commandId: randomUUID() });
   else await dispatch(project);
   const threads = new Map();
-  for (const { id, model, options, alternateModel } of fixture.instances) {
+  for (const { id, model, options, alternateModel, alternateOptions, extraEfforts } of fixture.instances) {
     const threadId = randomUUID();
     const selection = { instanceId: id, model, ...(options ? { options } : {}) };
     await dispatch({ type: 'thread.create', ...creation, threadId, projectId, title: id, modelSelection: selection,
@@ -200,33 +215,46 @@ try {
       modelSelection: selection, runtimeMode: 'approval-required', interactionMode: 'default' });
     await send();
     await awaitReply(threadId, 0);
-    if (v2 && id === 'kilo_claude_proxy') selection.model = alternateModel;
+    if (alternateModel) {
+      selection.model = alternateModel;
+      selection.options = alternateOptions;
+      if (!v2) await dispatch({ type: 'thread.meta.update', threadId, modelSelection: selection });
+    }
     await send();
     const thread = await awaitReply(threadId, 1);
-    if (v2 && id === 'kilo_claude_proxy') assert.equal(thread.modelSelection.model, alternateModel);
+    if (alternateModel) assert.equal(thread.modelSelection.model, alternateModel);
     assert.equal(thread.modelSelection.instanceId, id);
     assert.ok(frames.length > 0, `Thread subscription produced no events for ${id}`);
     await stopSession(threadId);
     // A new native process must resume this chat with the same instance/home.
-    let closed = false;
-    for (let i = 0; i < 80; i++) {
-      const stopped = await snapshot(threadId);
-      if (v2 ? stopped.projection.providerSessions.every(session => session.status === 'stopped') :
-        !stopped.session || stopped.session.status === 'stopped') { closed = true; break; }
-      await pause(100);
-    }
-    assert.ok(closed, `Native session did not stop for ${id}`);
-    if (v2 && id === 'kilo_claude_proxy') selection.model = model;
+    await awaitStopped(threadId);
+    selection.model = model;
+    if (options) selection.options = options;
+    else delete selection.options;
+    if (!v2 && alternateModel) await dispatch({ type: 'thread.meta.update', threadId, modelSelection: selection });
     await send();
     const resumed = await awaitReply(threadId, 2);
     assert.equal(resumed.modelSelection.instanceId, id);
     assert.equal(resumed.modelSelection.model, model);
     await stopSession(threadId);
+    for (const [index, effort] of (extraEfforts ?? []).entries()) {
+      await awaitStopped(threadId);
+      selection.options = { effort };
+      if (!v2) await dispatch({ type: 'thread.meta.update', threadId, modelSelection: selection });
+      await send();
+      const changed = await awaitReply(threadId, 3 + index);
+      assert.equal(changed.modelSelection.model, model);
+      const actual = Array.isArray(changed.modelSelection.options)
+        ? changed.modelSelection.options.find(option => option.id === 'effort')?.value
+        : changed.modelSelection.options?.effort;
+      assert.equal(actual, effort, 'Native effort change was lost after resume');
+      await stopSession(threadId);
+    }
     if (!threads.has(id)) threads.set(id, threadId);
     ws.send(JSON.stringify({ _tag: 'Interrupt', requestId: streamId }));
     streams.delete(streamId);
     console.log(`Passed installed T3: ${id}, exact model, streaming, second turn, stop and resume`);
-    if (v2 && id === 'kilo_claude_proxy') console.log('Passed installed T3 V2: Claude prepared High and Low models across turns');
+    if (alternateModel) console.log('Passed installed T3: native Claude High → Low → High across model changes and resume');
   }
   assert.ok(approved.size > 0, 'No real provider permission request was approved');
   if (v2) {

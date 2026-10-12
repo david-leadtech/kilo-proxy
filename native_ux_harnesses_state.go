@@ -24,6 +24,9 @@ type uxhLaunch struct {
 }
 
 func (u *nativeUI) uxhInstallState(key string) uxhInstall {
+	if key == "opencode" {
+		key = u.openCodeClientKey()
+	}
 	c := u.clientState()
 	if !c.LaunchChecked {
 		return uxhChecking
@@ -38,6 +41,15 @@ func (u *nativeUI) uxhInstallState(key string) uxhInstall {
 // Open is only enabled when a launch can succeed, and says why otherwise.
 func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 	a, c := u.agentsState(), u.clientState()
+	if nativeCLIPathClient(key) && !c.CLIPreferences.Requested {
+		u.refreshCLIPreferencesAfter(nil)
+	}
+	if key == "opencode" {
+		if !c.OpenCodePreferences.Requested {
+			u.refreshOpenCodePreferencesAfter(nil)
+		}
+		key = u.openCodeClientKey()
+	}
 	l := uxhLaunch{install: u.uxhInstallState(key)}
 	available := u.nativeLaunchAvailable(key)
 	s := u.sharedClientSelection(key)
@@ -96,6 +108,33 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 		local(u.tr("Review image generation settings in Models before opening Codex.", "Revisa la generación de imágenes en Modelos antes de abrir Codex."))
 	case busy:
 		l.reason = u.tr("Wait for the current harness operation to finish.", "Espera a que termine la operación actual del harness.")
+	}
+	if (key == "opencode" || key == "opencode2") && !u.openCodePreferencesReady() {
+		l.canOpen = false
+		l.reason, l.local = u.tr("Load or finish saving the OpenCode version choice before opening.", "Carga o termina de guardar la versión de OpenCode antes de abrir."), true
+	}
+	if nativeCLIPathClient(key) && !u.cliPreferencesReady() {
+		l.canOpen = false
+		l.reason, l.local = u.tr("Load or finish saving CLI executable settings before opening.", "Carga o termina de guardar las rutas de las CLI antes de abrir."), true
+	}
+	if key == "t3-code" {
+		if u.clientState().OpenCodePreferences.Loaded && (u.openCodePathDirty() || u.openCodePreferencesBusy() || u.clientState().OpenCodePreferences.Pending != nil) {
+			l.canOpen = false
+			l.reason, l.local = u.tr("Finish saving the OpenCode paths before opening T3 Code.", "Termina de guardar las rutas de OpenCode antes de abrir T3 Code."), true
+		}
+		preferences := &a.T3Code.PreferencesState
+		if preferences.Pending != nil || u.t3CodePreferencesBusy() || u.busy["GET"+nativeT3CodePreferencesEndpoint] || preferences.Requested && !preferences.Loaded {
+			l.canOpen = false
+			l.reason, l.local = u.tr("Load or finish saving T3 Code settings before opening.", "Carga o termina de guardar los ajustes de T3 Code antes de abrir."), true
+		}
+		if preferences.Loaded {
+			if payload, err := nativeClientPayload(key, s); err == nil {
+				if err := nativeT3CodePreferenceLibraryError(preferences.Preferences, payload.(map[string]any)["library"].(modelLibrary)); err != nil {
+					l.canOpen = false
+					l.reason, l.local = nativeMessage(err.Error(), u.language), true
+				}
+			}
+		}
 	}
 	l.label = u.tr("Open ", "Abrir ") + uxhName(key)
 	if key == "open-design" {

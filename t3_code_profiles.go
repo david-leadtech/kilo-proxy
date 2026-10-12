@@ -43,6 +43,10 @@ type t3CodeProfileOptions struct {
 	Port                                           int
 	LocalKey                                       string
 	Images                                         imageGenerationSettings
+	// Explicit opt-in; Synara keeps the existing shared-profile behavior.
+	Policy              *t3CodeModelPolicy
+	Preferences         *t3CodePreferences
+	AdditionalProviders map[string]any
 }
 
 type t3CodeProfiles struct {
@@ -64,7 +68,11 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 	if options.Port < 1024 || options.Port > 65535 || options.LocalKey == "" || strings.ContainsAny(options.LocalKey, "\x00\r\n") {
 		return result, errors.New("T3 Code requires a valid local proxy port and key.")
 	}
-	if err := validateT3CodeLibrary(options.Library); err != nil {
+	if options.Policy == nil {
+		if err := validateT3CodeLibrary(options.Library); err != nil {
+			return result, err
+		}
+	} else if err := validateModelLibrary(options.Library); err != nil {
 		return result, err
 	}
 	if len(options.Library.Models) == 0 {
@@ -96,8 +104,18 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 			return t3CodeProfiles{}, err
 		}
 	}
-	choices := terminalLibraryChoices(options.Library, options.Catalog)
-	catalog, err := buildCodexCatalog(choices, options.Library.DefaultModel, false)
+	codexLibrary, claudeLibrary := options.Library, options.Library
+	if options.Policy != nil {
+		if len(options.Policy.CodexLibrary.Models) > 0 {
+			codexLibrary = options.Policy.CodexLibrary
+		}
+		if len(options.Policy.ClaudeLibrary.Models) > 0 {
+			claudeLibrary = options.Policy.ClaudeLibrary
+		}
+	}
+	choices := terminalLibraryChoices(codexLibrary, options.Catalog)
+	claudeChoices := terminalLibraryChoices(claudeLibrary, options.Catalog)
+	catalog, err := buildCodexCatalog(choices, codexLibrary.DefaultModel, false)
 	if err != nil {
 		return t3CodeProfiles{}, err
 	}
@@ -127,7 +145,7 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 	if err != nil {
 		return t3CodeProfiles{}, err
 	}
-	selection := claudeSelection{Initial: options.Library.DefaultModel, Mode: "installed", Aliases: map[string]string{}}
+	selection := claudeSelection{Initial: claudeLibrary.DefaultModel, Mode: "installed", Aliases: map[string]string{}}
 	claudeSettingsCaps := claudeCapabilities{}
 	if options.ClaudeModelDefaults && options.ClaudeCaps.PerModelEffort {
 		// T3 V2 discards Claude effort options for custom gateway IDs.
@@ -136,8 +154,8 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 		claudeSettingsCaps.PerModelEffort = true
 		claudeSettingsCaps.Version = options.ClaudeCaps.Version
 	}
-	for i, model := range options.Library.Models {
-		context, err := contextPolicyForChoice(choices[i])
+	for i, model := range claudeLibrary.Models {
+		context, err := contextPolicyForChoice(claudeChoices[i])
 		if err != nil {
 			return t3CodeProfiles{}, err
 		}
@@ -146,7 +164,7 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 			if !strings.Contains(model.ID, "/") {
 				return t3CodeProfiles{}, errors.New("T3 Code requires provider-qualified Claude model IDs (for example anthropic/claude-opus-4-6) for saved reasoning defaults. Use the exact gateway ID in Models.")
 			}
-			_, preferred := nativeReasoningFor(choices[i])
+			_, preferred := nativeReasoningFor(claudeChoices[i])
 			if preferred != "" && validClaudeEffort(model.ID, preferred) {
 				if !claudeEffortCompatible(model.ID, options.ClaudeCaps) {
 					return t3CodeProfiles{}, managedClaudeEffortVersionError(model.ID, "T3 Code")
@@ -179,6 +197,12 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 	claudeConfig, err := mergeClaudeSettings(oldClaude, selection, claudeSettingsCaps, options.Port, options.LocalKey)
 	if err != nil {
 		return t3CodeProfiles{}, err
+	}
+	if options.Policy != nil {
+		claudeConfig, err = t3CodeNativeClaudeSettings(claudeConfig, *options.Policy, selection.Initial, options.Port)
+		if err != nil {
+			return t3CodeProfiles{}, err
+		}
 	}
 	claudeConfig, err = removeT3CodeClaudeToken(claudeConfig)
 	if err != nil {
@@ -365,7 +389,22 @@ func t3CodeProviderInstances(options t3CodeProfileOptions, profiles t3CodeProfil
 		return instance
 	}
 	codex := map[string]any{"setupMode": "existing", "binaryPath": options.CodexBinary, "homePath": profiles.CodexHome, "shadowHomePath": "", "launchArgs": "", "customModels": t3CodeCustomModels(choices, false, options.ClaudeCaps)}
-	claudeModels := t3CodeCustomModels(choices, true, options.ClaudeCaps)
+	claudeChoices := choices
+	if options.Policy != nil {
+		claudeChoices = terminalLibraryChoices(options.Policy.ClaudeLibrary, options.Catalog)
+	}
+	claudeModels := t3CodeCustomModels(claudeChoices, true, options.ClaudeCaps)
+	if options.Policy != nil {
+		custom := make([]map[string]any, 0, len(claudeModels))
+		for _, model := range claudeModels {
+			id, _ := model["slug"].(string)
+			if native := t3CodeNativeClaudeModelID(id); native != "" && options.Policy.ClaudeRoutes[native] == id {
+				continue
+			}
+			custom = append(custom, model)
+		}
+		claudeModels = custom
+	}
 	if options.ClaudeModelDefaults {
 		for _, model := range claudeModels {
 			model["capabilities"].(map[string]any)["optionDescriptors"] = []map[string]any{}
@@ -383,6 +422,23 @@ func t3CodeProviderInstances(options t3CodeProfileOptions, profiles t3CodeProfil
 	}
 	claudeInstance := instances[t3CodeClaudeProxyID].(map[string]any)
 	claudeInstance["environment"] = append(claudeInstance["environment"].([]map[string]any), map[string]any{"name": "ANTHROPIC_BASE_URL", "value": "http://127.0.0.1:" + strconv.Itoa(options.Port), "sensitive": false})
+	if options.Preferences != nil {
+		prefs := normalizeT3CodePreferences(*options.Preferences)
+		for id, enabled := range map[string]bool{t3CodeCodexNormalID: prefs.Codex, t3CodeClaudeNormalID: prefs.Claude, t3CodeCodexProxyID: prefs.KiloCodex, t3CodeClaudeProxyID: prefs.KiloClaude} {
+			instances[id].(map[string]any)["enabled"] = enabled
+		}
+		instances[t3CodeCodexNormalID].(map[string]any)["displayName"] = "Codex"
+		instances[t3CodeClaudeNormalID].(map[string]any)["displayName"] = "Claude"
+		claudeEnv := claudeInstance["environment"].([]map[string]any)
+		for _, item := range claudeEnv {
+			if item["name"] == "ANTHROPIC_BASE_URL" {
+				item["value"] = "http://127.0.0.1:" + strconv.Itoa(options.Port) + "/t3-code"
+			}
+		}
+		for id, provider := range options.AdditionalProviders {
+			instances[id] = provider
+		}
+	}
 	return instances
 }
 

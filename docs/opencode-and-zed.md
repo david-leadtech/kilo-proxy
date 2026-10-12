@@ -4,7 +4,11 @@ The native **OpenCode** and **Zed** cards use the same [shared model library](sh
 
 The optional browser helper remains a separate interface with independent per-client model selections and explicit profile preparation.
 
-## OpenCode
+## OpenCode 1
+
+Choose **OpenCode 1** in the OpenCode harness settings to use this integration. The executable must be version 1.x.
+
+Each major version has its own optional absolute executable path in Kilo Settings. Leave it empty for automatic detection: OpenCode 1 uses Kilo's verified installed copy before the system installation, while OpenCode 2 uses its separately installed executable. An explicit path takes priority and never falls back silently when unavailable. Updating a Kilo copy preserves the explicit choice. The actual major version is checked before preparing or opening. T3 shares these paths but keeps its own major-version selector.
 
 1. Install OpenCode separately and configure Kilo Proxy in **Settings**.
 2. Choose models, names, a default and any token limits in **Models**. These library changes save automatically.
@@ -18,6 +22,18 @@ The custom provider includes the local proxy key in its protected configuration,
 This is a separate configuration file, not a complete OpenCode sandbox: global and project configurations still merge, and project settings can override this file. The helper does not change ordinary global OpenCode settings, auth storage, permissions, plugins, or project files. Check the resolved settings if a repository overrides the Kilo provider.
 
 The optional configuration export contains the local key; keep it private. The launch command contains only the configuration path and model ID. It restores the parent shell environment on Unix and PowerShell.
+
+## OpenCode 2
+
+In the OpenCode harness settings, select **OpenCode 2**. Install [OpenCode 2](https://dev.opencode.ai/v2/docs/) version 2.0.18 or newer within major version 2 manually, then refresh detection. Kilo looks for `opencode2`, `opencode-v2`, then `opencode`, and verifies the executable's actual version before preparing or launching. Automatic installation for this major version is not available.
+
+Opening prepares the saved shared Models library in a separate home at `<Kilo data>/opencode2/home`. This uses OpenCode 2's `providers` configuration format, its OpenAI-compatible package and exact gateway `modelID` values. The local proxy key is passed only to the child environment. Kilo starts the executable with `--standalone`, preserving the chosen project folder. User MCP settings, other providers and large-number literals in this private config are retained.
+
+The separate HOME and XDG directories prevent OpenCode 2 from migrating OpenCode 1's normal database. Accounts and chats are separate; changing the selector does not move either version's chats. Project configuration can still merge, so this is not an operating-system sandbox.
+
+Adding OpenCode to T3 is a separate choice under **Settings → T3 Code**. Its native T3 driver uses its own authentication and model catalog. Select its major version there independently of this standalone Kilo connection.
+
+The official OpenCode 2.0.27 CLI completed a streaming request against a synthetic local gateway using the generated v2 config, exact model ID and local bearer key. No paid inference or personal account was used.
 
 ## Zed
 
