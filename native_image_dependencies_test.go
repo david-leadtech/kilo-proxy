@@ -3,7 +3,9 @@
 package main
 
 import (
+	"errors"
 	"image"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -15,6 +17,21 @@ import (
 func nativeImageDependencyFixture(t *testing.T, size image.Point, language string) (*nativePointerHarness, *atomic.Bool) {
 	t.Helper()
 	u := nativeTestUI(t)
+	// These pointer tests exercise image dependency settings, not the host's
+	// installed apps. Keep both resolved CLI rows without starting real Store
+	// queries or CLI probes when the first Agents frame starts discovery.
+	codexPath := filepath.Join(u.owner.editorTestRoot, "synthetic", "codex")
+	claudePath := filepath.Join(u.owner.editorTestRoot, "synthetic", "claude")
+	u.owner.launcher.resolve = func(client, _ string) (string, error) {
+		switch client {
+		case "codex-cli":
+			return codexPath, nil
+		case "claude":
+			return claudePath, nil
+		}
+		return "", errors.New("not installed in the image dependency fixture")
+	}
+	u.owner.launcher.terminal = func() (bool, string) { return true, "synthetic terminal" }
 	found := &atomic.Bool{}
 	u.owner.mu.Lock()
 	u.owner.imageDependencyLookup = func(tool string) string {

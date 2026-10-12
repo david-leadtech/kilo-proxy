@@ -148,6 +148,12 @@ func nativeTestWait(t *testing.T, u *nativeUI, predicate func() bool) {
 // confirmed state before capturing pointer coordinates in those blocks.
 func nativeSettingsPreferencesReady(h *nativePointerHarness) {
 	h.t.Helper()
+	defer func() {
+		if h.t.Failed() {
+			c := h.u.clientState()
+			h.t.Logf("Settings readiness after failure: cliReady=%v cliLoaded=%v cliGETBusy=%v cliPOSTBusy=%v t3Loaded=%v t3GETBusy=%v t3POSTBusy=%v launchStarted=%v launchChecked=%v launchError=%q launchGETBusy=%v", h.u.cliPreferencesReady(), c.CLIPreferences.Loaded, h.u.busy["GET"+nativeCLIPreferencesEndpoint], h.u.busy["POST"+nativeCLIPreferencesEndpoint], h.u.agentsState().T3Code.PreferencesState.Loaded, h.u.busy["GET"+nativeT3CodePreferencesEndpoint], h.u.busy["POST"+nativeT3CodePreferencesEndpoint], c.LaunchDetectStarted, c.LaunchChecked, c.LaunchError, h.u.busy["GET"+nativeLaunchEndpoint])
+		}
+	}()
 	nativeTestWait(h.t, h.u, func() bool {
 		c := h.u.clientState()
 		launchReady := !c.LaunchDetectStarted || c.LaunchChecked && !h.u.busy["GET"+nativeLaunchEndpoint]
