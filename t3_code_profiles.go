@@ -60,12 +60,13 @@ type t3CodeProfiles struct {
 // one transaction; normal provider configuration and credentials are never read.
 func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 	result := t3CodeProfiles{}
+	usesKilo := options.Preferences == nil || t3CodeUsesKilo(*options.Preferences)
 	for _, value := range []string{options.RootDir, options.NormalHome, options.CodexBinary, options.ClaudeBinary} {
 		if !filepath.IsAbs(value) || strings.ContainsAny(value, "\x00\r\n") {
 			return result, errors.New("T3 Code requires absolute private-profile, normal-home and CLI paths.")
 		}
 	}
-	if options.Port < 1024 || options.Port > 65535 || options.LocalKey == "" || strings.ContainsAny(options.LocalKey, "\x00\r\n") {
+	if usesKilo && (options.Port < 1024 || options.Port > 65535 || options.LocalKey == "" || strings.ContainsAny(options.LocalKey, "\x00\r\n")) {
 		return result, errors.New("T3 Code requires a valid local proxy port and key.")
 	}
 	if options.Policy == nil {
@@ -75,7 +76,7 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 	} else if err := validateModelLibrary(options.Library); err != nil {
 		return result, err
 	}
-	if len(options.Library.Models) == 0 {
+	if usesKilo && len(options.Library.Models) == 0 {
 		return result, errors.New("Choose shared models before preparing T3 Code.")
 	}
 	normalCodex, normalClaude, err := t3CodeNormalProviderHomes(options)
@@ -84,7 +85,10 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 	}
 	result.CodexHome = filepath.Join(options.RootDir, "profiles", "codex-kilo")
 	result.ClaudeHome = filepath.Join(options.RootDir, "profiles", "claude-kilo")
-	for _, normal := range []string{normalCodex, normalClaude} {
+	for index, normal := range []string{normalCodex, normalClaude} {
+		if !t3CodeNormalProviderEnabled(options, index) {
+			continue
+		}
 		normal, err = t3CodeCanonicalPath(normal)
 		if err != nil {
 			return t3CodeProfiles{}, errors.New("Cannot safely resolve the normal T3 Code provider home.")
@@ -98,6 +102,22 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 				return t3CodeProfiles{}, errors.New("T3 Code Kilo profiles must be separate from normal provider homes.")
 			}
 		}
+	}
+	if !usesKilo {
+		// Retain stable account IDs so T3 conversations and saved native model
+		// selections survive. Disabled Kilo slots need no profiles or secrets.
+		result.Providers = t3CodeProviderInstances(options, result, nil, claudeSelection{})
+		for _, id := range []string{t3CodeCodexProxyID, t3CodeClaudeProxyID} {
+			instance := result.Providers[id].(map[string]any)
+			env := []map[string]any{}
+			for _, value := range instance["environment"].([]map[string]any) {
+				if value["sensitive"] != true && value["name"] != "ANTHROPIC_BASE_URL" {
+					env = append(env, value)
+				}
+			}
+			instance["environment"] = env
+		}
+		return result, nil
 	}
 	for _, dir := range []string{result.CodexHome, result.ClaudeHome} {
 		if err := safeEditorDir(options.RootDir, dir); err != nil {
@@ -292,6 +312,9 @@ func t3CodeCanonicalPath(path string) (string, error) {
 func t3CodeNormalProviderHomes(options t3CodeProfileOptions) (string, string, error) {
 	homes := []string{filepath.Join(options.NormalHome, ".codex"), filepath.Join(options.NormalHome, ".claude")}
 	for i, name := range []string{"CODEX_HOME", "CLAUDE_CONFIG_DIR"} {
+		if !t3CodeNormalProviderEnabled(options, i) {
+			continue
+		}
 		if value := options.NormalEnvironment[name]; value != "" {
 			if !filepath.IsAbs(value) || strings.ContainsAny(value, "\x00\r\n") {
 				return "", "", errors.New("T3 Code normal provider homes must be absolute paths.")
@@ -300,6 +323,16 @@ func t3CodeNormalProviderHomes(options t3CodeProfileOptions) (string, string, er
 		}
 	}
 	return homes[0], homes[1], nil
+}
+
+func t3CodeNormalProviderEnabled(options t3CodeProfileOptions, index int) bool {
+	if options.Preferences == nil || t3CodeUsesKilo(*options.Preferences) {
+		return true
+	}
+	if index == 0 {
+		return options.Preferences.Codex
+	}
+	return options.Preferences.Claude
 }
 
 func mergeT3CodeCatalogPath(data []byte, catalogPath string) ([]byte, error) {

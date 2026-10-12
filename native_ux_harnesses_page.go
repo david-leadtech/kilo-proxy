@@ -11,6 +11,9 @@ import (
 
 // uxhProfileReady reports whether the prepared profile matches the current selection.
 func (u *nativeUI) uxhProfileReady(key string, s *nativeClientSelection) bool {
+	if key == "t3-code" {
+		return u.t3CodePrepared(s)
+	}
 	base, local, _ := u.clientBase()
 	return s.Saved != "" && s.Saved == nativeSelectionFingerprint(key, s, base, local, u.clientCaps(key))
 }
@@ -56,6 +59,9 @@ func (u *nativeUI) uxhHarnessPage(key string, s *nativeClientSelection, d uxhDet
 	if a.Error != "" {
 		widgets = append(widgets, u.message(nativeToneError, a.Error))
 	}
+	if key == "muse" {
+		return u.uxhMuseHarnessPage(widgets)
+	}
 	if key == "claude" && a.ClaudeError != "" {
 		widgets = append(widgets, u.message(nativeToneError, a.ClaudeError))
 	}
@@ -69,7 +75,11 @@ func (u *nativeUI) uxhHarnessPage(key string, s *nativeClientSelection, d uxhDet
 	if key == "claude-desktop" {
 		summary = u.claudeDesktopModelSummary(s)
 	}
-	onOpen = append(onOpen, u.uxhModelsRow(key, summary))
+	if key == "t3-code" && u.t3CodeNativeOnly() {
+		onOpen = append(onOpen, u.uxhKV(u.tr("Models", "Modelos"), u.column(u.uxhValue(u.tr("Native provider catalogs", "Catálogos nativos de los proveedores")), u.note(u.tr("Choose models in T3 using each account's native catalog. Shared Kilo models are only needed when a Kilo account is enabled.", "Elige modelos en T3 desde el catálogo nativo de cada cuenta. Los modelos compartidos de Kilo solo se necesitan si activas una cuenta Kilo.")))))
+	} else {
+		onOpen = append(onOpen, u.uxhModelsRow(key, summary))
+	}
 	onOpen = append(onOpen, d.onOpen...)
 	widgets = append(widgets, u.uxhBlock(u.tr("When opening", "Al abrir"), "", onOpen...))
 	widgets = append(widgets, d.blocks...)
@@ -84,6 +94,27 @@ func (u *nativeUI) uxhHarnessPage(key string, s *nativeClientSelection, d uxhDet
 			u.button("agent:"+key+":terminal-commands", u.tr("Open in Settings", "Abrir en Ajustes"), func() { u.page, u.settingsTab = "settings", "terminal" })))
 	}
 	widgets = append(widgets, u.uxhBlock(u.tr("Advanced", "Avanzado"), "", advanced...))
+	return u.column(widgets...)
+}
+
+// Muse keeps its native authentication and model picker. It has no Kilo
+// profile to prepare, model pack to assign or proxy credential to export.
+func (u *nativeUI) uxhMuseHarnessPage(widgets []layout.Widget) layout.Widget {
+	const key = "muse"
+	widgets = append(widgets, u.uxhBlock(u.tr("When opening", "Al abrir"), "",
+		u.uxhFolderRow(key),
+		u.uxhKV(u.tr("Account", "Cuenta"), u.column(u.uxhValue(u.tr("Muse Code · Meta login", "Muse Code · inicio de sesión de Meta")), u.note(u.tr("Sign in through Muse Code. Its existing configuration, login and chats stay with Muse.", "Inicia sesión desde Muse Code. Su configuración, sesión y chats permanecen en Muse.")))),
+		u.uxhKV(u.tr("Models", "Modelos"), u.column(u.uxhValue(u.tr("Official Muse catalog", "Catálogo oficial de Muse")), u.note(u.tr("Choose a model in Muse Code. Kilo's shared models and model packs do not apply to this connection.", "Elige un modelo en Muse Code. Los modelos compartidos y los packs de Kilo no se aplican a esta conexión.")))),
+	))
+	path := u.clientState().LaunchInfo.Clients[key].Path
+	if path == "" {
+		path = u.tr("Not detected", "Sin detectar")
+	}
+	widgets = append(widgets, u.uxhBlock(u.tr("Advanced", "Avanzado"), "",
+		u.uxhCompatibilityRow(key),
+		u.uxhAdvancedRow(u.tr("CLI installation", "Instalación de la CLI"), path, []layout.Widget{u.note(u.tr("Automatic detection uses the verified Kilo copy first. Choose a custom executable path in CLI settings to pin another installation.", "La detección automática usa primero la copia Kilo verificada. Elige una ruta personalizada en los ajustes de las CLI para fijar otra instalación."))}, u.button("agent:muse:cli-settings", u.tr("Open in Settings", "Abrir en Ajustes"), func() { u.page, u.settingsTab = "settings", "cli-tools" })),
+		u.uxhAdvancedRow(u.tr("Terminal commands", "Comandos de terminal"), u.tr("Run kilo-muse from your current project terminal. Muse uses its own login and models.", "Ejecuta kilo-muse desde la terminal de tu proyecto. Muse usa su propio inicio de sesión y sus modelos."), nil, u.button("agent:muse:terminal-commands", u.tr("Open in Settings", "Abrir en Ajustes"), func() { u.page, u.settingsTab = "settings", "terminal" })),
+	))
 	return u.column(widgets...)
 }
 

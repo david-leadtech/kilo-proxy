@@ -8,7 +8,11 @@ const knownProviders = {cursor:'Cursor',grok:'Grok',opencode:'OpenCode',antigrav
 export function t3CodePreferencesValid(value) {
  return value?.version === 1 && ['official','shared'].includes(value.codexModels) && ['official','shared'].includes(value.claudeModels) && ['codex','claude','kiloCodex','kiloClaude','openCode2'].every(key => typeof value[key] === 'boolean') && Array.isArray(value.providers) && value.providers.every(id => typeof id === 'string') && (!value.openCode2 || value.providers.includes('opencode'));
 }
+export function t3CodeNativeOnly(value) {
+ return t3CodePreferencesValid(value) && !value.kiloCodex && !value.kiloClaude;
+}
 export function t3CodePrepared(saved, profile, preferences) {
+ if (t3CodeNativeOnly(preferences)) return Boolean(profile?.prepared === true && preferencesSignature(preferences) === preferencesSignature(profile.preferences));
  return Boolean(openMausBotLibraryReady(saved) && profile?.prepared === true && librarySignature(saved.library) === librarySignature(profile.library) && (!preferences || preferencesSignature(preferences) === preferencesSignature(profile.preferences)));
 }
 
@@ -19,11 +23,12 @@ export function createT3CodeHelper({api, onChange}) {
  let loaded = false, loading = false, working = false, saving = false, error = '', preferencesError = '', pendingPreferences = null, profileConnection = '', requiresPreparation = false, openCode2Supported = false, generation = 0;
  const L = (en, es) => ctx.language === 'en' ? en : es;
  const connectionSignature = () => JSON.stringify([ctx.state?.baseURL, ctx.state?.localKey, ctx.state?.orgId, ctx.state?.connectionReady, ctx.state?.chatgpt?.connected]);
- const prepared = () => !saving && !pendingPreferences && profileConnection === connectionSignature() && t3CodePrepared(saved, profile, preferences);
+ const nativeOnly = () => t3CodeNativeOnly(preferences);
+ const prepared = () => !saving && !pendingPreferences && (nativeOnly() || profileConnection === connectionSignature()) && t3CodePrepared(saved, profile, preferences);
  const tooManyModels = () => (saved?.library?.models?.length || 0) > 32 && (preferences?.kiloCodex && preferences.codexModels === 'shared' || preferences?.kiloClaude && preferences.claudeModels === 'shared');
- const ready = () => loaded && openMausBotLibraryReady(saved) && t3CodePreferencesValid(preferences) && !tooManyModels() && !pendingPreferences && !saving;
- const signature = () => JSON.stringify([connectionSignature(), saved?.library, preferences]);
- const reason = () => !connectionReady(ctx.state) ? L('Connect your selected provider first.', 'Conecta primero el proveedor seleccionado.') : preferencesError || error || (loading ? L('Loading T3 Code settings…', 'Cargando ajustes de T3 Code…') : tooManyModels() ? L('T3 Code supports up to 32 shared models per account. Reduce your selection in Models or choose official models.', 'T3 Code admite hasta 32 modelos compartidos por cuenta. Reduce la selección en Modelos o elige modelos oficiales.') : saving ? L('Wait for T3 Code settings to finish saving.', 'Espera a que termine el guardado de los ajustes de T3 Code.') : !ready() ? L('Add and save models in the native app’s Models page, then refresh here.', 'Añade y guarda modelos en la página Modelos de la app nativa y actualiza aquí.') : '');
+ const ready = () => loaded && (nativeOnly() || openMausBotLibraryReady(saved)) && t3CodePreferencesValid(preferences) && !tooManyModels() && !pendingPreferences && !saving;
+ const signature = () => JSON.stringify([nativeOnly() ? null : connectionSignature(), nativeOnly() ? null : saved?.library, preferences]);
+ const reason = () => !nativeOnly() && !connectionReady(ctx.state) ? L('Connect your selected provider first.', 'Conecta primero el proveedor seleccionado.') : preferencesError || error || (loading ? L('Loading T3 Code settings…', 'Cargando ajustes de T3 Code…') : tooManyModels() ? L('T3 Code supports up to 32 shared models per account. Reduce your selection in Models or choose official models.', 'T3 Code admite hasta 32 modelos compartidos por cuenta. Reduce la selección en Modelos o elige modelos oficiales.') : saving ? L('Wait for T3 Code settings to finish saving.', 'Espera a que termine el guardado de los ajustes de T3 Code.') : !ready() ? L('Add and save models in the native app’s Models page, then refresh here.', 'Añade y guarda modelos en la página Modelos de la app nativa y actualiza aquí.') : '');
  const visibleProviders = value => [...capabilities.map(row=>({...row,supported:true})),...(value?.providers||[]).filter(id=>knownProviders[id]&&!capabilities.some(row=>row.id===id)).map(id=>({id,label:knownProviders[id],supported:false}))];
  const acceptPreferences = response => {
   if (!t3CodePreferencesValid(response?.preferences)) throw new Error(L('Could not read T3 Code preferences. Refresh to try again.', 'No se pudieron leer las preferencias de T3 Code. Actualiza para reintentarlo.'));
@@ -99,7 +104,7 @@ export function createT3CodeHelper({api, onChange}) {
   $('t3-code-compatibility').textContent = chat+' '+L('Claude Kilo offers Opus 5.5, Sonnet 5.5 and Fable 5.1 by default, with T3’s native reasoning selector. Available levels depend on the installed T3 and Claude Code versions. Check the selected account and model before continuing an older chat.', 'Claude Kilo ofrece Opus 5.5, Sonnet 5.5 y Fable 5.1 por defecto, con el selector nativo de razonamiento de T3. Los niveles disponibles dependen de las versiones instaladas de T3 y Claude Code. Revisa la cuenta y el modelo elegidos antes de continuar un chat antiguo.');
   $('t3-code-privacy').textContent = L('Your regular T3 Code workspace and chats stay separate and can remain open. Existing accounts use their CLI sessions without copying login data. Close only T3 Code · Kilo, prepare again and reopen it after changing accounts, models or the connection. Your chats are kept.', 'Tu espacio T3 Code habitual y sus chats siguen separados y pueden permanecer abiertos. Las cuentas existentes usan sus sesiones CLI sin copiar datos de inicio de sesión. Cierra solo T3 Code · Kilo, prepara de nuevo y vuelve a abrir tras cambiar cuentas, modelos o la conexión. Tus chats se conservan.');
   $('t3-code-reload').textContent = loading ? L('Loading…', 'Cargando…') : L('Refresh models', 'Actualizar modelos'); $('t3-code-reload').disabled = loading || working || saving;
-  $('t3-code-prepare').textContent = working ? L('Preparing…', 'Preparando…') : L('Prepare without opening', 'Preparar sin abrir'); $('t3-code-prepare').disabled = working || loading || !ready() || !connectionReady(ctx.state);
+  $('t3-code-prepare').textContent = working ? L('Preparing…', 'Preparando…') : L('Prepare without opening', 'Preparar sin abrir'); $('t3-code-prepare').disabled = working || loading || !ready() || !nativeOnly() && !connectionReady(ctx.state);
   $('t3-code-install').textContent = L('Get T3 Code ↗', 'Obtener T3 Code ↗');
   $('t3-code-prepared').textContent = prepared() ? L('Your saved T3 accounts and models are prepared.', 'Las cuentas y modelos guardados de T3 están preparados.') : L('Prepare or open T3 Code · Kilo to apply your saved accounts and models.', 'Prepara o abre T3 Code · Kilo para aplicar las cuentas y modelos guardados.');
   $('t3-code-status').textContent = translate(error || (working ? L('Preparing T3 Code accounts…', 'Preparando cuentas de T3 Code…') : profile?.message || ''), ctx.language); $('t3-code-status').classList.toggle('error', !!error);
@@ -110,9 +115,13 @@ export function createT3CodeHelper({api, onChange}) {
   if (loading || working || saving) return;
   loading = true; error = ''; preferencesError = ''; const currentGeneration = ++generation, connection = connectionSignature(); render();
   try {
-   const [nextSaved, nextProfile, nextPreferences] = await Promise.all([api('model-library'), api('clients/t3-code'), api('clients/t3-code/preferences')]);
+   const [libraryResult, profileResult, preferencesResult] = await Promise.allSettled([api('model-library'), api('clients/t3-code'), api('clients/t3-code/preferences')]);
    if (generation !== currentGeneration) return;
-   acceptPreferences(nextPreferences); saved = nextSaved; profile = nextProfile; profileConnection = connection; pendingPreferences = null;
+   if (preferencesResult.status !== 'fulfilled') throw preferencesResult.reason;
+   if (profileResult.status !== 'fulfilled') throw profileResult.reason;
+   acceptPreferences(preferencesResult.value);
+   if (libraryResult.status !== 'fulfilled' && !nativeOnly()) throw libraryResult.reason;
+   saved = libraryResult.status === 'fulfilled' ? libraryResult.value : null; profile = profileResult.value; profileConnection = connection; pendingPreferences = null;
   } catch (failure) { if (generation === currentGeneration) { saved = null; profile = null; preferences = null; error = failure.message; preferencesError = failure.message; } }
   finally { if (generation === currentGeneration) { loaded = true; loading = false; render(); } }
  }
@@ -131,16 +140,17 @@ export function createT3CodeHelper({api, onChange}) {
   finally { if (generation === currentGeneration) { saving = false; render(); } }
  }
  async function prepare() {
-  if (working || loading || !ready() || !connectionReady(ctx.state)) throw new Error(reason());
-  working = true; error = ''; const snapshot = structuredClone(saved.library), preferencesSnapshot = structuredClone(preferences), connection = connectionSignature(); render();
+  if (working || loading || !ready() || !nativeOnly() && !connectionReady(ctx.state)) throw new Error(reason());
+  const native = nativeOnly();
+  working = true; error = ''; const snapshot = native ? null : structuredClone(saved.library), preferencesSnapshot = structuredClone(preferences), connection = connectionSignature(); render();
   try {
-   const [latest, settings] = await Promise.all([api('model-library'), api('clients/t3-code/preferences')]);
-   if (!openMausBotLibraryReady(latest) || librarySignature(latest.library) !== librarySignature(snapshot)) { saved = latest; throw new Error(L('The shared models changed. Review the refreshed list and open again.', 'Los modelos compartidos han cambiado. Revisa la lista actualizada y vuelve a abrir.')); }
+   const [latest, settings] = await Promise.all([native ? Promise.resolve(null) : api('model-library'), api('clients/t3-code/preferences')]);
+   if (!native && (!openMausBotLibraryReady(latest) || librarySignature(latest.library) !== librarySignature(snapshot))) { saved = latest; throw new Error(L('The shared models changed. Review the refreshed list and open again.', 'Los modelos compartidos han cambiado. Revisa la lista actualizada y vuelve a abrir.')); }
    if (preferencesSignature(settings.preferences) !== preferencesSignature(preferencesSnapshot)) { acceptPreferences(settings); throw new Error(L('T3 Code settings changed. Review them and open again.', 'Los ajustes de T3 Code han cambiado. Revísalos y vuelve a abrir.')); }
-   profile = await api('clients/t3-code', {library:snapshot, preferences:preferencesSnapshot}); profileConnection = connection;
-   const [current, currentSettings] = await Promise.all([api('model-library'), api('clients/t3-code/preferences')]);
-   if (!openMausBotLibraryReady(current) || librarySignature(current.library) !== librarySignature(snapshot)) { saved = current; throw new Error(L('The shared models changed while preparing. Review the refreshed list and open again.', 'Los modelos compartidos cambiaron durante la preparación. Revisa la lista actualizada y vuelve a abrir.')); }
-   if (preferencesSignature(currentSettings.preferences) !== preferencesSignature(preferencesSnapshot) || connectionSignature() !== connection) { acceptPreferences(currentSettings); throw new Error(L('T3 Code settings or connection changed while preparing. Review them and open again.', 'Los ajustes o la conexión de T3 Code cambiaron durante la preparación. Revísalos y vuelve a abrir.')); }
+   profile = await api('clients/t3-code', native ? {preferences:preferencesSnapshot} : {library:snapshot, preferences:preferencesSnapshot}); profileConnection = connection;
+   const [current, currentSettings] = await Promise.all([native ? Promise.resolve(null) : api('model-library'), api('clients/t3-code/preferences')]);
+   if (!native && (!openMausBotLibraryReady(current) || librarySignature(current.library) !== librarySignature(snapshot))) { saved = current; throw new Error(L('The shared models changed while preparing. Review the refreshed list and open again.', 'Los modelos compartidos cambiaron durante la preparación. Revisa la lista actualizada y vuelve a abrir.')); }
+   if (preferencesSignature(currentSettings.preferences) !== preferencesSignature(preferencesSnapshot) || !native && connectionSignature() !== connection) { acceptPreferences(currentSettings); throw new Error(L('T3 Code settings or connection changed while preparing. Review them and open again.', 'Los ajustes o la conexión de T3 Code cambiaron durante la preparación. Revísalos y vuelve a abrir.')); }
    requiresPreparation = false; return profile;
   } catch (failure) { error = failure.message; throw failure; }
   finally { working = false; render(); }
@@ -152,5 +162,5 @@ export function createT3CodeHelper({api, onChange}) {
  $('t3-code-settings-reload').addEventListener('click', () => { void reload(); });
  $('t3-code-reload').addEventListener('click', () => { void reload(); });
  $('t3-code-prepare').addEventListener('click', () => { void prepare().catch(() => {}); });
- return {render, reload, savePreferences, preferences:() => preferences && structuredClone(preferences), launchState:() => ({id:'t3-code', count:(profile?.effectiveCodexModels?.length ?? 0)+(profile?.effectiveClaudeModels?.length ?? 0), ready:false, valid:ready() && connectionReady(ctx.state), reason:reason(), working:working || loading || saving, fingerprint:signature(), prepare})};
+ return {render, reload, savePreferences, preferences:() => preferences && structuredClone(preferences), launchState:() => ({id:'t3-code', nativeOnly:nativeOnly(), count:(profile?.effectiveCodexModels?.length ?? 0)+(profile?.effectiveClaudeModels?.length ?? 0), ready:false, valid:ready() && (nativeOnly() || connectionReady(ctx.state)), reason:reason(), working:working || loading || saving, fingerprint:signature(), prepare})};
 }

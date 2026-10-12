@@ -188,6 +188,10 @@ func validateTerminalProfile(plan clientLaunchPlan, info terminalRuntime) error 
 		if len(plan.Args) != 2 || plan.Args[0] != "--model" || !strings.HasPrefix(plan.Args[1], "kilo-local/") || !helperValidModelID(strings.TrimPrefix(plan.Args[1], "kilo-local/")) {
 			return invalid
 		}
+	case "muse":
+		if len(plan.Args) != 0 || !reflect.DeepEqual(plan.Env, map[string]string{"MUSE_NO_AUTO_UPDATE": "1"}) || !reflect.DeepEqual(plan.Unset, []string{"KILO_LOCAL_API_KEY"}) {
+			return invalid
+		}
 	case "opencode":
 		if info.OpenCodeConfig == "" || len(plan.Args) != 0 || !reflect.DeepEqual(plan.Env, map[string]string{"OPENCODE_CONFIG": info.OpenCodeConfig}) || !reflect.DeepEqual(plan.Unset, []string{"OPENCODE_CONFIG_CONTENT"}) {
 			return invalid

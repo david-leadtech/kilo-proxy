@@ -229,6 +229,9 @@ func (m *managedToolsManager) check(client, channel string) error {
 }
 
 func managedToolVersionNewer(latest, installed string) bool {
+	if comparison, muse := museManagedCompareVersions(latest, installed); muse {
+		return comparison > 0
+	}
 	left, leftOK := parseReleaseVersion(latest)
 	right, rightOK := parseReleaseVersion(installed)
 	if leftOK && rightOK {

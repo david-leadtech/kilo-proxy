@@ -235,7 +235,7 @@ func TestTerminalClientProcessHelper(t *testing.T) {
 	}
 	input, _ := io.ReadAll(os.Stdin)
 	directory, _ := os.Getwd()
-	_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"args": args, "input": string(input), "cwd": directory, "codexHome": os.Getenv("CODEX_HOME"), "localKey": os.Getenv("KILO_LOCAL_API_KEY"), "claudeHome": os.Getenv("CLAUDE_CONFIG_DIR"), "anthropicKey": os.Getenv("ANTHROPIC_API_KEY"), "anthropicBase": os.Getenv("ANTHROPIC_BASE_URL"), "ompHome": os.Getenv("PI_CODING_AGENT_DIR"), "ompProfile": os.Getenv("OMP_PROFILE"), "piProfile": os.Getenv("PI_PROFILE"), "stateful": os.Getenv("PI_OPENAI_STATEFUL"), "openCodeConfig": os.Getenv("OPENCODE_CONFIG"), "openCodeContent": os.Getenv("OPENCODE_CONFIG_CONTENT"), "managedTool": os.Getenv("KILO_TERMINAL_MANAGED_CLIENT")})
+	_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"args": args, "input": string(input), "cwd": directory, "codexHome": os.Getenv("CODEX_HOME"), "localKey": os.Getenv("KILO_LOCAL_API_KEY"), "claudeHome": os.Getenv("CLAUDE_CONFIG_DIR"), "anthropicKey": os.Getenv("ANTHROPIC_API_KEY"), "anthropicBase": os.Getenv("ANTHROPIC_BASE_URL"), "ompHome": os.Getenv("PI_CODING_AGENT_DIR"), "ompProfile": os.Getenv("OMP_PROFILE"), "piProfile": os.Getenv("PI_PROFILE"), "stateful": os.Getenv("PI_OPENAI_STATEFUL"), "openCodeConfig": os.Getenv("OPENCODE_CONFIG"), "openCodeContent": os.Getenv("OPENCODE_CONFIG_CONTENT"), "managedTool": os.Getenv("KILO_TERMINAL_MANAGED_CLIENT"), "metaKey": os.Getenv("META_API_KEY"), "museAuthPath": os.Getenv("MUSE_AUTH_PATH"), "museNoAutoUpdate": os.Getenv("MUSE_NO_AUTO_UPDATE")})
 	os.Exit(23)
 }
 

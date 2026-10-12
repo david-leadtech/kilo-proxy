@@ -51,6 +51,7 @@ func managedToolSupport(client, platform, arch string) (reason, installURL strin
 		"opencode":       "https://opencode.ai/docs/",
 		"opencode2":      "https://dev.opencode.ai/v2/docs/",
 		"omp":            "https://github.com/can1357/oh-my-pi#installation",
+		"muse":           "https://dev.meta.ai/docs/muse-code",
 		"open-design":    "https://github.com/nexu-io/open-design#installation",
 		"openmausbot":    "https://github.com/milind-soni/OpenMausBot/releases",
 		"t3-code":        "https://github.com/pingdotgg/t3code/releases",
@@ -110,6 +111,8 @@ func (c *vendorManagedToolCatalog) Latest(ctx context.Context, client, platform,
 		return managedToolRelease{}, errors.New("The selected tool channel is not supported.")
 	}
 	switch client {
+	case "muse":
+		return c.museRelease(ctx, platform, arch, channel)
 	case "codex", "claude-desktop":
 		if platform == "linux" {
 			return c.debianRelease(ctx, client, arch, channel)
@@ -136,6 +139,8 @@ func managedToolMetadataURL(raw string) bool {
 		return false
 	}
 	switch u.Host {
+	case "api.meta.ai", "lookaside.facebook.com":
+		return museManagedMetadataURL(raw)
 	case "api.github.com", "formulae.brew.sh", "downloads.claude.ai", "persistent.oaistatic.com":
 		return true
 	default:
@@ -155,10 +160,16 @@ func (c *vendorManagedToolCatalog) metadata(ctx context.Context, address string)
 		}
 	}
 	transport.CheckRedirect = func(req *http.Request, previous []*http.Request) error {
+		if len(previous) != 0 && museManagedMetadataURL(previous[0].URL.String()) {
+			return errors.New("The fixed Muse Code metadata service must not redirect.")
+		}
 		if len(previous) >= 4 || !managedToolMetadataURL(req.URL.String()) {
 			return errors.New("The vendor metadata redirect is not allowed.")
 		}
 		return nil
+	}
+	if museManagedMetadataURL(address) {
+		transport.Jar = nil
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {

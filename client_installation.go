@@ -12,6 +12,8 @@ func launchClientInstallURL(id string) string {
 		return "https://dev.opencode.ai/v2/docs/"
 	case "opencode":
 		return "https://opencode.ai/docs/#install"
+	case "muse":
+		return "https://dev.meta.ai/docs/muse-code/"
 	case "omp":
 		return "https://github.com/can1357/oh-my-pi#install"
 	case "openmausbot":

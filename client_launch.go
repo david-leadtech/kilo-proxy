@@ -13,16 +13,19 @@ import (
 
 // The API accepts client identities, never commands, environment maps or profile paths.
 type clientLaunchRequest struct {
-	Client    string `json:"client"`
-	Directory string `json:"directory,omitempty"`
-	AppPath   string `json:"appPath,omitempty"`
-	Engine    string `json:"engine,omitempty"`
+	Client         string `json:"client"`
+	Directory      string `json:"directory,omitempty"`
+	AppPath        string `json:"appPath,omitempty"`
+	Engine         string `json:"engine,omitempty"`
+	MuseExecutable string `json:"museExecutable,omitempty"`
 }
 type clientLaunchPlan struct {
 	Client, Name, Kind, Executable, Directory string
 	Args                                      []string
 	Env                                       map[string]string
 	Unset                                     []string
+	// Set only by local preparation, never by a controller response or API input.
+	skipProxy bool
 }
 type clientLaunchRuntime struct {
 	platform, home string
@@ -40,7 +43,7 @@ type clientLaunchAvailability struct {
 	InstallURL string `json:"installURL,omitempty"`
 }
 
-var launchClients = []string{"codex", "claude-desktop", "codex-cli", "claude", "opencode", "opencode2", "omp", "open-design", "openmausbot", "t3-code", "synara", "zed", "xcode-chat", "xcode-codex", "xcode-claude"}
+var launchClients = []string{"codex", "claude-desktop", "codex-cli", "claude", "muse", "opencode", "opencode2", "omp", "open-design", "openmausbot", "t3-code", "synara", "zed", "xcode-chat", "xcode-codex", "xcode-claude"}
 
 func clientLaunchUsesProject(client string) bool {
 	return client != "codex" && client != "claude-desktop" && client != "open-design" && client != "openmausbot" && client != "t3-code" && client != "synara"
@@ -56,6 +59,8 @@ func launchClientIdentity(id string) (string, string) {
 		return "Claude Desktop", "desktop"
 	case "claude":
 		return "Claude Code", "terminal"
+	case "muse":
+		return "Muse Code", "terminal"
 	case "opencode":
 		return "OpenCode", "terminal"
 	case "opencode2":
@@ -119,10 +124,20 @@ func (a *app) launchRuntime() clientLaunchRuntime {
 	}
 	resolve := rt.resolve
 	rt.resolve = func(client, custom string) (string, error) {
-		if custom == "" && (client == "codex-cli" || client == "claude") {
+		if custom == "" && (client == "codex-cli" || client == "claude" || client == "muse") {
 			if path := a.cliExecutable(client); path != "" {
 				if err := a.validateSelectedClientExecutable(client, path); err != nil {
 					return "", err
+				}
+				if client == "muse" {
+					native, err := resolveMuseWindowsLauncher(path, rt.platform)
+					if err != nil {
+						return "", err
+					}
+					if err := a.validateSelectedClientExecutable(client, native); err != nil {
+						return "", err
+					}
+					return native, nil
 				}
 				if client == "codex-cli" {
 					// Resolve only this npm installation's native dependency. An
@@ -236,7 +251,10 @@ func (a *app) clientsLaunch(w http.ResponseWriter, r *http.Request) {
 		a.clientLaunchError(w, 409, err.Error())
 		return
 	}
-	if err = a.start(); err != nil {
+	if !plan.skipProxy {
+		err = a.start()
+	}
+	if err != nil {
 		if input.Client == "t3-code" {
 			a.closeT3CodeAssets()
 		}
@@ -325,6 +343,13 @@ func (a *app) planClientLaunch(input clientLaunchRequest, rt clientLaunchRuntime
 	if reason := launchClientPlatformReason(input.Client, rt.platform); reason != "" {
 		return p, errors.New(reason)
 	}
+	if input.Client == "muse" {
+		if input.MuseExecutable == "" || validateCLIExecutable(input.MuseExecutable) != nil {
+			return p, errors.New("Refresh the installed Muse Code executable before opening it.")
+		}
+	} else if input.MuseExecutable != "" {
+		return p, errors.New("A Muse Code executable confirmation is supported only for Muse Code.")
+	}
 	var err error
 	directory := input.Directory
 	if !clientLaunchUsesProject(input.Client) {
@@ -358,6 +383,13 @@ func (a *app) planClientLaunch(input clientLaunchRequest, rt clientLaunchRuntime
 			return p, errors.New(why)
 		}
 	}
+	if input.Client == "muse" {
+		if filepath.Clean(input.MuseExecutable) != filepath.Clean(p.Executable) {
+			return p, errors.New("The Muse Code executable changed. Refresh installed apps and open it again.")
+		}
+		applyMuseNativeLaunch(&p)
+		return p, nil
+	}
 	a.mu.Lock()
 	if input.Client == "open-design" {
 		err = a.applyOpenDesignProfile(&p, input.Engine, rt)
@@ -365,6 +397,7 @@ func (a *app) planClientLaunch(input clientLaunchRequest, rt clientLaunchRuntime
 		err = a.applyOpenMausBotLaunch(&p, rt.platform)
 	} else if input.Client == "t3-code" {
 		err = a.applyT3CodeLaunch(&p, rt)
+		p.skipProxy = !t3CodeUsesKilo(a.config.T3Code)
 	} else if input.Client == "synara" {
 		err = a.applySynaraLaunch(&p, rt)
 	} else {

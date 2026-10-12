@@ -24,13 +24,16 @@ type nativeCLIPreferencesState struct {
 
 func nativeCLIPathClient(key string) bool {
 	switch key {
-	case "codex-cli", "claude", "t3-code", "synara", "open-design", "xcode-codex", "xcode-claude":
+	case "codex-cli", "claude", "muse", "t3-code", "synara", "open-design", "xcode-codex", "xcode-claude":
 		return true
 	}
 	return false
 }
 
 func nativeCLIPathValue(p cliPreferences, client string) string {
+	if client == "muse" {
+		return p.MuseExecutable
+	}
 	if client == "claude" {
 		return p.ClaudeExecutable
 	}
@@ -45,7 +48,7 @@ func (u *nativeUI) cliPreferencesBusy() bool {
 
 func (u *nativeUI) cliPathDirty() bool {
 	s := &u.clientState().CLIPreferences
-	return s.Loaded && (strings.TrimSpace(u.value(nativeCLIPathField("codex-cli"))) != s.Preferences.CodexExecutable || strings.TrimSpace(u.value(nativeCLIPathField("claude"))) != s.Preferences.ClaudeExecutable)
+	return s.Loaded && (strings.TrimSpace(u.value(nativeCLIPathField("codex-cli"))) != s.Preferences.CodexExecutable || strings.TrimSpace(u.value(nativeCLIPathField("claude"))) != s.Preferences.ClaudeExecutable || strings.TrimSpace(u.value(nativeCLIPathField("muse"))) != s.Preferences.MuseExecutable)
 }
 
 func (u *nativeUI) cliPreferencesReady() bool {
@@ -57,7 +60,7 @@ func (u *nativeUI) acceptCLIPreferences(next cliPreferences, discardDraft bool) 
 	s := &u.clientState().CLIPreferences
 	changed := s.Loaded && s.Preferences != next
 	claudeChanged := s.Loaded && s.Preferences.ClaudeExecutable != next.ClaudeExecutable
-	for _, client := range []string{"codex-cli", "claude"} {
+	for _, client := range []string{"codex-cli", "claude", "muse"} {
 		id := nativeCLIPathField(client)
 		if discardDraft || !s.Loaded || strings.TrimSpace(u.value(id)) == nativeCLIPathValue(s.Preferences, client) {
 			u.setValue(id, nativeCLIPathValue(next, client))
@@ -194,7 +197,9 @@ func (u *nativeUI) saveCLIExecutable(client string, automatic bool) {
 		return
 	}
 	next := s.Preferences
-	if client == "claude" {
+	if client == "muse" {
+		next.MuseExecutable = path
+	} else if client == "claude" {
 		next.ClaudeExecutable = path
 	} else {
 		next.CodexExecutable = path
@@ -209,7 +214,7 @@ func (u *nativeUI) cliPreferencesPanel() layout.Widget {
 	}
 	editable := s.Loaded && s.Pending == nil && !u.cliPreferencesBusy() && u.clientState().Launching == ""
 	rows := []layout.Widget{uxhCell(u.note(u.tr("Choose an installed CLI, including a custom version. Empty paths use the current verified Kilo copy first, then the system installation. These paths also apply to T3 Code, Synara and Open Design. Accounts and chats are kept.", "Elige una CLI instalada, incluida una versión personalizada. Las rutas vacías usan primero la copia Kilo actual verificada y después la instalación del sistema. Estas rutas también se aplican a T3 Code, Synara y Open Design. Se conservan las cuentas y los chats.")))}
-	for _, choice := range []nativeChoice{{Value: "codex-cli", Label: "Codex CLI"}, {Value: "claude", Label: "Claude Code"}} {
+	for _, choice := range []nativeChoice{{Value: "codex-cli", Label: "Codex CLI"}, {Value: "claude", Label: "Claude Code"}, {Value: "muse", Label: "Muse Code"}} {
 		client, label := choice.Value, choice.Label
 		id := nativeCLIPathField(client)
 		dirty := s.Loaded && strings.TrimSpace(u.value(id)) != nativeCLIPathValue(s.Preferences, client)
@@ -220,6 +225,9 @@ func (u *nativeUI) cliPreferencesPanel() layout.Widget {
 		info := u.clientState().LaunchInfo.Clients[client]
 		if info.Path != "" {
 			rows = append(rows, uxhCell(u.note(u.tr("Resolved executable: ", "Ejecutable detectado: ")+info.Path)))
+		}
+		if client == "muse" {
+			rows = append(rows, uxhCell(u.note(u.tr("Muse Code uses its own Meta login and official models in the terminal and T3 Code. It does not use your Kilo gateway or shared model selection.", "Muse Code usa su propio inicio de sesión de Meta y sus modelos oficiales en la terminal y T3 Code. No usa tu gateway de Kilo ni la selección compartida de modelos."))))
 		}
 	}
 	status := ""

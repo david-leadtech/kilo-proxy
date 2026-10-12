@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createT3CodeHelper, t3CodePrepared} from '../ui/t3-code-helper.mjs';
+import {createT3CodeHelper, t3CodeNativeOnly, t3CodePrepared} from '../ui/t3-code-helper.mjs';
 
 const saved = () => ({revision:2,library:{schemaVersion:1,defaultModel:'vendor/second',models:[{id:'vendor/first',displayName:'Friendly',reasoningEffort:'high'},{id:'vendor/second'}]}});
 const preferences = () => ({version:1,codex:true,claude:true,kiloCodex:true,kiloClaude:true,codexModels:'shared',claudeModels:'shared',providers:[],openCode2:false});
@@ -22,6 +22,62 @@ test('prepared status requires the current complete shared library',()=>{
  profile.library.models[0].reasoningEffort='low';
  assert.equal(t3CodePrepared(source,profile),false);
  assert.equal(t3CodePrepared({...source,recoveryRequired:true},profile),false);
+});
+
+test('native-only readiness requires explicit valid preferences and keeps native model ownership',()=>{
+ const native={...preferences(),codex:false,claude:false,kiloCodex:false,kiloClaude:false,providers:['muse']};
+ const profile={prepared:true,preferences:structuredClone(native),library:{schemaVersion:1,defaultModel:'',models:[]}};
+ assert.equal(t3CodeNativeOnly(native),true);
+ assert.equal(t3CodeNativeOnly({...native,version:0}),false);
+ assert.equal(t3CodeNativeOnly({...native,kiloClaude:true}),false);
+ assert.equal(t3CodePrepared({recoveryRequired:true},profile,native),true);
+ assert.equal(t3CodePrepared(null,profile,{...native,kiloCodex:true}),false);
+});
+
+test('native Muse prepares without shared Models or gateway and ignores unrelated connection edits',async t=>{
+ const native={...preferences(),codex:false,claude:false,kiloCodex:false,kiloClaude:false,providers:['muse']};
+ const writes=[]; let libraryReads=0;
+ const {helper,nodes}=fixture(t,async(path,body)=>{
+  if(path==='model-library'){libraryReads++;throw new Error('unrelated library recovery');}
+  if(body)writes.push(structuredClone(body));
+  return {prepared:true,preferences:structuredClone(native),library:{schemaVersion:1,defaultModel:'',models:[]},effectiveCodexModels:[],effectiveClaudeModels:[]};
+ },{preferencesAPI:async()=>({preferences:structuredClone(native),supportedProviders:[{id:'muse',label:'Muse Code'}]})});
+ await tick();
+ helper.render({state:{connectionReady:false},language:'en'});
+ const state=helper.launchState();
+ assert.equal(state.nativeOnly,true);
+ assert.equal(state.count,0);
+ assert.equal(state.valid,true);
+ assert.equal(state.reason,'');
+ assert.equal(nodes.get('t3-code-prepare').disabled,false);
+ helper.render({state:{connectionReady:false,baseURL:'http://unrelated.invalid',localKey:'unrelated',orgId:'unrelated'},language:'en'});
+ assert.equal(helper.launchState().fingerprint,state.fingerprint);
+ await helper.launchState().prepare();
+ assert.deepEqual(writes,[{preferences:native}]);
+ assert.equal(libraryReads,1);
+ assert.match(nodes.get('t3-code-prepared').textContent,/saved T3 accounts and models are prepared/);
+});
+
+test('native Muse detects external account changes before preparing or after a concurrent change',async t=>{
+ let current={...preferences(),codex:false,claude:false,kiloCodex:false,kiloClaude:false,providers:['muse']};
+ const native=structuredClone(current),writes=[];
+ let changeDuringPrepare=false;
+ const {helper}=fixture(t,async(path,body)=>{
+  if(path==='model-library')return {recoveryRequired:true,library:{schemaVersion:1,defaultModel:'',models:[]}};
+  if(body){writes.push(structuredClone(body));if(changeDuringPrepare)current={...current,kiloCodex:true};}
+  return {prepared:true,preferences:structuredClone(native),library:{schemaVersion:1,defaultModel:'',models:[]}};
+ },{preferencesAPI:async()=>({preferences:structuredClone(current),supportedProviders:[{id:'muse',label:'Muse Code'}]})});
+ await tick();
+ current={...current,kiloClaude:true};
+ await assert.rejects(helper.launchState().prepare(),/settings changed/);
+ assert.equal(writes.length,0);
+ assert.equal(helper.launchState().nativeOnly,false);
+ assert.equal(helper.launchState().valid,false);
+ current=structuredClone(native);await helper.reload();changeDuringPrepare=true;
+ await assert.rejects(helper.launchState().prepare(),/settings or connection changed/);
+ assert.deepEqual(writes,[{preferences:native}]);
+ assert.equal(helper.launchState().nativeOnly,false);
+ assert.equal(helper.launchState().valid,false);
 });
 
 test('T3 refuses a library exceeding its 32 custom-model limit before writing', async t => {

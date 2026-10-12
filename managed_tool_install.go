@@ -31,6 +31,8 @@ func managedToolDownloadURL(raw string) bool {
 		return false
 	}
 	switch u.Host {
+	case "lookaside.facebook.com":
+		return museManagedArtifactURL(raw, "", "")
 	case "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com", "persistent.oaistatic.com", "downloads.claude.ai":
 		return true
 	}
@@ -51,6 +53,24 @@ func managedToolHTTPClient() *http.Client {
 func downloadManagedTool(ctx context.Context, client *http.Client, release managedToolRelease, destination string) error {
 	if !validManagedToolRelease(release) || !managedToolDownloadURL(release.URL) {
 		return errors.New("The official release could not be verified.")
+	}
+	if release.Client == "muse" {
+		if !museManagedReleaseValid(release) {
+			return errors.New("The official Muse Code release could not be verified.")
+		}
+		// Muse's release service uses one fixed endpoint. Never follow a Muse
+		// download to another vendor or attach a login to a redirected request.
+		copy := *client
+		copy.Jar = nil
+		copy.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			if len(via) > 5 || !museManagedArtifactURL(req.URL.String(), release.Version, release.AssetName) {
+				return errors.New("The Muse Code download redirected outside its verified release.")
+			}
+			req.Header.Del("Authorization")
+			req.Header.Del("Cookie")
+			return nil
+		}
+		client = &copy
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, release.URL, nil)
 	if err != nil {
@@ -501,7 +521,7 @@ func extractManagedTool(ctx context.Context, file, root string, release managedT
 		defer gz.Close()
 		return extractManagedToolTarContext(ctx, gz, root)
 	case "binary":
-		name := map[string]string{"codex-cli": "codex", "claude": "claude", "opencode": "opencode", "omp": "omp"}[release.Client]
+		name := map[string]string{"codex-cli": "codex", "claude": "claude", "opencode": "opencode", "omp": "omp", "muse": "muse"}[release.Client]
 		if name == "" {
 			return errors.New("The release format does not match this tool.")
 		}
@@ -716,6 +736,8 @@ func managedToolEntryNames(client, platform string) []string {
 		return []string{"opencode"}
 	case "omp":
 		return []string{"omp"}
+	case "muse":
+		return []string{"muse"}
 	case "codex":
 		return []string{"chatgpt", "ChatGPT", "codex-desktop", "Codex"}
 	case "claude-desktop":

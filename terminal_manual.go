@@ -25,7 +25,7 @@ func terminalManualCommands(binary, configDir string) (terminalManualResult, err
 	}
 	result := terminalManualResult{Supported: true, Shell: "zsh-bash", Commands: make(map[string]string, 4)}
 	var blocks []string
-	for _, command := range []struct{ name, client string }{{"kilo-codex", "codex-cli"}, {"kilo-claude", "claude"}, {"kilo-omp", "omp"}, {"kilo-opencode", "opencode"}} {
+	for _, command := range []struct{ name, client string }{{"kilo-codex", "codex-cli"}, {"kilo-claude", "claude"}, {"kilo-omp", "omp"}, {"kilo-opencode", "opencode"}, {"kilo-muse", "muse"}} {
 		// These functions run inside the user's shell. Never use exec here:
 		// returning from the CLI must leave the shell open with its exit status.
 		block := "function " + command.name + " {\n  command " + helperShellQuote(binary) + " " + terminalAgentFlag + " " + command.client + " --config-dir " + helperShellQuote(configDir) + " -- \"$@\"\n}\n"

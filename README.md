@@ -85,4 +85,6 @@ Release binaries need no Go, Node or Docker. Linux Desktop needs [system graphic
 
 For the terminal edition, follow the [headless setup guide](docs/headless.md).
 
+[Muse Code](docs/muse-code.md) uses its own Meta login and official models in the terminal or as an optional native T3 provider. Its `kilo-muse` terminal command also works with Kilo Proxy closed.
+
 [Desktop guide](docs/desktop.md) · [Agents and editors](docs/clients.md) · [Models](docs/shared-models.md) · [Security](docs/security-and-debugging.md) · [Development and releases](docs/releases.md)

@@ -59,7 +59,7 @@ func terminalPowerShellManualCommands(binary, configDir string) (terminalManualR
 	}
 	result := terminalManualResult{Supported: true, Shell: "powershell", Commands: make(map[string]string, 4)}
 	var blocks []string
-	for _, command := range []struct{ name, client string }{{"kilo-codex", "codex-cli"}, {"kilo-claude", "claude"}, {"kilo-omp", "omp"}, {"kilo-opencode", "opencode"}} {
+	for _, command := range []struct{ name, client string }{{"kilo-codex", "codex-cli"}, {"kilo-claude", "claude"}, {"kilo-omp", "omp"}, {"kilo-opencode", "opencode"}, {"kilo-muse", "muse"}} {
 		fixed := "--terminal-agent " + command.client + " --config-dir " + terminalWindowsQuote(configDir) + " --encoded-args "
 		invoke := "& (" + terminalPowerShellLiteral(binary) + ") --terminal-agent " + command.client + " --config-dir (" + terminalPowerShellLiteral(configDir) + ") --encoded-args $kiloEncodedArgs | Microsoft.PowerShell.Utility\\Write-Output\n"
 		// Base64 avoids PowerShell 5.1's loss of empty/quoted native arguments.
@@ -194,7 +194,7 @@ func validTerminalPowerShellProfile(path string) bool {
 	return strings.EqualFold(parent, "PowerShell") || strings.EqualFold(parent, "WindowsPowerShell")
 }
 
-var terminalPowerShellCommandConflict = regexp.MustCompile(`(?im)^\s*(?:function\s+(?:(?:global|script|local):)?|(?:Set-Alias|New-Alias|sal|nal)\s+(?:-Name\s+)?)["']?(?:kilo-codex|kilo-claude|kilo-omp|kilo-opencode)(?:["']?(?:\s|\(|\{)|$)`)
+var terminalPowerShellCommandConflict = regexp.MustCompile(`(?im)^\s*(?:function\s+(?:(?:global|script|local):)?|(?:Set-Alias|New-Alias|sal|nal)\s+(?:-Name\s+)?)["']?(?:kilo-codex|kilo-claude|kilo-omp|kilo-opencode|kilo-muse)(?:["']?(?:\s|\(|\{)|$)`)
 
 func terminalPowerShellCommandsPlan(configDir, binary string, profiles []string) (terminalCommandsInstallResult, []terminalInstallFile, error) {
 	result := terminalCommandsInstallResult{Shell: "powershell", InstallerStyle: "powershell-profile", Commands: map[string]string{}}
@@ -241,9 +241,9 @@ func terminalPowerShellCommandsPlan(configDir, binary string, profiles []string)
 		result.StartupFiles = append(result.StartupFiles, path)
 		files = append(files, f)
 	}
-	result.Message = "Install the four Kilo commands in your PowerShell profiles. Execution policy will not be changed."
+	result.Message = "Install the five Kilo commands in your PowerShell profiles. Execution policy will not be changed."
 	if result.Installed {
-		result.Message = "The four Kilo commands are installed in your PowerShell profiles. Open a new PowerShell window; keep Kilo Proxy open. Execution policy was not changed."
+		result.Message = "The five Kilo commands are installed in your PowerShell profiles. Open a new PowerShell window. Muse Code works with Kilo Proxy closed; the other commands require it open. Execution policy was not changed."
 	}
 	return result, files, nil
 }

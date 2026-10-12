@@ -14,6 +14,7 @@ type cliPreferences struct {
 	Version          int    `json:"version"`
 	CodexExecutable  string `json:"codexExecutable"`
 	ClaudeExecutable string `json:"claudeExecutable"`
+	MuseExecutable   string `json:"museExecutable"`
 }
 
 func validateCLIExecutable(path string) error {
@@ -33,6 +34,8 @@ func (a *app) cliExecutable(client string) string {
 		return a.cliExecutables[0]
 	case "claude":
 		return a.cliExecutables[1]
+	case "muse":
+		return a.museExecutable
 	}
 	return ""
 }
@@ -83,6 +86,7 @@ func (a *app) cliPreferencesAPI(w http.ResponseWriter, r *http.Request) {
 		Version          int     `json:"version"`
 		CodexExecutable  *string `json:"codexExecutable,omitempty"`
 		ClaudeExecutable *string `json:"claudeExecutable,omitempty"`
+		MuseExecutable   *string `json:"museExecutable,omitempty"`
 	}
 	if r.Method == http.MethodPost {
 		if !decodeBody(w, r, &input) {
@@ -100,7 +104,7 @@ func (a *app) cliPreferencesAPI(w http.ResponseWriter, r *http.Request) {
 		for _, selected := range []struct {
 			client string
 			path   *string
-		}{{"codex-cli", input.CodexExecutable}, {"claude", input.ClaudeExecutable}} {
+		}{{"codex-cli", input.CodexExecutable}, {"claude", input.ClaudeExecutable}, {"muse", input.MuseExecutable}} {
 			if selected.path == nil || *selected.path == "" {
 				continue
 			}
@@ -124,6 +128,9 @@ func (a *app) cliPreferencesAPI(w http.ResponseWriter, r *http.Request) {
 		if input.ClaudeExecutable != nil {
 			next.ClaudeCodeExecutable = *input.ClaudeExecutable
 		}
+		if input.MuseExecutable != nil {
+			next.MuseCodeExecutable = *input.MuseExecutable
+		}
 		if err := writeSettings(a.dir, next); err != nil {
 			jsonError(w, 500, "Cannot save CLI executable preferences. Your previous settings are unchanged.")
 			return
@@ -131,7 +138,8 @@ func (a *app) cliPreferencesAPI(w http.ResponseWriter, r *http.Request) {
 		a.config = next
 		a.cliPathsMu.Lock()
 		a.cliExecutables = [2]string{next.CodexCLIExecutable, next.ClaudeCodeExecutable}
+		a.museExecutable = next.MuseCodeExecutable
 		a.cliPathsMu.Unlock()
 	}
-	jsonResponse(w, 200, cliPreferences{Version: 1, CodexExecutable: a.config.CodexCLIExecutable, ClaudeExecutable: a.config.ClaudeCodeExecutable})
+	jsonResponse(w, 200, cliPreferences{Version: 1, CodexExecutable: a.config.CodexCLIExecutable, ClaudeExecutable: a.config.ClaudeCodeExecutable, MuseExecutable: a.config.MuseCodeExecutable})
 }

@@ -83,6 +83,7 @@ func managedToolProbeOutput(ctx context.Context, binary string) (string, error) 
 		"CODEX_HOME=" + scratch, "CLAUDE_CONFIG_DIR=" + scratch, "CLAUDE_SECURESTORAGE_CONFIG_DIR=" + scratch,
 		"XDG_CONFIG_HOME=" + scratch, "XDG_DATA_HOME=" + scratch, "XDG_STATE_HOME=" + scratch, "XDG_CACHE_HOME=" + scratch,
 		"TMPDIR=" + scratch, "TMP=" + scratch, "TEMP=" + scratch, "NO_COLOR=1", "CI=1", "DO_NOT_TRACK=1",
+		"MUSE_NO_AUTO_UPDATE=1", "MUSE_LOGIN=0", "MUSE_AUTH_PATH=" + filepath.Join(scratch, "muse-auth.json"),
 	}
 	if runtime.GOOS == "windows" {
 		// Native CLIs may require Windows' loader directory. No other ambient state
@@ -266,6 +267,8 @@ func managedToolInstalledVersion(ctx context.Context, client, executable, platfo
 		return "", "", errors.New("The tool version check was cancelled.")
 	}
 	switch client {
+	case "muse":
+		version, err = museManagedProbeVersion(ctx, executable)
 	case "codex-cli", "claude", "opencode", "omp":
 		version, err = managedToolProbeVersion(ctx, executable)
 	case "zed":

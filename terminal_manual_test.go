@@ -30,11 +30,11 @@ func TestTerminalManualAPIIndependentOfInstaller(t *testing.T) {
 	}
 	response := adminRequest(a, "terminal/manual", "")
 	var result terminalManualResult
-	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &result) != nil || !result.Supported || result.Shell != "zsh-bash" || len(result.Commands) != 4 {
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &result) != nil || !result.Supported || result.Shell != "zsh-bash" || len(result.Commands) != 5 {
 		t.Fatal("manual commands were coupled to the installer", response.Code, response.Body.String())
 	}
 	var blocks []string
-	for _, name := range []string{"kilo-codex", "kilo-claude", "kilo-omp", "kilo-opencode"} {
+	for _, name := range []string{"kilo-codex", "kilo-claude", "kilo-omp", "kilo-opencode", "kilo-muse"} {
 		block := result.Commands[name]
 		if !strings.HasPrefix(block, "function "+name+" {\n  command ") || !strings.HasSuffix(block, " -- \"$@\"\n}\n") || strings.Contains(block, "exec ") {
 			t.Fatal("unsafe or missing manual function", name)
@@ -177,7 +177,7 @@ func TestTerminalManualFunctionsPreserveShellAndArguments(t *testing.T) {
 			if output, err := run(aliasSetup+source+"eval 'kilo-codex'\n", nil, ""); err != nil || string(output) != "prior-alias" {
 				t.Fatal("function definitions expanded or removed an existing alias", err, string(output))
 			}
-			for name, client := range map[string]string{"kilo-codex": "codex-cli", "kilo-claude": "claude", "kilo-omp": "omp", "kilo-opencode": "opencode"} {
+			for name, client := range map[string]string{"kilo-codex": "codex-cli", "kilo-claude": "claude", "kilo-omp": "omp", "kilo-opencode": "opencode", "kilo-muse": "muse"} {
 				args := []string{"run", "--continue", "-m", "provider/model", "spaces and 'quotes'", "$(touch pwned-argument)", ";touch pwned-semicolon", "", "--config-dir", "client argument"}
 				// The function's status must return to the calling shell; exec would
 				// skip this marker and terminate the user shell with the child.

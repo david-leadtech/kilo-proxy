@@ -65,6 +65,7 @@ type app struct {
 	openCodeExecutables       [2]string
 	cliPathsMu                sync.RWMutex
 	cliExecutables            [2]string
+	museExecutable            string
 	t3CodeProbeClaude         func(string, clientLaunchRuntime) claudeCapabilities // Synthetic test fixtures only.
 	t3CodeCheckRunning        func(string) (bool, error)
 	t3CodeLaunchUntil         time.Time
@@ -146,6 +147,7 @@ func newApp(dir string, vault credentialVault) (*app, error) {
 	a := &app{dir: dir, config: cfg, vault: vault, adminToken: randomKey(""), upstream: u, transport: tr, quit: make(chan struct{})}
 	a.openCodeExecutables = [2]string{cfg.OpenCode1Executable, cfg.OpenCode2Executable}
 	a.cliExecutables = [2]string{cfg.CodexCLIExecutable, cfg.ClaudeCodeExecutable}
+	a.museExecutable = cfg.MuseCodeExecutable
 	a.updates = newReleaseUpdateChecker(version)
 	a.chatgpt = newChatGPTConnection(vault, cfg.VaultID, tr, dir)
 	a.modelLibrary = newModelLibraryStore(dir)
