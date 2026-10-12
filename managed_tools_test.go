@@ -36,7 +36,10 @@ func (c *fixtureManagedToolCatalog) Latest(ctx context.Context, client, platform
 func managedToolsFixture(t *testing.T) (*app, *managedToolsManager, *fixtureManagedToolCatalog) {
 	t.Helper()
 	a := testApp(t)
-	a.launcher = &clientLaunchRuntime{platform: "linux", resolve: func(string, string) (string, error) { return "", errors.New("not installed") }, terminal: func() (bool, string) { return true, "" }}
+	// This fixture exercises plans and concurrency with a synthetic installer.
+	// Its platform must not inherit the Linux host's real sandbox restrictions.
+	// Linux policy decisions are covered separately in managed_tool_system_test.go.
+	a.launcher = &clientLaunchRuntime{platform: "macos", resolve: func(string, string) (string, error) { return "", errors.New("not installed") }, terminal: func() (bool, string) { return true, "" }}
 	m := a.toolsManager()
 	catalog := &fixtureManagedToolCatalog{}
 	m.catalog = catalog
