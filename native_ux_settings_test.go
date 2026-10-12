@@ -120,6 +120,7 @@ func TestUxsLegacyTabJumpsAndIndexFollows(t *testing.T) {
 	u.page = "settings"
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 820), now: time.Now()}
 	h.frame()
+	nativeSettingsPreferencesReady(h)
 	if !h.selected("Accounts", semantic.Button) {
 		t.Fatal("the index does not start at Accounts")
 	}

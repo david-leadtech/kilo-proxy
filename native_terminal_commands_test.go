@@ -57,6 +57,7 @@ func TestNativeTerminalCommandsPointerInstallAndUpdate(t *testing.T) {
 				u.owner.mu.Unlock()
 				h := &nativePointerHarness{t: t, u: u, size: size, now: time.Now()}
 				h.frame()
+				nativeSettingsPreferencesReady(h)
 				nativeTestWait(t, u, func() bool { return u.terminalCommandsState().Checked })
 				h.frame()
 				nativeMenuWheel(h, image.Pt(size.X-100, size.Y-100), 10000)
@@ -125,6 +126,7 @@ func TestNativeTerminalCommandsCopyWithAndWithoutPATH(t *testing.T) {
 				}
 				h := &nativePointerHarness{t: t, u: u, size: image.Pt(780, 700), now: time.Now()}
 				h.frame()
+				nativeSettingsPreferencesReady(h)
 				nativeMenuWheel(h, image.Pt(680, 600), 10000)
 				details := u.tr("Commands and paths", "Comandos y rutas")
 				h.reveal(details, semantic.Button)
@@ -173,6 +175,7 @@ func TestNativeTerminalCommandsPowerShellInstallUpdateAndCopy(t *testing.T) {
 			}
 			h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 1000), now: time.Now()}
 			h.frame()
+			nativeSettingsPreferencesReady(h)
 			s := u.terminalCommandsState()
 			nativeTestWait(t, u, func() bool { return s.Checked && s.ManualChecked })
 			if !s.Info.Supported || s.Info.Shell != "powershell" || s.Info.Installed || !reflect.DeepEqual(s.Info.StartupFiles, u.owner.terminalCommandsProfiles) {
@@ -302,6 +305,7 @@ func TestNativeTerminalCommandsUnsupportedPlatformHidesInstall(t *testing.T) {
 	}
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(780, 700), now: time.Now()}
 	h.frame()
+	nativeSettingsPreferencesReady(h)
 	nativeMenuWheel(h, image.Pt(680, 600), 10000)
 	u.requestTerminalCommands("POST")
 	if u.busy["POST"+nativeTerminalCommandsEndpoint] {
@@ -420,6 +424,7 @@ func TestNativeTerminalManualPointerClipboardAndPreview(t *testing.T) {
 					before := nativeTerminalHomeSnapshot(t, u.owner.editorTestRoot)
 					h := &nativePointerHarness{t: t, u: u, size: size, now: time.Now()}
 					h.frame()
+					nativeSettingsPreferencesReady(h)
 					nativeTestWait(t, u, func() bool { return u.terminalCommandsState().ManualChecked && u.terminalCommandsState().Checked })
 					h.frame()
 					// The Shortcuts row's Manual link opens the manual setup.
@@ -514,6 +519,7 @@ func TestNativeTerminalManualSurvivesInstallerConflict(t *testing.T) {
 	}
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(780, 700), now: time.Now()}
 	h.frame()
+	nativeSettingsPreferencesReady(h)
 	h.reveal("Manual", semantic.Button)
 	h.click("Manual", semantic.Button)
 	h.reveal("Copy all", semantic.Button)
@@ -566,6 +572,7 @@ func TestNativeTerminalManualBusyFailureAndPointerRetry(t *testing.T) {
 	}
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(780, 700), now: time.Now()}
 	h.frame()
+	nativeSettingsPreferencesReady(h)
 	h.reveal("Manual", semantic.Button)
 	h.click("Manual", semantic.Button)
 	nativeMenuWheel(h, image.Pt(680, 600), 10000)
@@ -620,6 +627,7 @@ func TestNativeTerminalManualHiddenOnUnsupportedPlatform(t *testing.T) {
 	}
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(780, 700), now: time.Now()}
 	h.frame()
+	nativeSettingsPreferencesReady(h)
 	nativeMenuWheel(h, image.Pt(680, 600), 10000)
 	for _, node := range h.nodes() {
 		if node.Desc.Label == "Manual setup · Zsh / Bash" || node.Desc.Label == "Copy all" || strings.HasPrefix(node.Desc.Label, "Copy kilo-") {

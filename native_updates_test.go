@@ -142,6 +142,7 @@ func newNativeUpdateFixture(t *testing.T, language string, size image.Point) *na
 	u.settingsTab = "updates"
 	f.h = &nativePointerHarness{t: t, u: u, size: size, now: time.Now()}
 	f.refresh(t)
+	nativeSettingsPreferencesReady(f.h)
 	return f
 }
 

@@ -252,6 +252,13 @@ func TestNativeClientsWidgetActionsPrepareEveryEditor(t *testing.T) {
 				nativeTestWait(t, u, u.openCodePreferencesReady)
 				nativeTestFrame(t, u)
 			}
+			if nativeCLIPathClient(key) {
+				if !u.clientState().CLIPreferences.Requested {
+					u.refreshCLIPreferencesAfter(nil)
+				}
+				nativeTestWait(t, u, u.cliPreferencesReady)
+				nativeTestFrame(t, u)
+			}
 			u.clickable("client:" + key + ":prepare").Click()
 			nativeTestFrame(t, u)
 			nativeTestWait(t, u, func() bool { return s.Saved != "" })
@@ -304,6 +311,91 @@ func TestNativeClientsWidgetActionsPrepareEveryEditor(t *testing.T) {
 				t.Fatalf("preparation changed the shared library: %#v", stored)
 			}
 		})
+	}
+}
+
+func TestNativeClientsPrepareWaitsForConfirmedCLIPaths(t *testing.T) {
+	for _, key := range []string{"codex-cli", "claude", "xcode-codex", "xcode-claude"} {
+		for _, language := range []string{"en", "es"} {
+			t.Run(key+"/"+language, func(t *testing.T) {
+				u := nativeTestUI(t)
+				u.setLanguage(language)
+				nativeTestWait(t, u, func() bool {
+					return u.language == language && u.languageTarget == "" && len(u.busy) == 0
+				})
+				u.models = nativeClientModelsForTest()
+				u.models[0].ContextWindow = 128000
+				model := u.models[0]
+				nativeSeedSharedForTest(t, u, model)
+				u.page, u.client = "clients", key
+				if strings.HasPrefix(key, "xcode-") {
+					u.client = "xcode"
+					u.clientState().Variant = strings.TrimPrefix(key, "xcode-")
+					u.clients.Xcode = u.owner.xcodeInfo()
+					u.clients.XcodeChecked, u.clients.XcodeDetectStarted = true, true
+				}
+				if key == "claude" {
+					u.setValue("clients-claude-mode", "modern")
+				}
+				entered, release := make(chan struct{}, 1), make(chan struct{})
+				var once sync.Once
+				unblock := func() { once.Do(func() { close(release) }) }
+				var prepares atomic.Int32
+				handler := u.owner.adminHandler()
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Method == http.MethodGet && r.URL.Path == nativeCLIPreferencesEndpoint {
+						select {
+						case entered <- struct{}{}:
+						default:
+						}
+						select {
+						case <-release:
+						case <-r.Context().Done():
+							return
+						}
+					}
+					if r.Method == http.MethodPost && r.URL.Path == nativeClientEndpoint(key) {
+						prepares.Add(1)
+					}
+					handler.ServeHTTP(w, r)
+				}))
+				t.Cleanup(func() { unblock(); server.Close() })
+				u.owner.adminHost = strings.TrimPrefix(server.URL, "http://")
+				h := &nativePointerHarness{t: t, u: u, size: image.Pt(1280, 5000), now: time.Now()}
+				h.frame()
+				if !u.clientState().CLIPreferences.Requested {
+					// Xcode can inherit an in-flight read started in Settings.
+					u.refreshCLIPreferencesAfter(nil)
+				}
+				nativeTestWait(t, u, func() bool {
+					select {
+					case <-entered:
+						return true
+					default:
+						return false
+					}
+				})
+				h.frame()
+				if u.cliPreferencesReady() || !u.cliPreferencesBusy() {
+					t.Fatal("the retained settings response did not keep CLI paths unconfirmed")
+				}
+				s := u.sharedClientSelection(key)
+				u.clickable("client:" + key + ":prepare").Click()
+				h.frame()
+				if prepares.Load() != 0 || s.Saved != "" || !strings.Contains(u.notice, u.tr("Load or finish saving CLI executable settings before opening.", "Carga o termina de guardar las rutas de las CLI antes de abrir.")) {
+					t.Fatalf("a click while CLI paths were loading did not preserve the guard: posts=%d saved=%q notice=%q", prepares.Load(), s.Saved, u.notice)
+				}
+				unblock()
+				nativeTestWait(t, u, u.cliPreferencesReady)
+				h.frame()
+				u.clickable("client:" + key + ":prepare").Click()
+				h.frame()
+				nativeTestWait(t, u, func() bool { return s.Saved != "" && !u.cliPreferencesBusy() })
+				if prepares.Load() != 1 || !u.uxhProfileReady(key, s) || s.Path == "" {
+					t.Fatalf("confirmed paths did not prepare exactly one current profile: posts=%d saved=%q path=%q", prepares.Load(), s.Saved, s.Path)
+				}
+			})
+		}
 	}
 }
 

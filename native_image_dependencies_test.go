@@ -266,6 +266,8 @@ func TestNativeImageDependencyOnboardingAndExplicitChoice(t *testing.T) {
 			u.showImageSettings()
 			h.frame()
 			h.frame()
+			nativeSettingsPreferencesReady(h)
+			nativeScrollImageSetting(h, u.tr("Off", "Desactivado"))
 			h.click(u.tr("Off", "Desactivado"), semantic.RadioButton)
 			nativeTestWait(t, u, func() bool { return !u.busy["PUT/api/image-transport-settings"] && !u.busy["GET/api/state"] })
 			u.refreshState()
