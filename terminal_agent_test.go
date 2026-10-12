@@ -258,7 +258,11 @@ func TestTerminalAgentRunsInCurrentTerminal(t *testing.T) {
 	}
 	self, _ := os.Executable()
 	for _, name := range []string{"codex", "claude", "omp", "opencode"} {
-		script := "#!/bin/sh\nif [ \"$1\" = --version ]; then printf '2.1.251 (synthetic client)\\n'; exit 0; fi\nexec " + helperShellQuote(self) + " -test.run='^TestTerminalClientProcessHelper$' -- \"$@\"\n"
+		version := "2.1.251 (synthetic client)"
+		if name == "opencode" {
+			version = "1.19.0"
+		}
+		script := "#!/bin/sh\nif [ \"$1\" = --version ]; then printf '%s\\n' " + helperShellQuote(version) + "; exit 0; fi\nexec " + helperShellQuote(self) + " -test.run='^TestTerminalClientProcessHelper$' -- \"$@\"\n"
 		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0700); err != nil {
 			t.Fatal(err)
 		}
@@ -290,18 +294,23 @@ func TestTerminalAgentRunsInCurrentTerminal(t *testing.T) {
 		client  string
 		args    []string
 		managed bool
+		custom  bool
 	}{
-		{"codex-cli", args, false},
-		{"claude", args, false},
-		{"omp", args, false},
-		{"opencode", append([]string{"run", "--continue", "-m", "kilo-local/vendor/one"}, args[1:]...), false},
-		{"opencode", []string{"models", "kilo-local"}, false},
-		{"opencode", []string{"--continue", "--model", "kilo-local/vendor/one"}, false},
-		{"codex-cli", args, true},
-		{"claude", args, true},
+		{"codex-cli", args, false, false},
+		{"claude", args, false, false},
+		{"omp", args, false, false},
+		{"opencode", append([]string{"run", "--continue", "-m", "kilo-local/vendor/one"}, args[1:]...), false, false},
+		{"opencode", []string{"models", "kilo-local"}, false, false},
+		{"opencode", []string{"--continue", "--model", "kilo-local/vendor/one"}, false, false},
+		{"codex-cli", args, true, false},
+		{"claude", args, true, false},
+		{"claude", args, false, true},
+		{"opencode", []string{"models", "kilo-local"}, false, true},
 	} {
 		client, arguments := test.client, test.args
+		wantInstallation := ""
 		if test.managed {
+			wantInstallation = client
 			record := managedToolRegistryFixture(t, a.dir, client, "terminal-managed")
 			nativeName := map[string]string{"codex-cli": "codex", "claude": "claude"}[client]
 			source, err := os.ReadFile(filepath.Join(bin, nativeName))
@@ -317,6 +326,30 @@ func TestTerminalAgentRunsInCurrentTerminal(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := writeManagedTool(a.dir, record); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if test.custom {
+			wantInstallation = "custom-" + client
+			source, err := os.ReadFile(filepath.Join(bin, client))
+			if err != nil {
+				t.Fatal(err)
+			}
+			source = bytes.Replace(source, []byte("#!/bin/sh\n"), []byte("#!/bin/sh\nexport KILO_TERMINAL_MANAGED_CLIENT="+wantInstallation+"\n"), 1)
+			selected := filepath.Join(t.TempDir(), "custom "+client)
+			if err := os.WriteFile(selected, source, 0700); err != nil {
+				t.Fatal(err)
+			}
+			next, err := readSettings(a.dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if client == "claude" {
+				next.ClaudeCodeExecutable = selected
+			} else {
+				next.OpenCode1Executable = selected
+			}
+			if err := writeSettings(a.dir, next); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -344,8 +377,8 @@ func TestTerminalAgentRunsInCurrentTerminal(t *testing.T) {
 		if err := json.Unmarshal(output.Bytes(), &got); err != nil {
 			t.Fatal(err, output.String())
 		}
-		if test.managed && got.ManagedTool != client || !test.managed && got.ManagedTool != "" {
-			t.Fatalf("terminal shortcut selected the wrong installation: managed=%v marker=%q", test.managed, got.ManagedTool)
+		if got.ManagedTool != wantInstallation {
+			t.Fatalf("terminal shortcut selected the wrong installation: managed=%v custom=%v marker=%q want=%q", test.managed, test.custom, got.ManagedTool, wantInstallation)
 		}
 		wantArgs := arguments
 		if client == "claude" {

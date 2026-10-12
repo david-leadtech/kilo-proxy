@@ -17,7 +17,7 @@ import (
 func (a *app) launchProfile(p *clientLaunchPlan, home string) error {
 	fail := profileLaunchError(p.Name)
 	id := p.Client
-	if id == "opencode" {
+	if id == "opencode" && p.Executable != "" {
 		if err := a.checkOpenCodeVersion(p.Executable, 1); err != nil {
 			return err
 		}

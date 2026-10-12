@@ -59,6 +59,10 @@ func TestNativeOpenMausBotWideCardAfterDesktopApps(t *testing.T) {
 			u.setValue(agentProjectField("openmausbot"), "/does-not-exist/ignored")
 			h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 1700), now: time.Now()}
 			h.frame()
+			// Loading CLI paths changes the readiness hints above the Bots row.
+			// Let that real response settle before targeting the row's pixels.
+			nativeTestWait(t, u, func() bool { return u.cliPreferencesReady() })
+			h.frame()
 			codex := h.target(u.tr("Open Codex", "Abrir Codex"), semantic.Button).Desc.Bounds
 			claude := h.target(u.tr("Open Claude Desktop", "Abrir Claude Desktop"), semantic.Button).Desc.Bounds
 			maus := h.target(u.tr("Open OpenMausBot", "Abrir OpenMausBot"), semantic.Button).Desc.Bounds
@@ -90,7 +94,7 @@ func TestNativeOpenMausBotWideCardAfterDesktopApps(t *testing.T) {
 			}
 			nativeGridCapture(t, h, "native-openmausbot-agents-"+lang)
 			h.click(u.tr("Open OpenMausBot", "Abrir OpenMausBot"), semantic.Button)
-			nativeTestWait(t, u, func() bool { return u.clientState().Launching == "" })
+			nativeTestWait(t, u, func() bool { return recorder.prepares.Load() == 1 && u.clientState().Launching == "" })
 			if recorder.count() != 1 || recorder.prepares.Load() != 1 {
 				t.Fatalf("pointer launch did not prepare and open once: %s", u.notice)
 			}
@@ -135,7 +139,7 @@ func TestNativeOpenMausBotPreparationFailureAndEditsNeverLaunch(t *testing.T) {
 			u, recorder := nativeLaunchTestUI(t, "openmausbot", true, failure == "prepare")
 			before := append([]modelLibraryItem(nil), u.modelLibraryValue().Models...)
 			u.launchAgent("openmausbot")
-			<-recorder.entered
+			recorder.waitForPrepare(t, u)
 			switch failure {
 			case "library":
 				u.setValue(nativeClientField(sharedModelKey, "vendor/one", "name"), "Changed during preparation")

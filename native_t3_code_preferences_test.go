@@ -30,6 +30,7 @@ type nativeT3PreferencesFixture struct {
 	profileGate       chan struct{}
 	profileEntered    chan struct{}
 	profile           nativeT3CodeInfo
+	profilePosts      int
 }
 
 func newNativeT3PreferencesFixture(t *testing.T, language string) *nativeT3PreferencesFixture {
@@ -53,6 +54,11 @@ func newNativeT3PreferencesFixture(t *testing.T, language string) *nativeT3Prefe
 	}
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/clients/t3-code" && r.Method == http.MethodPost {
+			f.mu.Lock()
+			f.profilePosts++
+			f.mu.Unlock()
+		}
 		if r.URL.Path == "/api/clients/t3-code" && r.Method == http.MethodGet {
 			f.mu.Lock()
 			gate, entered, profile := f.profileGate, f.profileEntered, f.profile
@@ -167,9 +173,17 @@ func TestNativeT3CodePreferencesSavePendingFailureAndRetry(t *testing.T) {
 		}
 	}
 	finished := false
-	u.prepareClientAfter("t3-code", func(err error) { finished = err != nil })
-	if !finished {
+	var prepareErr error
+	u.prepareClientAfter("t3-code", func(err error) { finished, prepareErr = true, err })
+	nativeTestWait(t, u, func() bool { return finished })
+	if prepareErr == nil {
 		t.Fatal("unconfirmed settings allowed preparing")
+	}
+	f.mu.Lock()
+	profilePosts := f.profilePosts
+	f.mu.Unlock()
+	if profilePosts != 0 || !u.t3CodePreferencesBusy() || state.Pending == nil {
+		t.Fatal("pending settings reached profile preparation or lost their gate")
 	}
 	close(gate)
 	nativeTestWait(t, u, func() bool { return !u.t3CodePreferencesBusy() })

@@ -37,6 +37,20 @@ type nativeLaunchRecorder struct {
 func (r *nativeLaunchRecorder) count() int { r.mu.Lock(); defer r.mu.Unlock(); return len(r.plans) }
 func (r *nativeLaunchRecorder) unblock()   { r.once.Do(func() { close(r.release) }) }
 
+func (r *nativeLaunchRecorder) waitForPrepare(t *testing.T, u *nativeUI) {
+	t.Helper()
+	// The CLI preference check completes on the UI queue before preparation.
+	// Drain it while waiting for the same gated POST, using the usual deadline.
+	nativeTestWait(t, u, func() bool {
+		select {
+		case <-r.entered:
+			return true
+		default:
+			return false
+		}
+	})
+}
+
 func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nativeUI, *nativeLaunchRecorder) {
 	t.Helper()
 	u := nativeTestUI(t)
@@ -259,7 +273,7 @@ func TestNativeLaunchPreservesEditsWhilePreparing(t *testing.T) {
 			nativeTestFrame(t, u)
 			u.clickable("client:" + key + ":launch").Click()
 			nativeTestFrame(t, u)
-			<-r.entered
+			r.waitForPrepare(t, u)
 			switch field {
 			case "model":
 				u.setValue(nativeClientField(sharedModelKey, "vendor/one", "name"), "Newest name")
@@ -430,7 +444,7 @@ func TestNativeLaunchRejectsInvalidRawLimitDuringProfilePreparation(t *testing.T
 	u.persistLibraryEdits()
 	u.flushModelLibrary()
 	u.launchAgent("codex")
-	<-r.entered
+	r.waitForPrepare(t, u)
 	u.setValue(nativeClientField(sharedModelKey, "vendor/one", "output"), "not a number")
 	r.unblock()
 	nativeTestWait(t, u, func() bool { return u.clients.Launching == "" })

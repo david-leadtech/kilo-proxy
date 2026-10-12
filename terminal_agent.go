@@ -62,7 +62,7 @@ func runTerminalAgentMode(args []string) int {
 		fmt.Fprintln(os.Stderr, "The Kilo Proxy configuration directory must be absolute.")
 		return 1
 	}
-	executable, err := (&app{dir: *dir}).resolveManagedTool(args[0], "")
+	executable, err := resolveTerminalExecutable(*dir, args[0])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -106,4 +106,26 @@ func runTerminalAgentMode(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// The controller returns only a private profile, never executable paths. Resolve
+// the invoking terminal's real installation using the same saved selections as
+// GUI/T3 launches, then check OpenCode's major before preparing or executing it.
+func resolveTerminalExecutable(dir, client string) (string, error) {
+	config, err := readSettings(dir)
+	if err != nil {
+		return "", errors.New("Cannot read Kilo Proxy settings.")
+	}
+	a := &app{dir: dir, cliExecutables: [2]string{config.CodexCLIExecutable, config.ClaudeCodeExecutable},
+		openCodeExecutables: [2]string{config.OpenCode1Executable, config.OpenCode2Executable}}
+	executable, err := a.launchRuntime().resolve(client, "")
+	if err != nil {
+		return "", err
+	}
+	if client == "opencode" {
+		if err := a.checkOpenCodeVersion(executable, 1); err != nil {
+			return "", err
+		}
+	}
+	return executable, nil
 }

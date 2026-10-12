@@ -181,7 +181,7 @@ function lock(title, message) {
 }
 async function api(path, body, method = body === undefined ? 'GET' : 'POST') {
   const guarded=cliPreferenceOperation(path,body,method);
-  if(guarded)return cliPreferencesHelper.guardOperation(guarded,()=>rawAPI(path,body,method));
+  if(guarded)return cliPreferencesHelper.guardOperation(guarded,()=>rawAPI(path,body,method),{preparation:path!=='clients/launch'});
   return rawAPI(path,body,method);
 }
 async function rawAPI(path, body, method) {
@@ -216,7 +216,7 @@ const synaraHelper=createSynaraHelper({api,onChange:renderClientLaunch});
 const openDesignHelper=createOpenDesignHelper({api,refreshCatalog:loadModels,onChange:renderClientLaunch});
 const editorHelper=createEditorHelper({api,notify,copy,refreshCatalog:loadModels,onChange:renderClientLaunch});
 const openCodeVersionHelper=createOpenCodeVersionHelper({api,notify,onPreferencesSaved:()=>{void detectLaunchClients();void openDesignHelper.reload();},onChange:()=>{if(client==='opencode'){renderOpenCodeMode();editorHelper.render({client,state,catalog,language,opencodeBlocked:()=>openCodeVersionHelper.blocked()});}renderClientLaunch();}});
-const cliPreferencesHelper=createCLIPreferencesHelper({api,notify,openCodeSnapshot:()=>openCodeVersionHelper.toolPaths(),onOpenCodePathsChanged:()=>void openCodeVersionHelper.reload(),onPreferencesSaved:refreshCLIPathDiscovery,onChange:()=>renderClientLaunch()});
+const cliPreferencesHelper=createCLIPreferencesHelper({api,notify,openCodeSnapshot:()=>openCodeVersionHelper.toolPaths(),openCodePathsBlocked:()=>openCodeVersionHelper.pathsBlocked(),onOpenCodePathsChanged:()=>void openCodeVersionHelper.reload(),onPreferencesSaved:refreshCLIPathDiscovery,onChange:()=>renderClientLaunch()});
 function renderOpenCodeMode(){const second=client==='opencode'&&openCodeVersionHelper.major()===2;$('opencode2-helper').hidden=!second;if(client==='opencode')$('editor-helper').hidden=second;}
 const xcodeHelper=createXcodeHelper({api,notify,refreshCatalog:loadModels,onChange:renderClientLaunch});
 function rawClientLaunchSelection(){
@@ -237,8 +237,8 @@ function rawClientLaunchSelection(){
 function clientLaunchSelection(){
  const selection=rawClientLaunchSelection();
  if(!selection||!cliPathClient(selection.id))return selection;
- const blocked=cliPreferencesHelper.blocked();
- return {...selection,reason:blocked?(language==='en'?'Load or finish saving CLI executable paths in CLI installations before opening.':'Carga o termina de guardar las rutas en Instalaciones de las CLI antes de abrir.'):selection.reason,ready:false,valid:selection.valid!==false&&!blocked,working:selection.working||blocked,fingerprint:JSON.stringify([selection.fingerprint,cliPreferencesHelper.signature()])};
+ const blocked=cliPreferencesHelper.blocked(selection.id),openCodeBlocked=selection.id==='t3-code'&&openCodeVersionHelper.pathsBlocked();
+ return {...selection,reason:openCodeBlocked?(language==='en'?'Save or reload the OpenCode executable paths before opening T3 Code.':'Guarda o carga las rutas de OpenCode antes de abrir T3 Code.'):blocked?(language==='en'?'Load or finish saving CLI executable paths in CLI installations before opening.':'Carga o termina de guardar las rutas en Instalaciones de las CLI antes de abrir.'):selection.reason,ready:selection.ready&&cliPreferencesHelper.prepared(selection.id),valid:selection.valid!==false&&!blocked,working:selection.working||blocked,fingerprint:JSON.stringify([selection.fingerprint,cliPreferencesHelper.signature()])};
 }
 function renderClientLaunch(){
  const L=(en,es)=>language==='en'?en:es,selection=clientLaunchSelection();

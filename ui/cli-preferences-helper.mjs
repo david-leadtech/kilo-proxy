@@ -9,14 +9,15 @@ export function cliPreferenceOperation(path,body,method) {
  return ({'codex-cli/catalog':'codex-cli','claude/profile':'claude','clients/t3-code':'t3-code','clients/synara':'synara','open-design/profile':'open-design','xcode/codex':'xcode-codex','xcode/claude':'xcode-claude'})[path]||'';
 }
 
-export function createCLIPreferencesHelper({api,notify,onChange=()=>{},onPreferencesSaved=()=>{},openCodeSnapshot=()=>null,onOpenCodePathsChanged=()=>{}}) {
+export function createCLIPreferencesHelper({api,notify,onChange=()=>{},onPreferencesSaved=()=>{},openCodeSnapshot=()=>null,openCodePathsBlocked=()=>false,onOpenCodePathsChanged=()=>{}}) {
  const $=id=>document.getElementById(id);
+ const preparedPaths=new Map();
  let ctx={language:'en'},preferences=null,pending=null,error='',loaded=false,loading=false,saving=false,revision=0,changed=false,drafts={codexExecutable:'',claudeExecutable:''};
  const L=(en,es)=>ctx.language==='en'?en:es;
  const dirty=()=>!!preferences&&Object.keys(drafts).some(key=>drafts[key].trim()!==preferences[key]);
- const blocked=()=>!loaded||loading||saving||!!pending||dirty();
+ const blocked=client=>!loaded||loading||saving||!!pending||dirty()||client==='t3-code'&&openCodePathsBlocked();
  const changedError=()=>new Error(L('CLI executable settings changed. Review the paths and prepare again.','Las rutas de las CLI cambiaron. Revísalas y prepara de nuevo.'));
- function accept(next,discard=false){const wasChanged=!!preferences&&signature(preferences)!==signature(next);for(const key of Object.keys(drafts))if(discard||!preferences||drafts[key].trim()===preferences[key])drafts[key]=next[key];preferences={...next};loaded=true;if(wasChanged)onPreferencesSaved();}
+ function accept(next,discard=false){const wasChanged=!!preferences&&signature(preferences)!==signature(next);for(const key of Object.keys(drafts))if(discard||!preferences||drafts[key].trim()===preferences[key])drafts[key]=next[key];preferences={...next};loaded=true;if(wasChanged){preparedPaths.clear();onPreferencesSaved();}}
  function render(context=ctx) {
   ctx=context;if(!loaded&&!loading&&!error)void reload();
   $('cli-preferences-title').textContent=L('CLI installations','Instalaciones de las CLI');
@@ -43,21 +44,31 @@ export function createCLIPreferencesHelper({api,notify,onChange=()=>{},onPrefere
   $('cli-path-save-'+client).addEventListener('click',()=>savePath(key,false));$('cli-path-auto-'+client).addEventListener('click',()=>savePath(key,true));
  }
  $('cli-preferences-retry').addEventListener('click',()=>{if(pending)void save({...pending});});$('cli-preferences-reload').addEventListener('click',()=>void reload());
- async function guardOperation(client,operation) {
+ function prepared(client) {
+  const saved=preparedPaths.get(client),known=client==='t3-code'&&openCodeSnapshot();
+  return !blocked(client)&&!!saved&&saved.cli===signature(preferences)&&(!known||saved.openCode===openCodePaths(known));
+ }
+ async function guardOperation(client,operation,{preparation=true}={}) {
   if(!loaded&&!loading)await reload();
-  if(blocked())throw changedError();
+  if(blocked(client))throw changedError();
   const expected={...preferences},generation=revision;
-  const check=async()=>{const current=await api(endpoint);if(generation!==revision||blocked())throw changedError();if(!valid(current)||signature(current)!==signature(expected)){if(valid(current)){accept(current);changed=true;render();}throw changedError();}};
+  const check=async()=>{const current=await api(endpoint);if(generation!==revision||blocked(client))throw changedError();if(!valid(current)||signature(current)!==signature(expected)){if(valid(current)){accept(current);changed=true;render();}throw changedError();}};
   await check();
   let expectedOpenCode;
   if(client==='t3-code') {
    const current=await api('clients/opencode/preferences'),known=openCodeSnapshot();expectedOpenCode=openCodePaths(current);
-   if(known&&expectedOpenCode!==openCodePaths(known)){onOpenCodePathsChanged();throw changedError();}
+   if(known&&expectedOpenCode!==openCodePaths(known)){preparedPaths.delete(client);onOpenCodePathsChanged();throw changedError();}
   }
+  const paths={cli:signature(expected),...(client==='t3-code'?{openCode:expectedOpenCode}:{})};
+  if(generation!==revision||blocked(client))throw changedError();
+  if(!preparation&&JSON.stringify(preparedPaths.get(client))!==JSON.stringify(paths)){preparedPaths.delete(client);if(client==='t3-code')onOpenCodePathsChanged();throw changedError();}
+  if(preparation)preparedPaths.delete(client);
   const result=await operation();
   await check();
-  if(client==='t3-code'&&expectedOpenCode!==openCodePaths(await api('clients/opencode/preferences'))){onOpenCodePathsChanged();throw changedError();}
+  if(client==='t3-code'&&expectedOpenCode!==openCodePaths(await api('clients/opencode/preferences'))){preparedPaths.delete(client);onOpenCodePathsChanged();throw changedError();}
+  if(generation!==revision||blocked(client))throw changedError();
+  if(preparation)preparedPaths.set(client,paths);
   return result;
  }
- return {render,reload,blocked,guardOperation,signature:()=>JSON.stringify([preferences,pending,drafts,revision])};
+ return {render,reload,blocked,prepared,guardOperation,signature:()=>JSON.stringify([preferences,pending,drafts,revision])};
 }

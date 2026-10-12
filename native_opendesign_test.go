@@ -124,7 +124,7 @@ func TestNativeOpenDesignLaunchGates(t *testing.T) {
 func TestNativeOpenDesignChangedEngineDuringPreparationDoesNotLaunch(t *testing.T) {
 	u, r := nativeLaunchTestUI(t, "open-design", true, false)
 	u.launchAgent("open-design")
-	<-r.entered
+	r.waitForPrepare(t, u)
 	u.setValue("open-design-engine", "Claude Code")
 	r.unblock()
 	nativeTestWait(t, u, func() bool { return u.clientState().Launching == "" })
@@ -162,13 +162,15 @@ func TestNativeOpenDesignPointerLayoutAndNoManualSecrets(t *testing.T) {
 }
 
 func TestNativeOpenDesignPreparedProfilesUseSharedUpdates(t *testing.T) {
-	u, _ := nativeLaunchTestUI(t, "open-design", false, false)
+	u, recorder := nativeLaunchTestUI(t, "open-design", false, false)
 	nativeSeedSharedForTest(t, u, nativeClientModelsForTest()...)
 	u.setValue(nativeClientField(sharedModelKey, "vendor/one", "name"), "Friendly model")
 	u.persistLibraryEdits()
 	u.flushModelLibrary()
 	u.prepareClient("open-design")
-	nativeTestWait(t, u, func() bool { return !u.busy["POST"+openDesignProfileEndpoint] })
+	nativeTestWait(t, u, func() bool {
+		return recorder.prepares.Load() == 1 && !u.busy["POST"+openDesignProfileEndpoint] && !u.cliPreferencesBusy()
+	})
 	paths := openDesignProfilePaths(u.owner.dir)
 	data, err := os.ReadFile(filepath.Join(paths.Profiles, "codex-cli", "models.json"))
 	if err != nil {

@@ -124,7 +124,7 @@ export function createOpenCodeVersionHelper({api,notify,onChange=()=>{},onPrefer
  $('opencode-version-retry').addEventListener('click',()=>{if(pending)void save({...pending});});
  $('opencode-version-reload').addEventListener('click',()=>void reload());
  $('opencode2-prepare').addEventListener('click',()=>void prepare().catch(failure=>notify(failure.message,true)));
- return {render,reload,toolPaths:()=>preferences?{...preferences}:null,major:()=>preferences?.major||1,blocked:()=>!available()||working,
+ return {render,reload,toolPaths:()=>preferences?{...preferences}:null,pathsBlocked:()=>loading||saving||!!pending||pathDirty()||requested&&!validPreferences(preferences),major:()=>preferences?.major||1,blocked:()=>!available()||working,
   launchState(fallback) {
    if(preferences?.major!==2){const chosenPreferences=preferences?{...preferences}:null;return {...fallback,working:fallback.working||!available(),valid:available()&&fallback.valid!==false,fingerprint:JSON.stringify([fallback.fingerprint,preferences,drafts]),prepare:async()=>{await guardVersion(chosenPreferences);await fallback.prepare();await guardVersion(chosenPreferences);}};}
    return {id:'opencode2',count:library?.models?.length||0,ready:false,valid:ready(),reason:error||(!library?.models?.length?L('Save at least one shared model before opening.','Guarda al menos un modelo compartido antes de abrir.'):''),working:working||loading||saving,fingerprint:signature(),prepare};

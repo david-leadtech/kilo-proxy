@@ -104,6 +104,20 @@ test('T3 Code explains missing models, connection and installation without launc
  await expect(page.locator('#client-launch')).toBeEnabled();
 });
 
+test('T3 blocks unsaved or failed OpenCode paths without blocking Claude and recovers after explicit save',async({page,gateway,request})=>{
+ await setupT3(request,gateway);await startProxy(page,gateway);await page.locator('#tab-t3-code').click();await expect(page.locator('#client-launch')).toBeEnabled();
+ let prepares=0,fail=true;page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname==='/api/clients/t3-code')prepares++;});
+ await page.locator('#tab-opencode').click();await expect(page.locator('#opencode-executable')).toBeEnabled();await page.locator('#opencode-executable').fill(gateway.openCodeExecutable);
+ await page.locator('#tab-t3-code').click();await expect(page.locator('#client-launch')).toBeDisabled();await expect(page.locator('#client-launch-status')).toContainText('OpenCode executable paths');
+ await page.locator('#t3-code-options').click();await page.locator('#t3-code-prepare').click();await expect(page.locator('#t3-code-status')).toContainText('CLI executable settings changed');expect(prepares).toBe(0);expect(await records(gateway)).toEqual([]);
+ await page.locator('#tab-claude').click();await page.locator('#model-picker input[name="model-choice"][value="vendor/one"]').check();await expect(page.locator('#client-launch')).toBeEnabled();
+ await page.route('**/api/clients/opencode/preferences',async route=>{if(route.request().method()==='POST'&&fail)return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{message:'Synthetic OpenCode persistence unavailable'}})});await route.continue();});
+ await page.locator('#tab-opencode').click();await page.locator('#opencode-executable-save').click();await expect(page.locator('#opencode-version-status')).toContainText('Synthetic OpenCode persistence unavailable');
+ await page.locator('#tab-t3-code').click();await expect(page.locator('#client-launch')).toBeDisabled();expect(prepares).toBe(0);expect(await records(gateway)).toEqual([]);
+ fail=false;await page.locator('#tab-opencode').click();await page.locator('#opencode-version-retry').click();await expect(page.locator('#opencode-executable')).toBeEnabled();expect((await getAPI(request,gateway,'clients/opencode/preferences')).executable1).toBe(gateway.openCodeExecutable);
+ await page.locator('#tab-t3-code').click();await expect(page.locator('#client-launch')).toBeEnabled();await page.locator('#client-launch').click();await expect.poll(async()=>(await records(gateway)).length).toBe(1);expect(prepares).toBe(1);
+});
+
 test('T3 Code stops stale preparation and refreshes an externally changed library',async({page,gateway,request})=>{
  await setupT3(request,gateway);await startProxy(page,gateway);
  await page.locator('#tab-t3-code').click();await expect(page.locator('#client-launch')).toBeEnabled();

@@ -112,7 +112,7 @@ func TestNativeSynaraPreparationFailureAndEditsNeverLaunch(t *testing.T) {
 			u, recorder := nativeLaunchTestUI(t, "synara", true, failure == "prepare")
 			before := append([]modelLibraryItem(nil), u.modelLibraryValue().Models...)
 			u.launchAgent("synara")
-			<-recorder.entered
+			recorder.waitForPrepare(t, u)
 			switch failure {
 			case "library":
 				u.setValue(nativeClientField(sharedModelKey, "vendor/one", "name"), "Changed during preparation")

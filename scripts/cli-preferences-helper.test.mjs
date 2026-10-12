@@ -53,3 +53,61 @@ test('T3 rejects external OpenCode path changes before and during prepare and re
  const {helper}=fixture(t,async path=>path==='clients/opencode/preferences'?{...prefs}:initial(),{openCodeSnapshot:()=>known,onOpenCodePathsChanged:()=>reloads++});await tick();prefs.executable2='/changed/two';
  await assert.rejects(helper.guardOperation('t3-code',async()=>assert.fail('stale preparation')),/settings changed/);known={...prefs};await assert.rejects(helper.guardOperation('t3-code',async()=>{prefs.executable1='/changed/one'}),/settings changed/);assert.equal(reloads,2);
 });
+test('confirmed preparations remain reusable across unchanged path reloads and each opening still verifies saved paths',async t=>{
+ let reads=0,prepares=0,launches=0,refreshes=0;
+ const {helper}=fixture(t,async()=>{reads++;return initial()},{onPreferencesSaved:()=>refreshes++});await tick();
+ assert.equal(helper.prepared('codex-cli'),false);
+ await assert.rejects(helper.guardOperation('codex-cli',async()=>assert.fail('unprepared launch'),{preparation:false}),/settings changed/);
+ await helper.guardOperation('codex-cli',async()=>{prepares++;return {prepared:true}});
+ assert.equal(helper.prepared('codex-cli'),true);
+ await helper.reload();assert.equal(helper.prepared('codex-cli'),true);assert.equal(refreshes,0);
+ const before=reads;
+ for(let i=0;i<2;i++)await helper.guardOperation('codex-cli',async()=>{launches++},{preparation:false});
+ assert.equal(prepares,1);assert.equal(launches,2);assert.equal(reads-before,4);assert.equal(helper.prepared('codex-cli'),true);
+});
+test('saving or discovering a changed CLI path invalidates preparation until the new path is confirmed',async t=>{
+ let prefs=initial();
+ const {helper,nodes,input}=fixture(t,async(path,body)=>{if(body)prefs={...body};return {...prefs}});await tick();
+ await helper.guardOperation('claude',async()=>({prepared:true}));assert.equal(helper.prepared('claude'),true);
+ input('claude','/custom/claude');assert.equal(helper.prepared('claude'),false);nodes.get('cli-path-save-claude').dispatch('click');await tick();
+ assert.equal(helper.prepared('claude'),false);
+ await assert.rejects(helper.guardOperation('claude',async()=>assert.fail('new route was not prepared'),{preparation:false}),/settings changed/);
+ await helper.guardOperation('claude',async()=>({prepared:true}));assert.equal(helper.prepared('claude'),true);
+ prefs.codexExecutable='/external/codex';
+ await assert.rejects(helper.guardOperation('claude',async()=>assert.fail('external route change launched'),{preparation:false}),/settings changed/);
+ assert.equal(helper.prepared('claude'),false);
+});
+test('failed preparation and path changes during confirmation cannot restore reusable readiness',async t=>{
+ let prefs=initial();const {helper}=fixture(t,async()=>({...prefs}));await tick();
+ await helper.guardOperation('synara',async()=>({prepared:true}));assert.equal(helper.prepared('synara'),true);
+ await assert.rejects(helper.guardOperation('synara',async()=>{throw new Error('Synthetic preparation failure')}),/preparation failure/);assert.equal(helper.prepared('synara'),false);
+ await assert.rejects(helper.guardOperation('synara',async()=>{prefs.claudeExecutable='/changed/claude';return {prepared:true}}),/settings changed/);assert.equal(helper.prepared('synara'),false);
+});
+test('T3 reuses confirmed executable paths independently of OpenCode major and blocks an external path before launching',async t=>{
+ let prefs={version:1,major:1,executable1:'/oc/one',executable2:'/oc/two'},known=null,reloads=0;
+ const {helper}=fixture(t,async path=>path==='clients/opencode/preferences'?{...prefs}:initial(),{openCodeSnapshot:()=>known,onOpenCodePathsChanged:()=>reloads++});await tick();
+ await helper.guardOperation('t3-code',async()=>({prepared:true}));assert.equal(helper.prepared('t3-code'),true);
+ prefs.major=2;known={...prefs};await helper.guardOperation('t3-code',async()=>({opened:true}),{preparation:false});assert.equal(helper.prepared('t3-code'),true);
+ prefs.executable2='/external/two';known=null;
+ await assert.rejects(helper.guardOperation('t3-code',async()=>assert.fail('external OpenCode route launched'),{preparation:false}),/settings changed/);assert.equal(helper.prepared('t3-code'),false);assert.equal(reloads,1);
+});
+test('an OpenCode path draft or pending save blocks only T3 and cannot be bypassed by preparing directly',async t=>{
+ let pathBlocked=false;const oc={version:1,major:1,executable1:'',executable2:''};
+ const {helper}=fixture(t,async path=>path==='clients/opencode/preferences'?{...oc}:initial(),{openCodePathsBlocked:()=>pathBlocked});await tick();
+ await helper.guardOperation('t3-code',async()=>({prepared:true}));await helper.guardOperation('claude',async()=>({prepared:true}));
+ pathBlocked=true;assert.equal(helper.blocked('t3-code'),true);assert.equal(helper.prepared('t3-code'),false);assert.equal(helper.blocked('claude'),false);assert.equal(helper.prepared('claude'),true);
+ await assert.rejects(helper.guardOperation('t3-code',async()=>assert.fail('OpenCode draft reached T3 preparation')),/settings changed/);
+ await assert.rejects(helper.guardOperation('t3-code',async()=>assert.fail('OpenCode draft reached T3 opening'),{preparation:false}),/settings changed/);
+ await helper.guardOperation('claude',async()=>({opened:true}),{preparation:false});pathBlocked=false;assert.equal(helper.prepared('t3-code'),true);
+});
+test('an OpenCode draft during preflight or preparation prevents stale T3 execution or prepared success',async t=>{
+ let pathBlocked=false,hold=false,release;const gate=new Promise(resolve=>release=resolve),oc={version:1,major:1,executable1:'',executable2:''};
+ const {helper}=fixture(t,async path=>{if(path==='clients/opencode/preferences'){if(hold)await gate;return {...oc}}return initial()},{openCodePathsBlocked:()=>pathBlocked});await tick();
+ hold=true;const preflight=helper.guardOperation('t3-code',async()=>assert.fail('draft during OpenCode preflight reached operation'));await tick();pathBlocked=true;release();await assert.rejects(preflight,/settings changed/);assert.equal(helper.prepared('t3-code'),false);
+ hold=false;pathBlocked=false;await assert.rejects(helper.guardOperation('t3-code',async()=>{pathBlocked=true;return {prepared:true}}),/settings changed/);assert.equal(helper.prepared('t3-code'),false);
+});
+test('an OpenCode draft during the final path verification prevents a prepared confirmation',async t=>{
+ let pathBlocked=false,reads=0,release;const gate=new Promise(resolve=>release=resolve),oc={version:1,major:1,executable1:'',executable2:''};
+ const {helper}=fixture(t,async path=>{if(path==='clients/opencode/preferences'){if(++reads===2)await gate;return {...oc}}return initial()},{openCodePathsBlocked:()=>pathBlocked});await tick();
+ const pending=helper.guardOperation('t3-code',async()=>({prepared:true}));await tick();assert.equal(reads,2);pathBlocked=true;release();await assert.rejects(pending,/settings changed/);assert.equal(helper.prepared('t3-code'),false);
+});
