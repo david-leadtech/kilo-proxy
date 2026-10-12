@@ -274,6 +274,9 @@ func (u *nativeUI) uxhRow(key string) layout.Widget {
 		side = append(side, u.uxhSquareButton("agent:"+key+":settings", fmt.Sprintf(u.tr("%s settings", "Ajustes de %s"), name), nativeIconSettings, func() { u.agentSetup(key) }))
 	} else {
 		action = u.buttonWidget("agent:"+key+":install", u.tr("How to install", "Cómo instalarlo"), nativeButtonSecondary, nativeIconOpenInNew, true, false, func() { u.open(u.uxhInstallURL(key)) })
+		if u.managedToolsSupported() {
+			action = u.column(u.buttonWidget("agent:"+key+":installation", u.tr("Install or update", "Instalar o actualizar"), nativeButtonSecondary, nil, false, false, func() { u.agentSetup(key) }), action)
+		}
 		if key == "codex" {
 			side = append(side, u.disabled(u.agentsState().FolderBusy == "", u.uxhSquareButton("agent:codex:locate", u.tr("Locate Codex", "Localizar Codex"), nativeIconFolder, u.locateCodexApplication)))
 		}

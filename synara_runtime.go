@@ -240,8 +240,17 @@ func synaraOwnedRuntimeLinksSafe(bundle string) error {
 }
 
 func synaraRuntimeInfoPlist(original []byte, originalHash, bootstrapHash string) ([]byte, error) {
-	oldID := []byte("<string>com.emanueledipietro.synara.beta</string>")
-	if len(original) > 1<<20 || bytes.Count(original, []byte(originalHash)) != 1 || bytes.Count(original, oldID) != 1 {
+	var oldID []byte
+	for _, id := range []string{"com.emanueledipietro.synara", "com.emanueledipietro.synara.beta"} {
+		candidate := []byte("<string>" + id + "</string>")
+		if bytes.Count(original, candidate) == 1 {
+			if oldID != nil {
+				return nil, errors.New("This Synara desktop bundle identity is ambiguous.")
+			}
+			oldID = candidate
+		}
+	}
+	if len(original) > 1<<20 || oldID == nil || bytes.Count(original, []byte(originalHash)) != 1 {
 		return nil, errors.New("This Synara desktop bundle metadata has not been validated.")
 	}
 	data := bytes.Replace(original, []byte(originalHash), []byte(bootstrapHash), 1)
@@ -251,8 +260,8 @@ func synaraRuntimeInfoPlist(original []byte, originalHash, bootstrapHash string)
 func synaraRuntimePackageData(source []byte) ([]byte, string, error) {
 	var fields map[string]json.RawMessage
 	var metadata synaraPackageInfo
-	if len(source) == 0 || len(source) > 64<<10 || json.Unmarshal(source, &fields) != nil || json.Unmarshal(source, &metadata) != nil || metadata.Name != "synara-desktop-beta" || metadata.SynaraDesktopFlavor != "beta" {
-		return nil, "", errors.New("Cannot verify the Synara Beta runtime package.")
+	if len(source) == 0 || len(source) > 64<<10 || json.Unmarshal(source, &fields) != nil || json.Unmarshal(source, &metadata) != nil || synaraPackageChannel(metadata) == "" {
+		return nil, "", errors.New("Cannot verify the Synara stable or Beta runtime package.")
 	}
 	main := metadata.Main
 	// ASAR entries use relative slash paths on every host. On Windows a leading
@@ -280,7 +289,7 @@ func synaraSourceDigestValid(digest string) bool {
 }
 
 func prepareSynaraPrivateRuntime(options synaraProfileOptions, binary, platform string) (synaraPrivateRuntime, error) {
-	// This beta's embedded archive validation differs across operating systems.
+	// Synara's embedded archive validation differs across operating systems.
 	// Preserve the existing integration on other platforms until their private
 	// native bootstrap is validated; never disable Electron integrity fuses.
 	if platform != "macos" && platform != "darwin" {
@@ -293,7 +302,7 @@ func prepareSynaraPrivateRuntime(options synaraProfileOptions, binary, platform 
 	archive := filepath.Join(binary, "Contents", "Resources", "app.asar")
 	packageSource, header, err := synaraReadASARSource(archive, "package.json", 64<<10)
 	if err != nil {
-		return empty, errors.New("Cannot read the Synara Beta runtime package.")
+		return empty, errors.New("Cannot read the Synara runtime package.")
 	}
 	packageData, mainEntry, err := synaraRuntimePackageData(packageSource)
 	if err != nil {

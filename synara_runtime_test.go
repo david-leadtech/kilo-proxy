@@ -313,7 +313,15 @@ func TestSynaraPrivateRuntimeInstalledPrepare(t *testing.T) {
 		t.Fatal(err)
 	}
 	originals := map[string]string{}
-	for _, relative := range []string{"Contents/MacOS/Synara Beta", "Contents/Info.plist", "Contents/_CodeSignature/CodeResources", "Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework"} {
+	executable := t3CodeBundleExecutable(installed)
+	if executable == "" {
+		t.Fatal("the installed Synara bundle has no valid executable")
+	}
+	executableRelative, err := filepath.Rel(installed, executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, relative := range []string{executableRelative, "Contents/Info.plist", "Contents/_CodeSignature/CodeResources", "Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework"} {
 		path := filepath.Join(installed, filepath.FromSlash(relative))
 		digest, err := openDesignFileHash(path, 512<<20)
 		if err != nil {
@@ -335,7 +343,7 @@ func TestSynaraPrivateRuntimeInstalledPrepare(t *testing.T) {
 	wantPackage, _, err := synaraRuntimePackageData(packageSource)
 	gotPackage, _, gotErr := synaraReadASARSource(filepath.Join(saved.Root, synaraRuntimeBundleName, "Contents", "Resources", "app.asar"), "package.json", 64<<10)
 	if err != nil || gotErr != nil || !bytes.Equal(wantPackage, gotPackage) {
-		t.Fatal("owned runtime did not retain the installed Beta's real metadata")
+		t.Fatal("owned runtime did not retain the installed release's real metadata")
 	}
 	for _, change := range []string{"replace-critical-file", "root", "executable", "header", "revision", "main-entry", "main-digest", "server-digest"} {
 		t.Run(change, func(t *testing.T) {

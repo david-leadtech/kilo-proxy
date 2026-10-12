@@ -46,7 +46,7 @@ func (u *nativeUI) uxhHarnessPage(key string, s *nativeClientSelection, d uxhDet
 			detail = c.LaunchInfo.Clients[key].Path
 		}
 	}
-	widgets := []layout.Widget{u.uxhBackLink(), u.uxhDetailHeader(key, l, detail)}
+	widgets := []layout.Widget{u.uxhBackLink(), u.uxhDetailHeader(key, l, detail), u.managedToolInstallationPanel(key)}
 	if l.reason != "" && l.install != uxhMissing {
 		widgets = append(widgets, u.hint(l.reason))
 	}
@@ -82,10 +82,6 @@ func (u *nativeUI) uxhHarnessPage(key string, s *nativeClientSelection, d uxhDet
 	if terminalClientSupported(key) {
 		advanced = append(advanced, u.uxhAdvancedRow(u.tr("Terminal commands", "Comandos de terminal"), u.tr("Open this harness by name from any terminal.", "Abre este harness por su nombre desde cualquier terminal."), nil,
 			u.button("agent:"+key+":terminal-commands", u.tr("Open in Settings", "Abrir en Ajustes"), func() { u.page, u.settingsTab = "settings", "terminal" })))
-	}
-	if url := u.uxhInstallURL(key); url != "" {
-		advanced = append(advanced, u.uxhAdvancedRow(u.tr("Installation", "Instalación"), u.tr("Official download and setup instructions.", "Descarga e instrucciones oficiales."), nil,
-			u.buttonWidget("client:"+key+":install", u.tr("How to install", "Cómo instalarlo"), nativeButtonSecondary, nativeIconOpenInNew, true, false, func() { u.open(url) })))
 	}
 	widgets = append(widgets, u.uxhBlock(u.tr("Advanced", "Avanzado"), "", advanced...))
 	return u.column(widgets...)

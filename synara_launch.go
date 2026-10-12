@@ -15,33 +15,35 @@ func synaraInstallationCandidates(platform, home, localAppData string) []string 
 	candidates := []string{}
 	switch platform {
 	case "darwin", "macos":
-		for _, name := range []string{"Synara Beta.app"} {
+		for _, name := range []string{"Synara Beta.app", "Synara.app"} {
 			for _, root := range []string{"/Applications", filepath.Join(home, "Applications")} {
 				candidates = append(candidates, filepath.Join(root, name))
 			}
 		}
 	case "windows":
-		for _, name := range []string{"Synara Beta.exe", "synara-beta.exe"} {
+		for _, name := range []string{"Synara Beta.exe", "synara-beta.exe", "Synara.exe", "synara.exe"} {
 			for _, root := range []string{localAppData, os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)")} {
 				if !filepath.IsAbs(root) {
 					continue
 				}
-				for _, dir := range []string{"Programs/Synara Beta", "Programs/synara-beta", "Synara Beta", "synara-beta"} {
+				for _, dir := range []string{"Programs/Synara Beta", "Programs/synara-beta", "Synara Beta", "synara-beta", "Programs/Synara", "Programs/synara", "Synara", "synara"} {
 					candidates = append(candidates, filepath.Join(root, filepath.FromSlash(dir), name))
 				}
 			}
 		}
 	default:
-		for _, name := range []string{"synara-beta", "Synara Beta"} {
-			candidates = append(candidates, filepath.Join("/opt/Synara Beta", name))
+		for _, name := range []string{"synara-beta", "Synara Beta", "synara", "Synara"} {
+			for _, root := range []string{"/opt/Synara Beta", "/opt/Synara"} {
+				candidates = append(candidates, filepath.Join(root, name))
+			}
 		}
 		for _, name := range []string{"synara-beta", "synara"} {
 			if path := launchLookPath(name); path != "" {
 				candidates = append(candidates, path)
 			}
 		}
-		for _, root := range []string{"/opt/synara-beta", "/opt/Synara Beta", filepath.Join(home, ".local", "share", "synara-beta")} {
-			for _, name := range []string{"synara-beta", "Synara Beta", "synara"} {
+		for _, root := range []string{"/opt/synara-beta", "/opt/Synara Beta", filepath.Join(home, ".local", "share", "synara-beta"), "/opt/synara", "/opt/Synara", filepath.Join(home, ".local", "share", "synara")} {
+			for _, name := range []string{"synara-beta", "Synara Beta", "synara", "Synara"} {
 				candidates = append(candidates, filepath.Join(root, name))
 			}
 		}
@@ -63,7 +65,7 @@ func resolveSynaraCandidates(candidates []string) (string, error) {
 			return path, nil
 		}
 	}
-	return "", errors.New("Install Synara Beta, Codex CLI and Claude Code, then refresh installed apps. Extract an AppImage before using it on Linux.")
+	return "", errors.New("Install Synara (stable or Beta), Codex CLI and Claude Code, then refresh installed apps. Extract an AppImage before using it on Linux.")
 }
 
 func (a *app) applySynaraLaunch(plan *clientLaunchPlan, rt clientLaunchRuntime) error {

@@ -485,7 +485,7 @@ func saveClaudeProfile(dir string, s claudeSelection, caps claudeCapabilities, p
 }
 func (a *app) claudeProfile(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/api/claude/info" {
-		jsonResponse(w, 200, installedClaude())
+		jsonResponse(w, 200, a.installedClaude())
 		return
 	}
 	dir := a.claudeProfileDir
@@ -525,7 +525,7 @@ func (a *app) claudeProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	caps := claudeCaps("2.1.251")
 	if s.Mode == "installed" {
-		caps = installedClaude()
+		caps = a.installedClaude()
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()

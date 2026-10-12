@@ -15,7 +15,7 @@ You can disable accounts you do not use in Synara's provider settings. Disabling
 
 ## Requirements
 
-- Install [Synara Beta](https://github.com/Emanuele-web04/synara/releases). From Kilo Proxy **0.56.2**, the installed Beta version is not restricted; the detected version is shown for information. See Synara's requirements for [Codex](https://www.trysynara.com/docs/providers/codex) and [Claude Code](https://www.trysynara.com/docs/providers/claude-code).
+- Install [Synara stable or Beta](https://github.com/Emanuele-web04/synara/releases). From Kilo Proxy **0.61.0**, both official stable and Beta channels are supported without a version allowlist; the detected version is shown for information. Choose the release channel in **Installation and updates** on macOS/Linux. See Synara's requirements for [Codex](https://www.trysynara.com/docs/providers/codex) and [Claude Code](https://www.trysynara.com/docs/providers/claude-code).
 - Install native **Codex CLI** and **Claude Code CLI**. Desktop app login is separate from CLI login. The normal agents require an existing CLI session.
 - **Codex · Normal** requires file-based Codex authentication: Synara does not support Codex's `keyring` or `auto` credential-store modes. Kilo Proxy does not convert or copy your credentials.
 - Connect Kilo Proxy and save 1–32 shared models in **Models**. Choose the initial model and any compatible reasoning defaults there.
@@ -42,7 +42,7 @@ An existing chat keeps its account. Create a new chat to switch between a normal
 
 On macOS, the private workspace's Synara tools list the four accounts separately, with their enabled/authentication status and their own model catalog. Choose **Codex · Normal**, **Kilo Proxy · Codex**, **Claude · Normal** or **Kilo Proxy · Claude** when asking an agent to create another chat. The tools retain that account's `instanceId` for single and batch creation. A request that omits an ambiguous account, selects a disabled account or uses a model outside its catalog fails before creating the chat; Synara does not silently substitute a different account.
 
-The private macOS runtime checks the backend integration points before applying this correction, preserving the installed app and the regular workspace. If a Beta build changes those integration points, the private launch reports the incompatibility before starting Synara. Account-aware tool delegation has not been validated for the native Windows or Linux desktop yet.
+The private macOS runtime checks the backend integration points before applying this correction, preserving the installed app and the regular workspace. If a release changes those integration points, the private launch reports the incompatibility before starting Synara. Account-aware tool delegation has not been validated for the native Windows or Linux desktop yet.
 
 **Delegar a otra cuenta:** indica Codex Normal, Codex Kilo, Claude Normal o Claude Kilo al pedir que se abra otro chat. Cada cuenta tiene su catálogo y estado propios. Si falta elegir la cuenta o está desactivada, la petición se detiene antes de crear el chat. Esta corrección de las herramientas de delegación está validada para el workspace privado en macOS.
 
@@ -56,7 +56,7 @@ The private Codex Normal adapter makes the CLI's ChatGPT login status readable b
 
 ## Troubleshooting
 
-- **Synara or a CLI was not found:** install Synara Beta, native Codex CLI and Claude Code, then use **Check again** on the Harnesses list.
+- **Synara or a CLI was not found:** install Synara stable or Beta, native Codex CLI and Claude Code, then use **Check again** on the Harnesses list.
 - **A Claude model is unavailable:** check that the composer selected the exact prepared gateway ID rather than a built-in Claude entry.
 - **Close Synara · Kilo first:** quit its private window and prepare again. Your normal Synara window can remain open.
 - **Models or credentials changed:** close and reopen the private workspace so the prepared profiles receive the current settings.

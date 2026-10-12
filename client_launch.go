@@ -97,7 +97,7 @@ func (a *app) launchRuntime() clientLaunchRuntime {
 	if platform == "darwin" {
 		platform = "macos"
 	}
-	rt := clientLaunchRuntime{platform: platform, home: home, resolve: resolveLaunchClient, terminal: clientTerminalAvailable, start: startClientLaunch}
+	rt := clientLaunchRuntime{platform: platform, home: home, resolve: a.resolveManagedTool, terminal: clientTerminalAvailable, start: startClientLaunch}
 	if x := a.launcher; x != nil {
 		if x.platform != "" {
 			rt.platform = x.platform
@@ -346,11 +346,11 @@ func (a *app) planClientLaunch(input clientLaunchRequest, rt clientLaunchRuntime
 		p.Env["CODEX_ELECTRON_USER_DATA_PATH"] = ui
 		p.Args = []string{"--user-data-dir=" + ui}
 		if rt.platform == "macos" && strings.HasSuffix(p.Executable, ".app") {
-			binary := plistValue(filepath.Join(p.Executable, "Contents", "Info.plist"), "CFBundleExecutable")
-			if binary == "" || filepath.Base(binary) != binary {
+			binary := managedToolBundleExecutable(p.Executable)
+			if binary == "" {
 				return p, errors.New("The Codex application bundle is invalid.")
 			}
-			p.Executable = filepath.Join(p.Executable, "Contents", "MacOS", binary)
+			p.Executable = binary
 		}
 	} else if input.Client == "claude-desktop" {
 		paths, pathsErr := a.claudeDesktopPaths()
@@ -370,11 +370,11 @@ func (a *app) planClientLaunch(input clientLaunchRequest, rt clientLaunchRuntime
 		// LaunchServices may reuse the regular Claude process. Start the native
 		// executable directly so the separate data directory takes effect.
 		if rt.platform == "macos" && strings.HasSuffix(p.Executable, ".app") {
-			binary := plistValue(filepath.Join(p.Executable, "Contents", "Info.plist"), "CFBundleExecutable")
-			if binary == "" || filepath.Base(binary) != binary {
+			binary := managedToolBundleExecutable(p.Executable)
+			if binary == "" {
 				return p, errors.New("The Claude Desktop application bundle is invalid.")
 			}
-			p.Executable = filepath.Join(p.Executable, "Contents", "MacOS", binary)
+			p.Executable = binary
 		}
 	} else if input.Client == "open-design" || input.Client == "openmausbot" || input.Client == "t3-code" || input.Client == "synara" {
 		// These clients already selected their isolated native executable.

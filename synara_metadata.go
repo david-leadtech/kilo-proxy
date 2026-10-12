@@ -16,8 +16,8 @@ type synaraPackageInfo struct {
 }
 
 // Read bounded package metadata; never start the application during discovery.
-// Package identity selects the Beta channel. Version and commit are descriptive
-// metadata, not a compatibility allowlist.
+// Package identity selects the official stable or Beta channel. Version and
+// commit are descriptive metadata, not a compatibility allowlist.
 func synaraPackageMetadata(executable, platform string) (synaraPackageInfo, error) {
 	if resolved, err := filepath.EvalSymlinks(executable); err == nil {
 		executable = resolved
@@ -32,12 +32,24 @@ func synaraPackageMetadata(executable, platform string) (synaraPackageInfo, erro
 			continue
 		}
 		var meta synaraPackageInfo
-		if json.Unmarshal(data, &meta) != nil || meta.Name != "synara-desktop-beta" || meta.SynaraDesktopFlavor != "beta" {
-			return synaraPackageInfo{}, errors.New("Cannot verify this Synara Beta package. Install an official Synara Beta release.")
+		if json.Unmarshal(data, &meta) != nil || synaraPackageChannel(meta) == "" {
+			return synaraPackageInfo{}, errors.New("Cannot verify this Synara package. Install an official stable or Beta release.")
 		}
 		return meta, nil
 	}
-	return synaraPackageInfo{}, errors.New("Cannot verify this Synara Beta installation. Install an official Synara Beta release and refresh detection. Extract an AppImage before using it on Linux.")
+	return synaraPackageInfo{}, errors.New("Cannot verify this Synara installation. Install an official stable or Beta release and refresh detection. Extract an AppImage before using it on Linux.")
+}
+
+// Upstream desktop-artifact-identity.ts and desktopIdentity.ts define these
+// release identities. Internal canary/Cua builds are not public release feeds.
+func synaraPackageChannel(metadata synaraPackageInfo) string {
+	switch {
+	case metadata.Name == "synara-desktop" && metadata.SynaraDesktopFlavor == "production":
+		return "stable"
+	case metadata.Name == "synara-desktop-beta" && metadata.SynaraDesktopFlavor == "beta":
+		return "beta"
+	}
+	return ""
 }
 
 func synaraVersion(executable, platform string) (string, error) {
@@ -45,7 +57,7 @@ func synaraVersion(executable, platform string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// An absent or unsuitable display label does not make a Beta incompatible.
+	// An absent or unsuitable display label does not make a release incompatible.
 	version := strings.TrimSpace(meta.Version)
 	if len(version) > 80 || strings.ContainsAny(version, "\x00\r\n") {
 		version = ""

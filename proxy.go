@@ -38,6 +38,8 @@ type app struct {
 	providerChanging          bool
 	updates                   *releaseUpdateChecker
 	packageUpdates            *packageUpdateManager
+	managedToolsMu            sync.Mutex
+	managedTools              *managedToolsManager
 	imageURLBackends          imageURLBackendManager
 	imageDependencyLookup     func(string) string
 	imageURLLeaseFactory      func(context.Context, string, string) (imageURLLease, error)

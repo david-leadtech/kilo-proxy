@@ -304,7 +304,7 @@ func (a *app) openDesignProfileAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	caps := claudeCapabilities{}
 	if input.Engine == "claude" && a.editorTestRoot == "" {
-		caps = installedClaude()
+		caps = a.installedClaude()
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()

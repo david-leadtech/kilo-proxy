@@ -15,6 +15,20 @@ node --test scripts/*.test.mjs
 python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
+For managed-tool installer changes, also validate a current official package in
+a disposable profile on the host platform:
+
+```sh
+KILO_TEST_MANAGED_TOOL=codex-cli go test -run '^TestManagedToolOfficialInstallation$' -count=1 -timeout=30m -v .
+KILO_TEST_MANAGED_TOOL=t3-code:nightly go test -run '^TestManagedToolOfficialInstallation$' -count=1 -timeout=30m -v .
+```
+
+This opt-in acceptance downloads the fixed official package, checks its SHA256,
+architecture, packaged version and channel, then verifies atomic publication and
+managed-path resolution. It opens no desktop app. CLI version checks use
+disposable homes without personal authentication. A successful extraction does
+not establish native GUI coverage or satisfy missing Linux system dependencies.
+
 Run the Node glob from a shell that expands it, such as Bash or zsh. CI uses Bash on all three operating systems.
 
 When changing T3 Code profiles or model selection, also run the installed-client acceptance against each supported Desktop release:
@@ -25,7 +39,7 @@ KILO_TEST_T3_APP='/absolute/path/to/T3 Code.app' KILO_TEST_T3_PICKER=1 go test -
 
 This macOS opt-in check requires installed Codex CLI, Claude Code and Playwright Chromium. It uses disposable homes and synthetic local upstreams, reproduces an old built-in Claude selection, and verifies the exact gateway ID through the packaged frontend and native drivers. Desktop persistence/bootstrap IPC is injected into headless Chromium; this is not a native Electron IPC acceptance test. Existing application windows and account profiles are not used.
 
-When changing Synara profiles or account/model selection, run the installed-client acceptance against the Beta build being validated:
+When changing Synara profiles or account/model selection, run the installed-client acceptance against the stable or Beta build being validated:
 
 ```sh
 go build -o /private/tmp/kilo-synara-adapter .

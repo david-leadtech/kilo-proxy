@@ -1,4 +1,4 @@
-// Loaded only in Kilo Proxy's private, version-checked Synara server snapshot.
+// Loaded only in Kilo Proxy's private, contract-checked Synara server snapshot.
 const kiloSynaraGatewayModels = __KILO_SYNARA_GATEWAY_MODELS__;
 function kiloSynaraDefaultModel(input) {
 	const managed = input.instanceId === "kilo_codex_proxy" ? kiloSynaraGatewayModels.codex : input.instanceId === "kilo_claude_proxy" ? kiloSynaraGatewayModels.claudeAgent : null;
