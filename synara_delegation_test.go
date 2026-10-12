@@ -16,6 +16,10 @@ func synaraDelegationContractFixture(t *testing.T) []byte {
 	if err := json.Unmarshal(synaraDelegationPatchesJSON, &patches); err != nil {
 		t.Fatal(err)
 	}
+	return synaraDelegationSelectedContractFixture(patches)
+}
+
+func synaraDelegationSelectedContractFixture(patches []synaraDelegationPatch) []byte {
 	text := ""
 	// Retain the largest upstream contracts first; shorter anchors occur inside
 	// them and must not be duplicated by this portable source fixture.
@@ -32,6 +36,46 @@ func synaraDelegationContractFixture(t *testing.T) []byte {
 		}
 	}
 	return []byte(text)
+}
+
+func TestSynaraDelegationAcceptsAccountAwareContractsWithoutChangingHubApproval(t *testing.T) {
+	var patches []synaraDelegationPatch
+	if err := json.Unmarshal(synaraDelegationPatchesJSON, &patches); err != nil {
+		t.Fatal(err)
+	}
+	legacyAvailability := patches[6].Before
+	alternatives := 0
+	for i, patch := range patches {
+		if len(patch.Alternatives) != 0 {
+			patches[i] = patch.Alternatives[0]
+			alternatives++
+		}
+	}
+	if alternatives != 8 {
+		t.Fatal("the reviewed account-aware contract set changed")
+	}
+	source := synaraDelegationSelectedContractFixture(patches)
+	patched, err := patchSynaraDelegationServer(source, synaraProfileTestOptions(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(patched)
+	if !strings.Contains(text, "const inheritedRuntimeMode = caller.value.runtimeMode;\n\t\t// Validate every selected account/model") || !strings.Contains(text, "including Approve for me. An explicit mode takes precedence.") {
+		t.Fatal("the upstream Hub approval mode or guidance changed")
+	}
+	if strings.Contains(text, `caller.value.runtimeMode === "auto" ? "approval-required"`) {
+		t.Fatal("the current upstream Hub mode was rewritten to the historical fallback")
+	}
+	changed := bytes.Replace(source, []byte("const statusByInstance ="), []byte("const unreviewedStatusMap ="), 1)
+	if result, err := patchSynaraDelegationServer(changed, synaraProfileTestOptions(t)); err == nil || result != nil {
+		t.Fatal("a partially changed account-aware contract was accepted")
+	}
+	for _, copies := range []int{1, 2} {
+		mixed := append(append([]byte(nil), source...), []byte(strings.Repeat(legacyAvailability+"\n", copies))...)
+		if result, err := patchSynaraDelegationServer(mixed, synaraProfileTestOptions(t)); err == nil || result != nil {
+			t.Fatal("mixed or duplicated availability contracts were accepted")
+		}
+	}
 }
 
 func TestSynaraDelegationAcceptsCompatibleBuildsAndRejectsChangedContracts(t *testing.T) {

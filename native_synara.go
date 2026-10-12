@@ -99,7 +99,7 @@ func (u *nativeUI) synaraDetail(s *nativeClientSelection) uxhDetail {
 		d.status = append(d.status, u.note(nativeMessage(state.Info.Message, u.language)))
 	}
 	d.blocks = append(d.blocks, u.uxhBlock(u.tr("Agents", "Agentes"), u.tr("Choose one of these four options for each new chat.", "Elige una de estas cuatro opciones para cada chat nuevo."), uxhMultiAgentRows(u, u.tr("Kilo Proxy names and green account indicators identify Kilo agents.", "Los nombres Kilo Proxy y los indicadores verdes de cuenta identifican los agentes Kilo."))...))
-	requirements := u.tr("Supports Synara Beta. Requires native Codex CLI and Claude Code.", "Admite Synara Beta. Requiere Codex CLI nativo y Claude Code.")
+	requirements := u.tr("Supports official Synara stable and Beta releases. Requires native Codex CLI and Claude Code.", "Admite versiones oficiales estables y Beta de Synara. Requiere Codex CLI nativo y Claude Code.")
 	if state.Info.Version != "" {
 		requirements += u.tr(" Detected: ", " Detectado: ") + state.Info.Version + "."
 	}

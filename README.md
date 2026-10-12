@@ -81,7 +81,7 @@ Release binaries need no Go, Node or Docker. Linux Desktop needs [system graphic
 
 1. **Connect your account:** follow the sign-in guide and choose your Kilo organization, or connect ChatGPT.
 2. **Choose models:** start with the recommended models or a curated pack, then adjust the shared library.
-3. **Open your agent:** start the proxy and open an installed editor or agent from **Harnesses**. Keep Kilo Proxy running while you use it.
+3. **Install or open your agent:** on macOS and Linux, **Harnesses** can check versions and install or update a private Kilo copy of supported tools. Choose the stable or nightly channel for T3 Code, or stable or Beta for Synara. Start the proxy and open your agent here. Keep Kilo Proxy running while you use it. [Supported packages and requirements](docs/managed-tools.md).
 
 For the terminal edition, follow the [headless setup guide](docs/headless.md).
 

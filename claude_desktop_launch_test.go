@@ -31,7 +31,10 @@ func TestClaudeDesktopLaunchUsesSeparateDesktopAndCodeProfiles(t *testing.T) {
 		application = filepath.Join(a.launcher.home, "Applications", "Claude.exe")
 		wantExecutable = application
 	case "darwin":
-		if err := os.MkdirAll(filepath.Join(application, "Contents"), 0700); err != nil {
+		if err := os.MkdirAll(filepath.Dir(wantExecutable), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(wantExecutable, []byte("synthetic executable; must never run"), 0700); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(application, "Contents", "Info.plist"), []byte(`<plist><dict><key>CFBundleExecutable</key><string>Claude</string></dict></plist>`), 0600); err != nil {

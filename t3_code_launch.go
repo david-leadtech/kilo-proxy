@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"encoding/xml"
 	"errors"
 	"os"
 	"os/exec"
@@ -112,43 +110,7 @@ func t3CodeCompatibility(executable, platform string) error {
 }
 
 func t3CodeBundleExecutable(bundle string) string {
-	data, err := readOpenDesignShimFile(filepath.Join(bundle, "Contents", "Info.plist"), 1<<20)
-	if err != nil {
-		return ""
-	}
-	decoder := xml.NewDecoder(bytes.NewReader(data))
-	key := ""
-	for {
-		token, err := decoder.Token()
-		if err != nil {
-			return ""
-		}
-		start, ok := token.(xml.StartElement)
-		if !ok {
-			continue
-		}
-		if start.Name.Local == "key" {
-			if decoder.DecodeElement(&key, &start) != nil {
-				return ""
-			}
-		} else if start.Name.Local == "string" {
-			var value string
-			if decoder.DecodeElement(&value, &start) != nil {
-				return ""
-			}
-			if key == "CFBundleExecutable" {
-				if value == "" || filepath.Base(value) != value || strings.ContainsAny(value, "\x00\r\n") {
-					return ""
-				}
-				path := filepath.Join(bundle, "Contents", "MacOS", value)
-				if launchExecutable(path) {
-					return path
-				}
-				return ""
-			}
-			key = ""
-		}
-	}
+	return managedToolBundleExecutable(bundle)
 }
 
 func (a *app) t3CodeAvailability(executable string, rt clientLaunchRuntime) error {

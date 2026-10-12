@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 )
 
@@ -63,7 +62,7 @@ func runTerminalAgentMode(args []string) int {
 		fmt.Fprintln(os.Stderr, "The Kilo Proxy configuration directory must be absolute.")
 		return 1
 	}
-	executable, err := resolveLaunchClient(args[0], "")
+	executable, err := (&app{dir: *dir}).resolveManagedTool(args[0], "")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -76,10 +75,10 @@ func runTerminalAgentMode(args []string) int {
 	input := terminalPrepareRequest{Client: args[0], Directory: directory}
 	if input.Client == "claude" {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		output, err := exec.CommandContext(ctx, executable, "--version").Output()
+		installedVersion, _, err := managedToolInstalledVersion(ctx, "claude", executable, runtime.GOOS, runtime.GOARCH)
 		cancel()
-		if err == nil && len(output) < 256 {
-			input.ClaudeVersion = claudeCaps(strings.TrimSpace(string(output))).Version
+		if err == nil {
+			input.ClaudeVersion = claudeCaps(installedVersion).Version
 		}
 		if len(input.ClaudeVersion) > 64 {
 			input.ClaudeVersion = ""

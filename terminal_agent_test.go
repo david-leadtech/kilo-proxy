@@ -235,7 +235,7 @@ func TestTerminalClientProcessHelper(t *testing.T) {
 	}
 	input, _ := io.ReadAll(os.Stdin)
 	directory, _ := os.Getwd()
-	_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"args": args, "input": string(input), "cwd": directory, "codexHome": os.Getenv("CODEX_HOME"), "localKey": os.Getenv("KILO_LOCAL_API_KEY"), "claudeHome": os.Getenv("CLAUDE_CONFIG_DIR"), "anthropicKey": os.Getenv("ANTHROPIC_API_KEY"), "anthropicBase": os.Getenv("ANTHROPIC_BASE_URL"), "ompHome": os.Getenv("PI_CODING_AGENT_DIR"), "ompProfile": os.Getenv("OMP_PROFILE"), "piProfile": os.Getenv("PI_PROFILE"), "stateful": os.Getenv("PI_OPENAI_STATEFUL"), "openCodeConfig": os.Getenv("OPENCODE_CONFIG"), "openCodeContent": os.Getenv("OPENCODE_CONFIG_CONTENT")})
+	_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"args": args, "input": string(input), "cwd": directory, "codexHome": os.Getenv("CODEX_HOME"), "localKey": os.Getenv("KILO_LOCAL_API_KEY"), "claudeHome": os.Getenv("CLAUDE_CONFIG_DIR"), "anthropicKey": os.Getenv("ANTHROPIC_API_KEY"), "anthropicBase": os.Getenv("ANTHROPIC_BASE_URL"), "ompHome": os.Getenv("PI_CODING_AGENT_DIR"), "ompProfile": os.Getenv("OMP_PROFILE"), "piProfile": os.Getenv("PI_PROFILE"), "stateful": os.Getenv("PI_OPENAI_STATEFUL"), "openCodeConfig": os.Getenv("OPENCODE_CONFIG"), "openCodeContent": os.Getenv("OPENCODE_CONFIG_CONTENT"), "managedTool": os.Getenv("KILO_TERMINAL_MANAGED_CLIENT")})
 	os.Exit(23)
 }
 
@@ -287,17 +287,39 @@ func TestTerminalAgentRunsInCurrentTerminal(t *testing.T) {
 	}
 	args := []string{"resume", "with spaces", "literal$(should-not-run)", "semi;colon", "--model", "vendor/two", strings.Repeat("large prompt ", 1000)}
 	for _, test := range []struct {
-		client string
-		args   []string
+		client  string
+		args    []string
+		managed bool
 	}{
-		{"codex-cli", args},
-		{"claude", args},
-		{"omp", args},
-		{"opencode", append([]string{"run", "--continue", "-m", "kilo-local/vendor/one"}, args[1:]...)},
-		{"opencode", []string{"models", "kilo-local"}},
-		{"opencode", []string{"--continue", "--model", "kilo-local/vendor/one"}},
+		{"codex-cli", args, false},
+		{"claude", args, false},
+		{"omp", args, false},
+		{"opencode", append([]string{"run", "--continue", "-m", "kilo-local/vendor/one"}, args[1:]...), false},
+		{"opencode", []string{"models", "kilo-local"}, false},
+		{"opencode", []string{"--continue", "--model", "kilo-local/vendor/one"}, false},
+		{"codex-cli", args, true},
+		{"claude", args, true},
 	} {
 		client, arguments := test.client, test.args
+		if test.managed {
+			record := managedToolRegistryFixture(t, a.dir, client, "terminal-managed")
+			nativeName := map[string]string{"codex-cli": "codex", "claude": "claude"}[client]
+			source, err := os.ReadFile(filepath.Join(bin, nativeName))
+			if err != nil {
+				t.Fatal(err)
+			}
+			source = bytes.Replace(source, []byte("#!/bin/sh\n"), []byte("#!/bin/sh\nexport KILO_TERMINAL_MANAGED_CLIENT="+client+"\n"), 1)
+			if err := os.WriteFile(record.Executable, source, 0700); err != nil {
+				t.Fatal(err)
+			}
+			record.Digest, err = managedToolFingerprint(record.Executable, runtime.GOOS)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := writeManagedTool(a.dir, record); err != nil {
+				t.Fatal(err)
+			}
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		name := map[string]string{"codex-cli": "kilo-codex", "claude": "kilo-claude", "omp": "kilo-omp", "opencode": "kilo-opencode"}[client]
@@ -315,11 +337,15 @@ func TestTerminalAgentRunsInCurrentTerminal(t *testing.T) {
 		var got struct {
 			Args                                                                     []string
 			Input, Cwd, CodexHome, LocalKey, ClaudeHome, AnthropicKey, AnthropicBase string
+			ManagedTool                                                              string
 			OMPHome, OMPProfile, PIProfile, Stateful                                 string
 			OpenCodeConfig, OpenCodeContent                                          string
 		}
 		if err := json.Unmarshal(output.Bytes(), &got); err != nil {
 			t.Fatal(err, output.String())
+		}
+		if test.managed && got.ManagedTool != client || !test.managed && got.ManagedTool != "" {
+			t.Fatalf("terminal shortcut selected the wrong installation: managed=%v marker=%q", test.managed, got.ManagedTool)
 		}
 		wantArgs := arguments
 		if client == "claude" {

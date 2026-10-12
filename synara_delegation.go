@@ -19,9 +19,10 @@ var synaraDelegationHelpers string
 var synaraDelegationPatchesJSON []byte
 
 type synaraDelegationPatch struct {
-	Before string `json:"before"`
-	After  string `json:"after"`
-	Count  int    `json:"count"`
+	Before       string                  `json:"before"`
+	After        string                  `json:"after"`
+	Count        int                     `json:"count"`
+	Alternatives []synaraDelegationPatch `json:"alternatives,omitempty"`
 }
 
 func synaraDelegationModels(options synaraProfileOptions) (map[string]any, error) {
@@ -96,7 +97,25 @@ func applySynaraDelegationPatches(source []byte, options synaraProfileOptions) (
 	}
 	text := string(source)
 	for _, patch := range patches {
-		if patch.Before == "" || patch.Count < 1 || strings.Count(text, patch.Before) != patch.Count {
+		// Select exactly one complete, verified structural contract. New public
+		// releases may expose account-aware blocks without changing their Kilo
+		// semantics. Never accept partial anchors or ambiguous mixed copies.
+		candidates := append([]synaraDelegationPatch{patch}, patch.Alternatives...)
+		matches := 0
+		for _, candidate := range candidates {
+			if candidate.Before == "" || candidate.Count < 1 {
+				return nil, errors.New("Invalid private Synara delegation contract.")
+			}
+			count := strings.Count(text, candidate.Before)
+			if count != 0 && count != candidate.Count {
+				return nil, errors.New("This Synara server does not match the verified delegation contract; no private changes saved.")
+			}
+			if count == candidate.Count {
+				patch = candidate
+				matches++
+			}
+		}
+		if matches != 1 {
 			return nil, errors.New("This Synara server does not match the verified delegation contract; no private changes saved.")
 		}
 		after := patch.After

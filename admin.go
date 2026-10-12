@@ -102,6 +102,10 @@ func (a *app) adminHandler() http.Handler {
 			a.clientsLaunch(w, r)
 			return
 		}
+		if r.URL.Path == managedToolsStatusEndpoint || r.URL.Path == managedToolsCheckEndpoint || r.URL.Path == managedToolsInstallEndpoint || r.URL.Path == "/api/tools/cancel" {
+			a.managedToolsAPI(w, r)
+			return
+		}
 		if r.URL.Path == openMausBotEndpoint {
 			a.openMausBotProfile(w, r)
 			return

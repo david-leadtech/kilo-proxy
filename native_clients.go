@@ -17,6 +17,7 @@ import (
 )
 
 type nativeClients struct {
+	ManagedTools                *nativeManagedTools
 	Grids                       map[string]*nativeModelGridState
 	Selections                  map[string]*nativeClientSelection
 	Claude                      claudeCapabilities
