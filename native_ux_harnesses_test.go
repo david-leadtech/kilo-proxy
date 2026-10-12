@@ -46,7 +46,12 @@ func TestNativeHarnessesFolderMenuSetsGeneralFolder(t *testing.T) {
 	for _, lang := range []string{"en", "es"} {
 		t.Run(lang, func(t *testing.T) {
 			u, r := nativeLaunchTestUI(t, "codex-cli", false, false)
-			u.page, u.language = "agents", lang
+			u.page = "agents"
+			// Persist the fixture language so periodic state polls cannot restore English.
+			u.setLanguage(lang)
+			nativeTestWait(t, u, func() bool {
+				return u.language == lang && u.languageTarget == "" && !u.busy["POST/api/language"] && !u.busy["GET/api/state"]
+			})
 			a := u.agentsState()
 			now := time.Now()
 			a.now = func() time.Time { return now }
@@ -67,6 +72,13 @@ func TestNativeHarnessesFolderMenuSetsGeneralFolder(t *testing.T) {
 			h.click(uxhShortPath(other), semantic.Button)
 			if a.Preferences.Folder != other || u.expanded[uxhFolderMenuID] {
 				t.Fatalf("recent folder was not applied: %q", a.Preferences.Folder)
+			}
+			// Exercise the background refresh without depending on screenshot timing.
+			u.refreshState()
+			nativeTestWait(t, u, func() bool { return !u.busy["GET/api/state"] })
+			h.frame()
+			if saved, err := readSettings(u.owner.dir); err != nil || saved.Language != lang || u.language != lang {
+				t.Fatalf("folder selection lost the persisted language: saved=%q UI=%q want=%q error=%v", saved.Language, u.language, lang, err)
 			}
 
 			// A typed path must be an existing absolute folder.
