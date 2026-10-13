@@ -16,7 +16,7 @@ kilo-proxy-headless login kilo
 
 The command prints a verification URL and code. Open the URL in any browser, including on another machine, and approve the sign-in. If the account has multiple organizations, run `login kilo --org ORGANIZATION_ID` to select one. A completed login saves the connection to this headless profile. Ctrl+C or SIGTERM cancels the pending device flow.
 
-After a successful login or `configure`, and when starting `serve`, the CLI checks whether the four `kilo-*` commands are already installed for this executable and profile. If setup is needed, it prints the command to run on this machine, with the current executable and any custom `--config-dir` quoted correctly. The suggestion does not install anything or change shell settings. Running `commands` also shows setup guidance.
+After a successful login or `configure`, and when starting `serve`, the CLI checks whether the five `kilo-*` commands are already installed for this executable and profile. If setup is needed, it prints the command to run on this machine, with the current executable and any custom `--config-dir` quoted correctly. The suggestion does not install anything or change shell settings. Running `commands` also shows setup guidance. The four Kilo-backed agents use this profile; `kilo-muse` uses Muse’s native Meta account and saved executable selection.
 
 To supply an existing Kilo key, read it from a private file:
 

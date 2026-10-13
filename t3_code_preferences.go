@@ -87,6 +87,11 @@ func (a *app) t3CodePreferencesAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		defer a.launchMu.Unlock()
 	}
+	// Executable discovery can scan a slow installation or PATH. Keep it out
+	// of the state lock so polling and unrelated settings remain responsive.
+	rt := a.launchRuntime()
+	binary, resolveErr := rt.resolve("t3-code", "")
+	installation, _ := inspectT3CodeInstallation(binary, rt.platform)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	prefs := normalizeT3CodePreferences(a.config.T3Code)
@@ -102,9 +107,6 @@ func (a *app) t3CodePreferencesAPI(w http.ResponseWriter, r *http.Request) {
 			a.config, prefs = next, input
 		}
 	}
-	rt := a.launchRuntime()
-	binary, resolveErr := rt.resolve("t3-code", "")
-	installation, _ := inspectT3CodeInstallation(binary, rt.platform)
 	saved, readErr := a.readT3CodePrepared()
 	ready := resolveErr == nil && readErr == nil && a.t3CodeReady(saved, binary, rt)
 	jsonResponse(w, http.StatusOK, map[string]any{"preferences": prefs, "requiresPreparation": !ready, "supportedProviders": installation.SupportedProviders, "openCode2Supported": installation.OpenCode2Supported})
