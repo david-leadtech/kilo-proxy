@@ -17,6 +17,8 @@ import (
 // the proxy control in the header and show the period inside the page.
 func (u *nativeUI) uxaPageTop(description [2]string, controls layout.Widget) ([2]string, layout.Widget) {
 	switch u.uxa().tab {
+	case "history":
+		description = [2]string{"Retrieve historical Kilo usage and download exact CSV rows.", "Recupera el uso histórico de Kilo y descarga las filas exactas en CSV."}
 	case "requests":
 		description = [2]string{"The latest requests that went through the proxy.", "Las últimas peticiones que han pasado por el proxy."}
 	case "conversations":
@@ -24,7 +26,7 @@ func (u *nativeUI) uxaPageTop(description [2]string, controls layout.Widget) ([2
 	default:
 		description = [2]string{"What you spent on Kilo and how much the cache saved.", "Lo que has gastado en Kilo y cuánto ha ahorrado la caché."}
 	}
-	if u.sidebarVisible {
+	if u.sidebarVisible && u.uxa().tab != "history" {
 		controls = u.uxaPeriodSelector()
 	}
 	return description, controls
@@ -42,12 +44,14 @@ func (u *nativeUI) activityPanel() layout.Widget {
 		}))
 	}
 	head := []layout.Widget{}
-	if !u.sidebarVisible {
+	if !u.sidebarVisible && s.tab != "history" {
 		head = append(head, u.uxaPeriodSelector())
 	}
 	head = append(head, u.uxaTabBar(trailing))
 	var body layout.Widget
 	switch s.tab {
+	case "history":
+		body = u.usageExplorerPanel()
 	case "requests":
 		body = u.uxaRequestsTab()
 	case "conversations":

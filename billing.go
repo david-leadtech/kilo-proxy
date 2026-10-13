@@ -175,6 +175,10 @@ func (a *app) refreshBilling(w http.ResponseWriter, r *http.Request) {
 }
 
 func billingGet(ctx context.Context, endpoint string, transport http.RoundTripper, key, org, path string, result any) error {
+	return billingGetLimit(ctx, endpoint, transport, key, org, path, result, 1<<20)
+}
+
+func billingGetLimit(ctx context.Context, endpoint string, transport http.RoundTripper, key, org, path string, result any, limit int64) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+path, nil)
 	if err != nil {
 		return errors.New("The Kilo account endpoint is invalid.")
@@ -203,8 +207,8 @@ func billingGet(ctx context.Context, endpoint string, transport http.RoundTrippe
 			return fmt.Errorf("Kilo billing is unavailable (HTTP %d).", resp.StatusCode)
 		}
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
-	if err != nil || len(data) > 1<<20 {
+	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err != nil || int64(len(data)) > limit {
 		return errors.New("Kilo returned an invalid billing response.")
 	}
 	if err := json.Unmarshal(data, result); err != nil {
