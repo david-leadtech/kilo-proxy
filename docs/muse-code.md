@@ -1,6 +1,6 @@
 # Muse Code
 
-Kilo Proxy 0.62.0 opens [Muse Code](https://dev.meta.ai/products/muse-code) in a project terminal and connects its native provider to compatible T3 Code installations. Muse uses its own Meta login and official model catalog. Kilo's shared models, model packs and gateway credentials do not configure this connection.
+Kilo Proxy 0.62.1 opens [Muse Code](https://dev.meta.ai/products/muse-code) in a project terminal and connects its native provider to compatible T3 Code installations. Muse uses its own Meta login and official model catalog. Kilo's shared models, model packs and gateway credentials do not configure this connection.
 
 ## Installation and executable selection
 

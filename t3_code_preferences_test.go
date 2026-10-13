@@ -2,10 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestT3CodePreferencesDefaultsAndValidation(t *testing.T) {
@@ -95,5 +98,72 @@ func TestT3CodePreferencesFailedSaveAndPreparationLockPreserveState(t *testing.T
 	w = adminRequest(a, "clients/t3-code/preferences", string(data))
 	if w.Code != 500 || !reflect.DeepEqual(previous, a.config) {
 		t.Fatal("failed write changed in-memory preferences", w.Code, w.Body.String())
+	}
+}
+
+func TestT3CodePreferencesDiscoveryDoesNotBlockStateOrSettings(t *testing.T) {
+	for _, method := range []string{"GET", "POST"} {
+		t.Run(method, func(t *testing.T) {
+			a := t3CodeTestApp(t, "linux")
+			a.imageDependencyLookup = func(string) string { return "" }
+			prefs := normalizeT3CodePreferences(a.config.T3Code)
+			body := ""
+			if method == "POST" {
+				prefs.Codex = false
+				data, _ := json.Marshal(prefs)
+				body = string(data)
+			}
+			started, gate := make(chan struct{}), make(chan struct{})
+			var once sync.Once
+			release := func() { once.Do(func() { close(gate) }) }
+			defer release()
+			resolve := a.launcher.resolve
+			a.launcher.resolve = func(id, custom string) (string, error) {
+				if id == "t3-code" {
+					close(started)
+					<-gate
+				}
+				return resolve(id, custom)
+			}
+			response := make(chan *httptest.ResponseRecorder, 1)
+			go func() { response <- adminRequest(a, "clients/t3-code/preferences", body) }()
+			select {
+			case <-started:
+			case <-time.After(2 * time.Second):
+				t.Fatal("T3 discovery did not start")
+			}
+			// Both operations must finish while discovery is still retained.
+			for _, request := range []struct{ path, body string }{{"state", ""}, {"language", `{"language":"es"}`}} {
+				result := make(chan *httptest.ResponseRecorder, 1)
+				go func(path, body string) { result <- adminRequest(a, path, body) }(request.path, request.body)
+				select {
+				case w := <-result:
+					if w.Code != 200 {
+						t.Fatal(request.path, w.Code, w.Body.String())
+					}
+				case <-time.After(2 * time.Second):
+					t.Fatalf("%s blocked behind T3 executable discovery", request.path)
+				}
+			}
+			release()
+			select {
+			case w := <-response:
+				if w.Code != 200 {
+					t.Fatal(w.Code, w.Body.String())
+				}
+				var result struct {
+					Preferences t3CodePreferences `json:"preferences"`
+				}
+				if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil || !reflect.DeepEqual(result.Preferences, prefs) {
+					t.Fatal("T3 preferences changed during discovery", result, err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("T3 preferences did not finish after releasing discovery")
+			}
+			saved, err := readSettings(a.dir)
+			if err != nil || saved.Language != "es" || !reflect.DeepEqual(saved.T3Code, prefs) {
+				t.Fatal("T3 discovery overwrote concurrent settings", saved.Language, saved.T3Code, err)
+			}
+		})
 	}
 }

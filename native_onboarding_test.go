@@ -511,10 +511,12 @@ func TestNativeOnboardingProxyControlsIgnoreOlderState(t *testing.T) {
 			nativeSeedSharedForTest(t, u, u.models[0])
 			u.setLanguage(lang)
 			nativeTestWait(t, u, func() bool { return u.languageTarget == "" && !u.busy["GET/api/state"] })
-			// Installation detection is unrelated to the global proxy control.
+			// Installation discovery and provider preferences are unrelated to
+			// the global proxy control. Keep this fixture off the host's T3 scan.
 			c := u.clientState()
 			c.LaunchChecked, c.LaunchDetectStarted = true, true
 			c.OpenDesignChecked, c.OpenDesignDetectStarted = true, true
+			u.agentsState().T3Code.PreferencesState.Requested = true
 			u.page = "agents"
 			h := &nativePointerHarness{t: t, u: u, size: image.Pt(720, 700), now: time.Now()}
 			h.frame()
