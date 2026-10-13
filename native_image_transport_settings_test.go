@@ -177,9 +177,13 @@ func TestNativeImageTransportSettingsWaitForPrecedingPreferences(t *testing.T) {
 				gate := make(chan struct{})
 				var release sync.Once
 				entered := make(chan string, 2)
+				var t3Requests atomic.Int32
 				proxy := httputil.NewSingleHostReverseProxy(upstream)
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					if r.Method == http.MethodGet && (r.URL.Path == nativeCLIPreferencesEndpoint || r.URL.Path == nativeT3CodePreferencesEndpoint) {
+					if r.Method == http.MethodGet && r.URL.Path == nativeT3CodePreferencesEndpoint {
+						t3Requests.Add(1)
+					}
+					if r.Method == http.MethodGet && r.URL.Path == nativeCLIPreferencesEndpoint {
 						entered <- r.URL.Path
 						select {
 						case <-gate:
@@ -201,10 +205,13 @@ func TestNativeImageTransportSettingsWaitForPrecedingPreferences(t *testing.T) {
 						seen[path] = true
 					default:
 					}
-					return len(seen) == 2
+					return seen[nativeCLIPreferencesEndpoint]
 				})
-				if u.cliPreferencesReady() || u.agentsState().T3Code.PreferencesState.Loaded {
+				if u.cliPreferencesReady() {
 					t.Fatal("held preferences were marked loaded")
+				}
+				if t3Requests.Load() != 0 || u.agentsState().T3Code.PreferencesState.Requested {
+					t.Fatal("global Settings loaded preferences belonging to the T3 harness")
 				}
 				label, class := u.tr("Change", "Cambiar"), semantic.Button
 				if action == "off" {
@@ -219,7 +226,7 @@ func TestNativeImageTransportSettingsWaitForPrecedingPreferences(t *testing.T) {
 				// This wait drains responses without laying out. The router still
 				// contains coordinates from the pending Settings blocks.
 				nativeTestWait(t, u, func() bool {
-					return u.cliPreferencesReady() && u.agentsState().T3Code.PreferencesState.Loaded && !u.busy["GET"+nativeT3CodePreferencesEndpoint]
+					return u.cliPreferencesReady()
 				})
 				nativeSettingsPreferencesReady(h)
 				confirmedBounds := h.target(label, class).Desc.Bounds
