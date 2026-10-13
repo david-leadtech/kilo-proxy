@@ -123,9 +123,13 @@ func TestT3CodeOptionalOpenCodeGenerationIsVerifiedAndIsolated(t *testing.T) {
 
 func t3CodeOptionalCapabilityFixture() string {
 	var source strings.Builder
+	// Use the complete native instance/environment contract for OpenCode.
+	openCode := t3CodeOpenCodeKiloContractFixture()
+	openCode = strings.TrimPrefix(openCode, "const kindOpenCode = ProviderDriverKind.make(\"opencode\");\n")
+	source.WriteString(strings.SplitN(openCode, "const BUILT_IN_DRIVERS", 2)[0])
 	for _, spec := range []struct{ id, name string }{{"cursor", "Cursor"}, {"grok", "Grok"}, {"opencode", "OpenCode"}, {"antigravity", "Antigravity"}, {"muse", "Muse"}, {"pi", "Pi"}} {
 		source.WriteString("const kind" + spec.name + " = ProviderDriverKind.make(\"" + spec.id + "\");\n")
-		if spec.id != "pi" {
+		if spec.id != "pi" && spec.id != "opencode" {
 			source.WriteString("const " + spec.name + "Driver = {driverKind: kind" + spec.name + ", metadata: {displayName:\"" + spec.name + "\", supportsMultipleInstances:true}, configSchema: " + spec.name + "Settings, defaultConfig:()=>decode({}), create:()=>{} };\n")
 		}
 	}

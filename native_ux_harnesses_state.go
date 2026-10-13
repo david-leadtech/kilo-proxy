@@ -162,6 +162,10 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 			l.canOpen = false
 			l.reason, l.local = u.tr("Load or finish saving T3 Code settings before opening.", "Carga o termina de guardar los ajustes de T3 Code antes de abrir."), true
 		}
+		if err := u.t3CodeOpenCodeConnectionError(); err != nil {
+			l.canOpen = false
+			l.reason, l.local = err.Error(), true
+		}
 		if preferences.Loaded {
 			if payload, err := nativeClientPayload(key, s); err == nil {
 				if err := nativeT3CodePreferenceLibraryError(preferences.Preferences, payload.(map[string]any)["library"].(modelLibrary)); err != nil {

@@ -9,8 +9,9 @@ import (
 )
 
 type t3CodeModelPolicy struct {
-	CodexLibrary, ClaudeLibrary modelLibrary
-	ClaudeRoutes                map[string]string
+	CodexLibrary, ClaudeLibrary, OpenCodeLibrary modelLibrary
+	ClaudeRoutes                                 map[string]string
+	OpenCodeVariantLevels                        map[string][]string
 }
 
 var t3CodeClaudeGatewayID = regexp.MustCompile(`^anthropic/(claude-(?:opus|sonnet|haiku|fable)-[0-9]+(?:[.-][0-9]+)?)(-[0-9]{8})?$`)
@@ -24,13 +25,23 @@ var t3CodeOfficialClaudeModels = []struct{ Slug, Name string }{
 // Effective selections belong to individual T3 instances. Deriving them never
 // rewrites the shared library or the selections used by other integrations.
 func deriveT3CodeModelPolicy(prefs t3CodePreferences, library modelLibrary, catalog []modelInfo) (t3CodeModelPolicy, error) {
-	result := t3CodeModelPolicy{CodexLibrary: emptyModelLibrary(), ClaudeLibrary: emptyModelLibrary(), ClaudeRoutes: map[string]string{}}
+	result := t3CodeModelPolicy{CodexLibrary: emptyModelLibrary(), ClaudeLibrary: emptyModelLibrary(), OpenCodeLibrary: emptyModelLibrary(), ClaudeRoutes: map[string]string{}, OpenCodeVariantLevels: map[string][]string{}}
 	prefs = normalizeT3CodePreferences(prefs)
 	if err := validateT3CodePreferences(prefs); err != nil {
 		return result, err
 	}
 	if err := validateModelLibrary(library); err != nil {
 		return result, err
+	}
+	if t3CodeOpenCodeKiloEnabled(prefs) {
+		if len(library.Models) == 0 {
+			return result, errors.New("Choose shared models before preparing OpenCode with Kilo Proxy.")
+		}
+		result.OpenCodeLibrary = cloneModelLibrary(library)
+		for _, choice := range terminalLibraryChoices(library, catalog) {
+			levels, _ := nativeReasoningFor(choice)
+			result.OpenCodeVariantLevels[choice.Model.ID] = append([]string{}, levels...)
+		}
 	}
 	if prefs.KiloCodex {
 		if prefs.CodexModels == "shared" {

@@ -14,13 +14,14 @@ import (
 )
 
 type t3CodeInstallation struct {
-	Version             string
-	SourceDigest        string
-	ProtocolV2          bool
-	ClaudeModelDefaults bool
-	ClaudeBuiltins      []string
-	SupportedProviders  []t3CodeProviderSupport
-	OpenCode2Supported  bool
+	Version               string
+	SourceDigest          string
+	ProtocolV2            bool
+	ClaudeModelDefaults   bool
+	ClaudeBuiltins        []string
+	SupportedProviders    []t3CodeProviderSupport
+	OpenCode2Supported    bool
+	OpenCodeKiloSupported bool
 }
 
 type t3CodePackageMetadata struct{ Name, Version, Main string }
@@ -194,6 +195,7 @@ func inspectT3CodeInstallation(executable, platform string) (t3CodeInstallation,
 	// gateway IDs use the CLI's per-model defaults instead of an ineffective picker.
 	result.ClaudeModelDefaults = result.ProtocolV2
 	result.SupportedProviders, result.OpenCode2Supported = t3CodeOptionalProviderCapabilities(string(server))
+	result.OpenCodeKiloSupported = t3CodeOpenCodeKiloSupported(string(server))
 	seen := map[string]bool{}
 	for _, match := range t3CodePackagedClaudeSlug.FindAllSubmatch(server, -1) {
 		slug := string(match[1])
@@ -255,6 +257,148 @@ func t3CodeOptionalProviderCapabilities(source string) ([]t3CodeProviderSupport,
 		openCode = openCode && strings.Contains(source, marker)
 	}
 	return providers, openCode
+}
+
+// A separate Kilo account needs more than an OpenCode label or a version probe:
+// its live driver must allow multiple instances and pass each instance's own
+// environment to both runtimes. Match the installed source contract, not a
+// release/version allowlist. Unknown upstream shapes remain unavailable.
+func t3CodeOpenCodeKiloSupported(source string) bool {
+	providers, _ := t3CodeOptionalProviderCapabilities(source)
+	found := false
+	for _, provider := range providers {
+		found = found || provider.ID == "opencode"
+	}
+	if !found {
+		return false
+	}
+	code := t3CodeContractCode(source)
+	registry := regexp.MustCompile(`(?s)const\s+BUILT_IN_DRIVERS\s*=\s*\[(.*?)\n\];`).FindAllStringSubmatch(code, -1)
+	if len(registry) != 1 || !regexp.MustCompile(`\bOpenCodeDriver\s*,`).MatchString(registry[0][1]) {
+		return false
+	}
+	declarations := regexp.MustCompile(`(?m)^const\s+OpenCodeDriver\s*=\s*\{`).FindAllStringIndex(code, -1)
+	if len(declarations) != 1 {
+		return false
+	}
+	body, ok := t3CodeContractBody(code, declarations[0][1]-1)
+	if !ok || !regexp.MustCompile(`(?s)metadata:\s*\{[^{}]*\bsupportsMultipleInstances:\s*true\b`).MatchString(body) || !regexp.MustCompile(`create:\s*\(\{[^{}]*\benvironment\b[^{}]*\}\)\s*=>`).MatchString(body) {
+		return false
+	}
+	kind := regexp.MustCompile(`driverKind:\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*,`).FindStringSubmatch(body)
+	if len(kind) != 2 {
+		return false
+	}
+	kindPattern := regexp.MustCompile(`const\s+` + regexp.QuoteMeta(kind[1]) + `\s*=\s*ProviderDriverKind\.make\(["']opencode["']\);`)
+	liveKinds := 0
+	for _, binding := range kindPattern.FindAllStringIndex(source, -1) {
+		if strings.HasPrefix(code[binding[0]:], "const") {
+			liveKinds++
+		}
+	}
+	if liveKinds != 1 {
+		return false
+	}
+	merged := regexp.MustCompile(`const\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*yield\*\s+(mergeProviderInstanceEnvironment[A-Za-z0-9_$]*)\(environment\)`).FindStringSubmatch(body)
+	if len(merged) != 3 {
+		return false
+	}
+	env := regexp.QuoteMeta(merged[1])
+	if !regexp.MustCompile(`probeOpenCodeRuntime\([^,]+,\s*` + env + `\)`).MatchString(body) {
+		return false
+	}
+	for _, runtime := range []string{"serverOwner", "openCode2Server"} {
+		calls := regexp.MustCompile(`const\s+`+runtime+`\s*=\s*yield\*\s+[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?\(\{`).FindAllStringIndex(body, -1)
+		if len(calls) != 1 {
+			return false
+		}
+		options, valid := t3CodeContractBody(body, calls[0][1]-1)
+		if !valid || !regexp.MustCompile(`\benvironment:\s*`+env+`\b`).MatchString(options) {
+			return false
+		}
+	}
+	mergers := regexp.MustCompile(`const\s+`+regexp.QuoteMeta(merged[2])+`\s*=\s*(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?fn[A-Za-z0-9_$]*\(function\*\s*\(environment,\s*baseEnv\s*=\s*process\.env\)\s*\{`).FindAllStringIndex(code, -1)
+	if len(mergers) != 1 {
+		return false
+	}
+	mergeBody, ok := t3CodeContractBody(code, mergers[0][1]-1)
+	if !ok {
+		return false
+	}
+	copy := regexp.MustCompile(`const\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*\{\s*\.\.\.baseEnv\s*\}`).FindStringSubmatch(mergeBody)
+	loop := regexp.MustCompile(`for\s*\(const\s+([A-Za-z_$][A-Za-z0-9_$]*)\s+of\s+environment\)`).FindStringSubmatch(mergeBody)
+	if len(copy) != 2 || len(loop) != 2 {
+		return false
+	}
+	next, variable := regexp.QuoteMeta(copy[1]), regexp.QuoteMeta(loop[1])
+	return regexp.MustCompile(next+`\[`+variable+`\.name\]\s*=`).MatchString(mergeBody) && regexp.MustCompile(variable+`\.value\b`).MatchString(mergeBody) && regexp.MustCompile(`\breturn\s+`+next+`\b`).MatchString(mergeBody)
+}
+
+// Extract one bounded brace body after masking strings and comments. The
+// same mask is also applied globally before locating live declarations, so a
+// complete commented or quoted example cannot advertise a capability.
+// These known driver/merge bodies contain no regular-expression literals.
+func t3CodeContractBody(source string, start int) (string, bool) {
+	if start < 0 || start >= len(source) || source[start] != '{' {
+		return "", false
+	}
+	end := start + (512 << 10)
+	if end > len(source) {
+		end = len(source)
+	}
+	code := t3CodeContractCode(source[start:end])
+	depth := 0
+	for i, ch := range code {
+		switch ch {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return code[:i+1], true
+			}
+		}
+	}
+	return "", false
+}
+
+func t3CodeContractCode(source string) string {
+	code := []byte(source)
+	var quote byte
+	lineComment, blockComment := false, false
+	for i, ch := range code {
+		switch {
+		case lineComment:
+			if ch == '\n' {
+				lineComment = false
+			} else {
+				code[i] = ' '
+			}
+		case blockComment:
+			code[i] = ' '
+			if ch == '/' && i > 0 && source[i-1] == '*' {
+				blockComment = false
+			}
+		case quote != 0:
+			code[i] = ' '
+			if ch == quote {
+				escapes := 0
+				for j := i - 1; j >= 0 && source[j] == '\\'; j-- {
+					escapes++
+				}
+				if escapes%2 == 0 {
+					quote = 0
+				}
+			}
+		case ch == '"' || ch == '\'' || ch == '`':
+			quote, code[i] = ch, ' '
+		case ch == '/' && i+1 < len(code) && code[i+1] == '/':
+			lineComment, code[i] = true, ' '
+		case ch == '/' && i+1 < len(code) && code[i+1] == '*':
+			blockComment, code[i] = true, ' '
+		}
+	}
+	return string(code)
 }
 
 func t3CodeInstallationName(name string) bool {

@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createT3CodeHelper, t3CodeNativeOnly, t3CodePrepared} from '../ui/t3-code-helper.mjs';
+import {createT3CodeHelper, t3CodeNativeOnly, t3CodePrepared, t3CodePreferencesValid} from '../ui/t3-code-helper.mjs';
 
 const saved = () => ({revision:2,library:{schemaVersion:1,defaultModel:'vendor/second',models:[{id:'vendor/first',displayName:'Friendly',reasoningEffort:'high'},{id:'vendor/second'}]}});
-const preferences = () => ({version:1,codex:true,claude:true,kiloCodex:true,kiloClaude:true,codexModels:'shared',claudeModels:'shared',providers:[],openCode2:false});
+const preferences = () => ({version:1,codex:true,claude:true,kiloCodex:true,kiloClaude:true,codexModels:'shared',claudeModels:'shared',providers:[],openCode2:false,openCodeConnection:'native'});
 const preferencesResponse = () => ({preferences:preferences(),supportedProviders:[],openCode2Supported:false,requiresPreparation:false});
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function fixture(t, api, options = {}) {
@@ -263,4 +263,92 @@ test('saved choices absent from a newer build stay visible until disabled, witho
  nodes.get('t3-code-opencode-version').value='2';nodes.get('t3-code-opencode-version').dispatch('change');await tick();assert.equal(writes.length,2);
  assert.deepEqual(nodes.get('t3-code-provider-options').children.map(label=>label.children[1].textContent),['OpenCode']);
  helper.render({state:{connectionReady:true},language:'es'});assert.doesNotMatch(nodes.get('t3-code-agents').children.map(node=>node.textContent).join(' '),/Cursor|Unknown/);
+});
+
+
+test('OpenCode connection is optional in old responses and only enabled Kilo OpenCode requires the gateway',()=>{
+ const own={...preferences(),kiloCodex:false,kiloClaude:false,providers:['opencode']};
+ delete own.openCodeConnection;
+ assert.equal(t3CodePreferencesValid(own),true);
+ assert.equal(t3CodeNativeOnly(own),true);
+ assert.equal(t3CodeNativeOnly({...own,openCodeConnection:'kilo'}),false);
+ assert.equal(t3CodeNativeOnly({...own,openCodeConnection:'kilo',providers:[]}),true);
+ assert.equal(t3CodePreferencesValid({...own,openCodeConnection:''}),true);
+ for(const connection of ['other',null,false,12]) assert.equal(t3CodePreferencesValid({...own,openCodeConnection:connection}),false);
+ assert.equal(t3CodePrepared(null,{prepared:true,preferences:own},{...own,openCodeConnection:'native'}),true);
+});
+
+test('OpenCode connection saves an explicit immutable choice and displays only its matching Kilo summary',async t=>{
+ let current={...preferences(),providers:['opencode'],openCode2:true}, release;
+ const posts=[];
+ const summary=[{id:'vendor/first',name:'First shared'},{id:'vendor/second',name:'Second shared'}];
+ const {helper,nodes}=fixture(t,async path=>path==='model-library'?saved():{preferences:structuredClone(current),prepared:false,library:saved().library,effectiveOpenCodeModels:summary},{preferencesAPI:async body=>{
+  if(body){posts.push(structuredClone(body));await new Promise(resolve=>{release=resolve;});current=structuredClone(body);}
+  return {preferences:structuredClone(current),supportedProviders:[{id:'opencode',label:'OpenCode'}],openCode2Supported:true,openCodeKiloSupported:true};
+ }});
+ await tick();
+ assert.equal(nodes.get('t3-code-opencode-connection').value,'native');
+ assert.match(nodes.get('t3-code-opencode-connection-help').textContent,/login and catalog/);
+ assert.match(nodes.get('t3-code-opencode-help').textContent,/separate profile.*own login/);
+ const before=helper.launchState().fingerprint;
+ nodes.get('t3-code-opencode-connection').value='kilo';nodes.get('t3-code-opencode-connection').dispatch('change');
+ assert.equal(posts.length,1);assert.equal(posts[0].openCodeConnection,'kilo');assert.equal(posts[0].openCode2,true);
+ assert.equal(helper.preferences().openCodeConnection,'native');assert.equal(nodes.get('t3-code-opencode-connection').disabled,true);
+ assert.equal(helper.launchState().valid,false);
+ release();await tick();await tick();
+ assert.equal(helper.preferences().openCodeConnection,'kilo');assert.notEqual(helper.launchState().fingerprint,before);
+ assert.deepEqual(nodes.get('t3-code-models').children.map(row=>row.textContent),['Kilo Proxy · OpenCode · First shared · vendor/first','Kilo Proxy · OpenCode · Second shared · vendor/second']);
+ assert.match(nodes.get('t3-code-agents').children.at(-1).textContent,/Kilo Proxy · OpenCode 2 · Shared models through the proxy/);
+ assert.match(nodes.get('t3-code-summary').textContent,/OpenCode: 2/);
+ assert.equal(helper.launchState().count,2);
+ helper.render({state:{connectionReady:true},language:'es'});
+ assert.equal(nodes.get('t3-code-opencode-connection-label').textContent,'Conexión de OpenCode');
+ assert.match(nodes.get('t3-code-opencode-connection-help').textContent,/modelos guardados en Modelos/);
+ assert.doesNotMatch(nodes.get('t3-code-opencode-help').textContent,/inicio de sesión/);
+ nodes.get('t3-code-opencode-connection').value='native';nodes.get('t3-code-opencode-connection').dispatch('change');release();await tick();await tick();
+ assert.equal(helper.preferences().openCodeConnection,'native');assert.deepEqual(nodes.get('t3-code-models').children,[]);
+ assert.match(nodes.get('t3-code-opencode-help').textContent,/perfil separado.*inicio de sesión/);
+ assert.doesNotMatch(nodes.get('t3-code-agents').children.at(-1).textContent,/Kilo Proxy/);
+});
+
+test('OpenCode Kilo fails closed without the multiple-instance capability and permits explicit recovery to an own account',async t=>{
+ let current={...preferences(),kiloCodex:false,kiloClaude:false,providers:['opencode'],openCodeConnection:'kilo'};const writes=[];
+ const {helper,nodes}=fixture(t,async path=>path==='model-library'?saved():{preferences:current,prepared:false,library:saved().library},{preferencesAPI:async body=>{if(body){writes.push(body);current=structuredClone(body);}return {preferences:current,supportedProviders:[{id:'opencode',label:'OpenCode'}]};}});
+ await tick();assert.equal(helper.launchState().valid,false);assert.match(helper.launchState().reason,/cannot use the Kilo OpenCode connection/);
+ assert.equal(nodes.get('t3-code-opencode-connection-kilo').disabled,true);assert.equal(nodes.get('t3-code-opencode-connection').value,'kilo');
+ nodes.get('t3-code-opencode-connection').value='native';nodes.get('t3-code-opencode-connection').dispatch('change');await tick();await tick();
+ assert.equal(writes.length,1);assert.equal(helper.launchState().nativeOnly,true);
+ nodes.get('t3-code-opencode-connection').value='kilo';nodes.get('t3-code-opencode-connection').dispatch('change');await tick();assert.equal(writes.length,1);
+ assert.equal(nodes.get('t3-code-opencode-connection').value,'native');
+});
+
+test('OpenCode Kilo alone needs a saved library and connection without imposing the custom Codex or Claude model limit',async t=>{
+ const source=saved();source.library.models=Array.from({length:40},(_,i)=>({id:'vendor/model-'+i}));source.library.defaultModel='vendor/model-0';
+ const current={...preferences(),kiloCodex:false,kiloClaude:false,providers:['opencode'],openCodeConnection:'kilo'};
+ const {helper}=fixture(t,async path=>path==='model-library'?source:{preferences:current,prepared:false,library:source.library},{preferencesAPI:async()=>({preferences:current,supportedProviders:[{id:'opencode',label:'OpenCode'}],openCodeKiloSupported:true})});
+ await tick();assert.equal(helper.launchState().nativeOnly,false);assert.equal(helper.launchState().valid,true);
+ helper.render({state:{connectionReady:false},language:'en'});assert.equal(helper.launchState().valid,false);await assert.rejects(helper.launchState().prepare(),/Connect your selected provider/);
+});
+
+test('OpenCode Kilo rejects an old response that does not confirm the requested connection, then retries the exact choice',async t=>{
+ let current={...preferences(),providers:['opencode']},omit=true;const writes=[];
+ const {helper,nodes}=fixture(t,async path=>path==='model-library'?saved():{preferences:current,prepared:false,library:saved().library},{preferencesAPI:async body=>{
+  if(body){writes.push(structuredClone(body));current=structuredClone(body);}
+  const returned=structuredClone(current);if(omit)delete returned.openCodeConnection;
+  return {preferences:returned,supportedProviders:[{id:'opencode',label:'OpenCode'}],openCodeKiloSupported:true};
+ }});
+ await tick();assert.equal(helper.preferences().openCodeConnection,'native');
+ await helper.savePreferences({...current,openCodeConnection:'kilo'});
+ assert.equal(helper.preferences().openCodeConnection,'native');assert.equal(helper.launchState().valid,false);
+ assert.match(nodes.get('t3-code-settings-status').textContent,/did not confirm/);
+ omit=false;nodes.get('t3-code-settings-retry').dispatch('click');await tick();await tick();
+ assert.deepEqual(writes[1],writes[0]);assert.equal(helper.preferences().openCodeConnection,'kilo');
+});
+
+test('an externally changed OpenCode connection invalidates the profile snapshot before preparation',async t=>{
+ let current={...preferences(),providers:['opencode']};const writes=[];
+ const {helper}=fixture(t,async(path,body)=>{if(body)writes.push(body);return path==='model-library'?saved():{preferences:current,prepared:false,library:saved().library};},{preferencesAPI:async()=>({preferences:structuredClone(current),supportedProviders:[{id:'opencode',label:'OpenCode'}],openCodeKiloSupported:true})});
+ await tick();current={...current,openCodeConnection:'kilo'};
+ await assert.rejects(helper.launchState().prepare(),/settings changed/);assert.deepEqual(writes,[]);
+ assert.equal(helper.preferences().openCodeConnection,'kilo');
 });

@@ -44,7 +44,7 @@ Use `kilo-muse --help` and command-specific `--help` for the options supported b
 
 In **Harnesses → T3 Code → gear → Accounts and models** in Kilo Proxy, enable the optional **Muse Code** provider, close **T3 Code · Kilo**, and prepare or open it again. The installed T3 package must include a compatible native Muse driver and SDK. A missing or incompatible driver produces a preparation error.
 
-To use only native accounts, disable both **Kilo Proxy · Codex** and **Kilo Proxy · Claude**. This mode does not require a Kilo gateway connection or shared models and does not create Kilo CLI profiles or proxy secrets. Enabling either Kilo connection restores its connection and shared-model requirements.
+To use only native accounts, disable **Kilo Proxy · Codex** and **Kilo Proxy · Claude**, and keep OpenCode disabled or choose **Own OpenCode account**. This mode does not require a Kilo gateway connection or shared models and does not create Kilo CLI profiles or proxy secrets. Enabling any Kilo connection, including OpenCode’s **Kilo Proxy · shared models** choice, restores its connection and shared-model requirements.
 
 T3 receives the selected Muse executable. Its native driver obtains the model catalog from Muse's session protocol; Kilo does not freeze a model list or inject its shared gateway models into Muse. Model availability, reasoning controls and authentication follow the installed Muse and T3 versions and your Meta account. The [official Muse SDK](https://github.com/meta-models/muse-code-sdk) uses a `muse serve` process; Meta documents the SDK and CLI versions as paired releases.
 

@@ -305,3 +305,37 @@ test('T3 provider controls belong only to the T3 harness panel',async({page,gate
  await page.locator('#language').selectOption('es');await expect(page.locator('#client-launch-help')).toContainText('elegidos en este panel de T3 Code');
  expect(await records(gateway)).toEqual([]);
 });
+
+
+test('T3 gear separates the OpenCode connection from its version and confirms shared models before preparing',async({page,gateway,request},testInfo)=>{
+ await setControl(gateway,{t3Capabilities:true});await setupT3(request,gateway);await startProxy(page,gateway);
+ await page.locator('#tab-t3-code').click();await page.locator('#t3-code-settings-title').click();
+ await expect(page.locator('#t3-code-opencode-connection')).toHaveValue('native');
+ await expect(page.locator('#t3-code-opencode-connection')).toBeDisabled();
+ await page.locator('#t3-code-provider-opencode').check();await expect(page.locator('#t3-code-opencode-connection')).toBeEnabled();
+ await page.locator('#t3-code-opencode-connection').selectOption('kilo');await expect(page.locator('#t3-code-provider-opencode')).toBeEnabled();
+ await page.locator('#t3-code-opencode-version').selectOption('2');await expect(page.locator('#t3-code-provider-opencode')).toBeEnabled();
+ const response=await getAPI(request,gateway,'clients/t3-code/preferences');
+ expect(response.preferences.openCodeConnection).toBe('kilo');expect(response.preferences.openCode2).toBe(true);
+ expect(response.openCodeKiloSupported).toBe(true);
+ await expect(page.locator('#t3-code-agents')).toContainText('Kilo Proxy · OpenCode 2');
+ await expect(page.locator('#t3-code-opencode-connection-help')).toContainText('models saved in Models');
+ await expect(page.locator('#t3-code-opencode-help')).not.toContainText('own login');
+ const before=await getAPI(request,gateway,'model-library');
+ const profile=await getAPI(request,gateway,'clients/t3-code');
+ expect(profile.effectiveOpenCodeModels.map(model=>model.id)).toEqual(before.library.models.map(model=>model.id));
+ for(const model of profile.effectiveOpenCodeModels)await expect(page.locator('#t3-code-models')).toContainText('Kilo Proxy · OpenCode · '+(model.name?model.name+' · ':'')+model.id);
+ await expect(page.locator('#t3-code-settings-status')).toContainText('prepare again');
+ await page.locator('#t3-code-helper').screenshot({path:testInfo.outputPath('t3-opencode-kilo-en.png')});
+ await page.locator('#language').selectOption('es');await page.setViewportSize({width:390,height:844});
+ await expect(page.locator('#t3-code-opencode-connection-label')).toHaveText('Conexión de OpenCode');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await page.locator('#t3-code-opencode-connection').selectOption('native');await expect(page.locator('#t3-code-provider-opencode')).toBeEnabled();
+ await expect(page.locator('#t3-code-opencode-version')).toHaveValue('2');
+ await expect(page.locator('#t3-code-opencode-help')).toContainText('perfil separado que puede requerir su propio inicio de sesión');
+ await expect(page.locator('#t3-code-models')).not.toContainText('Kilo Proxy · OpenCode');
+ await page.locator('#t3-code-settings-reload').click();await expect(page.locator('#t3-code-opencode-connection')).toHaveValue('native');
+ await expect(page.locator('#t3-code-opencode-version')).toHaveValue('2');
+ await page.locator('#t3-code-helper').screenshot({path:testInfo.outputPath('t3-opencode-native-v2-es.png')});
+ expect(await records(gateway)).toEqual([]);
+});

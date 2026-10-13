@@ -343,6 +343,12 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 			return
 		}
 	}
+	if key == "t3-code" {
+		if err := u.t3CodeOpenCodeConnectionError(); err != nil {
+			u.noticeError(err)
+			return
+		}
+	}
 	nativeT3 := key == "t3-code" && u.t3CodeNativeOnly()
 	if err := u.packReadinessError(key); !nativeT3 && err != nil {
 		u.noticeError(err)

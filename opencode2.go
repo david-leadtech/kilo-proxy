@@ -135,8 +135,11 @@ func (a *app) openCode2Config(library modelLibrary) ([]byte, error) {
 			return nil, err
 		}
 		model := map[string]any{"modelID": choice.Model.ID, "name": choice.DisplayName}
-		if choice.Model.Tools != nil {
-			model["capabilities"] = map[string]any{"tools": *choice.Model.Tools}
+		model["package"] = "@opencode/ai/providers/openai-compatible"
+		model["settings"] = map[string]any{"baseURL": "http://127.0.0.1:" + strconv.Itoa(a.config.Port) + "/v1", "apiKey": "{env:KILO_OPENCODE2_API_KEY}"}
+		model["headers"] = map[string]string{"Authorization": "Bearer {env:KILO_OPENCODE2_API_KEY}"}
+		if capabilities := t3CodeOpenCodeCapabilities(choice.Model); capabilities != nil {
+			model["capabilities"] = capabilities
 		}
 		if choice.DisplayName == "" {
 			model["name"] = choice.Model.ID
@@ -151,9 +154,11 @@ func (a *app) openCode2Config(library modelLibrary) ([]byte, error) {
 		if len(limit) > 0 {
 			model["limit"] = limit
 		}
+		body := map[string]any{"model": choice.Model.ID}
 		if choice.DefaultReasoning != "" {
-			model["body"] = map[string]any{"reasoning_effort": choice.DefaultReasoning}
+			body["reasoning_effort"] = choice.DefaultReasoning
 		}
+		model["body"] = body
 		models[choice.Model.ID] = model
 	}
 	return json.MarshalIndent(map[string]any{

@@ -35,6 +35,9 @@ func validateT3CodeLibrary(library modelLibrary) error {
 type t3CodeProfileOptions struct {
 	RootDir, NormalHome, CodexBinary, ClaudeBinary string
 	Version                                        string
+	Platform                                       string
+	OpenCodeKiloSupported                          bool
+	NormalOpenCodePaths                            []string
 	ClaudeModelDefaults                            bool
 	NormalEnvironment                              map[string]string
 	Library                                        modelLibrary
@@ -137,6 +140,9 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 				}
 			}
 			instance["environment"] = env
+		}
+		if err := addT3CodeOpenCodeProfile(options, &result); err != nil {
+			return t3CodeProfiles{}, err
 		}
 		return result, nil
 	}
@@ -280,6 +286,9 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 		}
 	}
 	result.Providers = t3CodeProviderInstances(options, result, choices, selection)
+	if err := addT3CodeOpenCodeProfile(options, &result); err != nil {
+		return t3CodeProfiles{}, err
+	}
 	return result, nil
 }
 
@@ -360,7 +369,7 @@ func t3CodeNormalProviderHomes(options t3CodeProfileOptions) (string, string, er
 func t3CodeNormalProviderEnabled(options t3CodeProfileOptions, index int) bool {
 	// A disabled T3 direct account can still be used by an external CLI.
 	// Any Kilo writes must stay separate from both normal provider homes.
-	if options.Preferences == nil || t3CodeUsesKilo(*options.Preferences) {
+	if options.Preferences == nil || options.Preferences.KiloCodex || options.Preferences.KiloClaude {
 		return true
 	}
 	prefs := normalizeT3CodePreferences(*options.Preferences)

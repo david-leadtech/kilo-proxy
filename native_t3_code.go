@@ -11,15 +11,16 @@ import (
 const t3CodeDownloadURL = "https://github.com/pingdotgg/t3code/releases"
 
 type nativeT3CodeInfo struct {
-	Prepared              bool                       `json:"prepared"`
-	Library               *modelLibrary              `json:"library"`
-	Version               string                     `json:"version"`
-	ProtocolV2            bool                       `json:"protocolV2"`
-	ClaudeModelDefaults   bool                       `json:"claudeModelDefaults"`
-	Message               string                     `json:"message"`
-	Preferences           nativeT3CodePreferences    `json:"preferences"`
-	EffectiveCodexModels  []nativeT3CodeModelSummary `json:"effectiveCodexModels"`
-	EffectiveClaudeModels []nativeT3CodeModelSummary `json:"effectiveClaudeModels"`
+	Prepared                bool                       `json:"prepared"`
+	Library                 *modelLibrary              `json:"library"`
+	Version                 string                     `json:"version"`
+	ProtocolV2              bool                       `json:"protocolV2"`
+	ClaudeModelDefaults     bool                       `json:"claudeModelDefaults"`
+	Message                 string                     `json:"message"`
+	Preferences             nativeT3CodePreferences    `json:"preferences"`
+	EffectiveCodexModels    []nativeT3CodeModelSummary `json:"effectiveCodexModels"`
+	EffectiveClaudeModels   []nativeT3CodeModelSummary `json:"effectiveClaudeModels"`
+	EffectiveOpenCodeModels []nativeT3CodeModelSummary `json:"effectiveOpenCodeModels"`
 }
 
 type nativeT3CodeState struct {
@@ -36,7 +37,7 @@ type nativeT3CodeState struct {
 // Older or unloaded responses retain the existing Kilo readiness checks.
 func (u *nativeUI) t3CodeNativeOnly() bool {
 	prefs := &u.agentsState().T3Code.PreferencesState
-	return prefs.Loaded && validNativeT3CodePreferences(prefs.Preferences) && !prefs.Preferences.KiloCodex && !prefs.Preferences.KiloClaude
+	return prefs.Loaded && validNativeT3CodePreferences(prefs.Preferences) && !prefs.Preferences.KiloCodex && !prefs.Preferences.KiloClaude && !nativeT3OpenCodeUsesKilo(prefs.Preferences)
 }
 
 func (u *nativeUI) acceptT3CodeProfile(data json.RawMessage, connection [32]byte) {
@@ -115,6 +116,9 @@ func (u *nativeUI) t3CodeDetail(s *nativeClientSelection) uxhDetail {
 	canPrepare := libraryReady && u.agentConnectionReady() && !u.setupConnectionNeeded() && !u.connectionWorking() && len(s.Models) > 0 && validation == nil && !working
 	if u.t3CodeNativeOnly() {
 		validation, libraryReady, canPrepare = nil, true, !working
+	}
+	if err := u.t3CodeOpenCodeConnectionError(); err != nil {
+		validation, canPrepare = err, false
 	}
 	d := uxhDetail{canPrepare: &canPrepare}
 	d.prepareNote = u.tr("Prepare or open T3 Code · Kilo to apply your saved accounts and models.", "Prepara o abre T3 Code · Kilo para aplicar las cuentas y modelos guardados.")
