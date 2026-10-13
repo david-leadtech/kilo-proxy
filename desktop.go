@@ -29,6 +29,7 @@ type nativeDesktop struct {
 	cleanup          func()
 	actions          chan string
 	trayReady        chan struct{}
+	trayDone         chan struct{}
 	trayOnce         sync.Once
 	firstFrameOnce   sync.Once
 	firstFrameReady  chan struct{}
@@ -329,9 +330,18 @@ func (d *nativeDesktop) control() {
 			d.mu.Unlock()
 			if w != nil {
 				w.Perform(system.ActionClose)
-				select {
-				case <-done:
-				case <-time.After(2 * time.Second):
+				if runtime.GOOS == "windows" {
+					if err := waitDesktopClosed("window", done); err != nil {
+						fmt.Fprintln(os.Stderr, err)
+						code = 1
+					}
+				} else {
+					// Cocoa intercepts ActionClose to hide the window. Preserve
+					// the existing bounded wait on platforms using os.Exit.
+					select {
+					case <-done:
+					case <-time.After(2 * time.Second):
+					}
 				}
 			}
 			select {
@@ -340,12 +350,23 @@ func (d *nativeDesktop) control() {
 					d.trayEnd()
 				} else {
 					systray.Quit()
+					if runtime.GOOS == "windows" {
+						if err := waitDesktopClosed("tray", d.trayDone); err != nil {
+							fmt.Fprintln(os.Stderr, err)
+							code = 1
+						}
+					}
 				}
 			default:
 			}
-			// Gio owns the startup thread indefinitely. All application
-			// cleanup runs above before its documented process-exit pattern.
-			os.Exit(code)
+			d.mu.Lock()
+			if d.exitCode != 0 {
+				code = d.exitCode
+			}
+			d.mu.Unlock()
+			// Gio owns the startup thread indefinitely. Terminate only after
+			// saving state and closing application services and native UI.
+			exitDesktopProcess(code)
 		case action := <-d.actions:
 			d.message = ""
 			switch action {
@@ -387,7 +408,13 @@ func (a *app) runDesktop(_ string, hidden bool, selfTest string, cleanup func())
 	a.mu.Unlock()
 	d.ui = newNativeUI(a, d.invalidate)
 	if runtime.GOOS != "darwin" {
-		go func() { runtime.LockOSThread(); defer runtime.UnlockOSThread(); systray.Run(d.setupTray, func() {}) }()
+		d.trayDone = make(chan struct{})
+		go func() {
+			runtime.LockOSThread()
+			defer runtime.UnlockOSThread()
+			defer close(d.trayDone)
+			systray.Run(d.setupTray, func() {})
+		}()
 	}
 	go d.control()
 	// Cocoa initializes the tray through the first real window. Hidden startup
