@@ -63,7 +63,7 @@ func TestPackageUpdateBrewOwnershipAndManualCopies(t *testing.T) {
 		t.Skip("Unix package databases")
 	}
 	for _, cask := range []bool{false, true} {
-		for _, kind := range []string{"owned", "manual-copy", "wrong-tap", "wrong-version", "receipt-symlink"} {
+		for _, kind := range []string{"owned", "manual-copy", "wrong-tap", "wrong-version", "receipt-symlink", "selected-manager-unavailable"} {
 			t.Run(fmtPackageTest(cask, kind), func(t *testing.T) {
 				home, err := filepath.EvalSymlinks(t.TempDir())
 				if err != nil {
@@ -132,6 +132,11 @@ func TestPackageUpdateBrewOwnershipAndManualCopies(t *testing.T) {
 					}
 					return nil, errors.New("unexpected probe")
 				}}
+				if kind == "selected-manager-unavailable" {
+					// A different valid installation must not replace the manager
+					// whose identity was already approved in an update plan.
+					rt.manager = filepath.Join(home, "removed-manager")
+				}
 				installation, err := detectPackageInstallation(rt)
 				owned := kind == "owned" || cask && kind == "receipt-symlink"
 				if err != nil || (installation.Method != "manual") != owned {
@@ -452,7 +457,9 @@ func runPackageUpdateHelperFixture(t *testing.T, failUpgrade bool) {
 	}
 	brewScript += "printf 0.58.0 > " + helperShellQuote(versionFile) + ";;\n*) exit 2;;\nesac\n"
 	_ = os.WriteFile(brew, []byte(brewScript), 0700)
-	rt := packageUpdateRuntime{platform: runtime.GOOS, home: home, binary: binary, current: "0.57.0", uid: os.Geteuid(), capture: packageUpdateCapture(home)}
+	// This fixture owns one manager. Do not probe host Homebrew installations
+	// before the real helper handshake, whose existing deadline remains intact.
+	rt := packageUpdateRuntime{platform: runtime.GOOS, home: home, binary: binary, current: "0.57.0", manager: brew, uid: os.Geteuid(), capture: packageUpdateCapture(home)}
 	in, err := detectPackageInstallation(rt)
 	if err != nil || in.Method == "manual" {
 		t.Fatal(in, err)
