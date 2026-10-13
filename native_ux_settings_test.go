@@ -120,6 +120,7 @@ func TestUxsLegacyTabJumpsAndIndexFollows(t *testing.T) {
 	u.page = "settings"
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 820), now: time.Now()}
 	h.frame()
+	nativeSettingsPreferencesReady(h)
 	if !h.selected("Accounts", semantic.Button) {
 		t.Fatal("the index does not start at Accounts")
 	}
@@ -128,6 +129,10 @@ func TestUxsLegacyTabJumpsAndIndexFollows(t *testing.T) {
 	h.frame()
 	h.frame()
 	list := u.list("page.settings")
+	// Gio clamps a jump beyond the end after laying out the list item. Lay
+	// out the sticky index once at that clamped offset before using its
+	// pointer coordinates; the taller T3 settings block makes this visible.
+	h.frame()
 	// Near the end the list clamps the offset; the block is then on screen.
 	if u.settingsTab != "" || list.Position.Offset != u.uxs().blockY["images"] && list.Position.BeforeEnd {
 		t.Fatalf("legacy images tab did not jump: offset=%d want %d", list.Position.Offset, u.uxs().blockY["images"])

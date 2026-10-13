@@ -101,6 +101,30 @@ func newNativeUpdateFixture(t *testing.T, language string, size image.Point) *na
 				return
 			}
 			jsonResponse(w, 200, map[string]any{"started": true, "message": "synthetic terminal"})
+		case nativeT3CodePreferencesEndpoint:
+			f.mu.Unlock()
+			if r.Method != http.MethodGet {
+				t.Errorf("update fixture attempted to change T3 preferences: %s", r.Method)
+				jsonError(w, 405, "read-only fixture")
+				return
+			}
+			jsonResponse(w, 200, map[string]any{"preferences": normalizeT3CodePreferences(t3CodePreferences{}), "supportedProviders": []t3CodeProviderSupport{}, "openCode2Supported": false})
+		case nativeOpenCodePreferencesEndpoint:
+			f.mu.Unlock()
+			if r.Method != http.MethodGet {
+				t.Errorf("update fixture attempted to change OpenCode preferences: %s", r.Method)
+				jsonError(w, 405, "read-only fixture")
+				return
+			}
+			jsonResponse(w, 200, openCodePreferences{Version: 1, Major: 1})
+		case nativeCLIPreferencesEndpoint:
+			f.mu.Unlock()
+			if r.Method != http.MethodGet {
+				t.Errorf("update fixture attempted to change CLI preferences: %s", r.Method)
+				jsonError(w, 405, "read-only fixture")
+				return
+			}
+			jsonResponse(w, 200, cliPreferences{Version: 1})
 		default:
 			f.mu.Unlock()
 			t.Errorf("unexpected request in isolated update fixture: %s %s", r.Method, r.URL.Path)
@@ -118,6 +142,7 @@ func newNativeUpdateFixture(t *testing.T, language string, size image.Point) *na
 	u.settingsTab = "updates"
 	f.h = &nativePointerHarness{t: t, u: u, size: size, now: time.Now()}
 	f.refresh(t)
+	nativeSettingsPreferencesReady(f.h)
 	return f
 }
 

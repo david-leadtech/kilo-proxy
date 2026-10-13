@@ -142,6 +142,29 @@ func nativeTestWait(t *testing.T, u *nativeUI, predicate func() bool) {
 	t.Fatalf("native UI did not reach expected state: %s", u.notice)
 }
 
+// The CLI and T3 blocks precede Images, Terminal and Updates in Settings and
+// change height when their first responses arrive. Launcher discovery also adds
+// resolved CLI paths. Resolve requests already started and lay out their
+// confirmed state before capturing pointer coordinates in those blocks.
+func nativeSettingsPreferencesReady(h *nativePointerHarness) {
+	h.t.Helper()
+	defer func() {
+		if h.t.Failed() {
+			c := h.u.clientState()
+			h.t.Logf("Settings readiness after failure: cliReady=%v cliLoaded=%v cliGETBusy=%v cliPOSTBusy=%v t3Loaded=%v t3GETBusy=%v t3POSTBusy=%v launchStarted=%v launchChecked=%v launchError=%q launchGETBusy=%v", h.u.cliPreferencesReady(), c.CLIPreferences.Loaded, h.u.busy["GET"+nativeCLIPreferencesEndpoint], h.u.busy["POST"+nativeCLIPreferencesEndpoint], h.u.agentsState().T3Code.PreferencesState.Loaded, h.u.busy["GET"+nativeT3CodePreferencesEndpoint], h.u.busy["POST"+nativeT3CodePreferencesEndpoint], c.LaunchDetectStarted, c.LaunchChecked, c.LaunchError, h.u.busy["GET"+nativeLaunchEndpoint])
+		}
+	}()
+	nativeTestWait(h.t, h.u, func() bool {
+		c := h.u.clientState()
+		launchReady := !c.LaunchDetectStarted || c.LaunchChecked && !h.u.busy["GET"+nativeLaunchEndpoint]
+		return launchReady && h.u.cliPreferencesReady() && h.u.agentsState().T3Code.PreferencesState.Loaded && !h.u.busy["GET"+nativeT3CodePreferencesEndpoint] && !h.u.t3CodePreferencesBusy()
+	})
+	h.frame()
+	// A jump checked against the old block positions can enqueue a corrected
+	// scroll offset during layout. Apply it before capturing pointer bounds.
+	h.frame()
+}
+
 func TestNativeConnectionSaveStartStopAndEditPreservation(t *testing.T) {
 	u := nativeTestUI(t)
 	nativeTestFrame(t, u)

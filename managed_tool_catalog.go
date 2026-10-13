@@ -49,6 +49,7 @@ func managedToolSupport(client, platform, arch string) (reason, installURL strin
 		"claude":         "https://code.claude.com/docs/en/setup",
 		"claude-desktop": "https://claude.ai/download",
 		"opencode":       "https://opencode.ai/docs/",
+		"opencode2":      "https://dev.opencode.ai/v2/docs/",
 		"omp":            "https://github.com/can1357/oh-my-pi#installation",
 		"open-design":    "https://github.com/nexu-io/open-design#installation",
 		"openmausbot":    "https://github.com/milind-soni/OpenMausBot/releases",
@@ -62,6 +63,9 @@ func managedToolSupport(client, platform, arch string) (reason, installURL strin
 	installURL, known := links[client]
 	if !known {
 		return "This tool is not in the managed installation catalog.", ""
+	}
+	if client == "opencode2" {
+		return "Install OpenCode 2 from its official guide. Kilo keeps its profile separate from OpenCode 1.", installURL
 	}
 	if platform == "windows" {
 		return "Install and update this tool manually on Windows.", installURL

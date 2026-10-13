@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {openDesignLibrary, openDesignCanLaunch, openDesignEngines} from '../ui/open-design-helper.mjs';
+import {createOpenDesignHelper, openDesignLibrary, openDesignCanLaunch, openDesignEngines} from '../ui/open-design-helper.mjs';
 
 const state = {baseURL:'http://127.0.0.1:8877/v1', localKey:'kl_local_synthetic', hasKey:true, orgId:'synthetic-team'};
 const engines = {'codex-cli':{available:true}, claude:{available:true}, opencode:{available:true}};
@@ -41,4 +41,65 @@ test('selection drops malformed and duplicate IDs and recovers a removed initial
  assert.deepEqual(library.models.map(model => model.id), ['vendor/first', 'vendor/second']);
  assert.equal(library.defaultModel, 'vendor/first');
  assert.equal(openDesignLibrary(Array.from({length:60}, (_, i) => ({id:'vendor/'+i}))).models.length, 50);
+});
+
+const tick = () => new Promise(resolve => setImmediate(resolve));
+function helperFixture(t, api) {
+ const previous = globalThis.document, nodes = new Map();
+ const element = () => ({children:[], textContent:'', value:'', checked:false, disabled:false, dataset:{}, scrollTop:0, classList:{toggle(){}},
+  ownerDocument:globalThis.document, replaceChildren(){this.children=[];}, append(...items){this.children.push(...items);}, setAttribute(){}, setCustomValidity(){},
+  listeners:{}, addEventListener(name,callback){this.listeners[name]=callback;}});
+ globalThis.document = {getElementById(id){if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);}, createElement:element};
+ t.after(() => {globalThis.document=previous;});
+ const helper = createOpenDesignHelper({api, refreshCatalog(){}});
+ helper.render({state, language:'en', catalog:[]});
+ return {helper,nodes};
+}
+const profile = (available, model = 'vendor/first') => ({engine:'codex-cli', engines:{'codex-cli':{available},claude:{available:false},opencode:{available:false}},
+ library:{schemaVersion:1,defaultModel:model,models:[{id:model,displayName:model}]}});
+
+test('a CLI path reload discards the old in-flight engine result and checks the current executable', async t => {
+ const pending = [];
+ const {helper,nodes} = helperFixture(t, async () => new Promise(resolve => pending.push(resolve)));
+ assert.equal(pending.length,1);
+ helper.reload();
+ assert.equal(helper.launchState().valid,false);
+ pending[0]({...profile(false,'vendor/stale'),engine:'claude'});
+ await tick();
+ assert.equal(pending.length,2);
+ assert.equal(helper.launchState().working,true);
+ assert.equal(helper.launchState().count,0);
+ assert.equal(helper.launchState().engine,'codex-cli');
+ assert.match(nodes.get('open-design-engine-status').textContent,/Checking installed CLI engines/);
+ pending[1](profile(true));
+ await tick();
+ assert.equal(helper.launchState().valid,true);
+ assert.equal(helper.launchState().count,1);
+ assert.equal(helper.launchState().working,false);
+ assert.match(nodes.get('open-design-engine-status').textContent,/Installed/);
+});
+
+test('a CLI path reload during preparation runs afterward and preserves the selected model library', async t => {
+ let reads=0, releasePrepare, releaseReload;
+ const writes=[];
+ const {helper} = helperFixture(t, async (path,body) => {
+  if(body){writes.push(body);if(writes.length===1)await new Promise(resolve=>{releasePrepare=resolve;});return {};}
+  if(++reads===1)return profile(true);
+  return new Promise(resolve=>{releaseReload=resolve;});
+ });
+ await tick();
+ const prepare=helper.launchState().prepare();
+ helper.reload();
+ assert.equal(helper.launchState().valid,false);
+ releasePrepare();
+ await prepare;
+ assert.equal(reads,2);
+ assert.equal(helper.launchState().working,true);
+ assert.equal(helper.launchState().valid,false);
+ releaseReload(profile(true,'vendor/later'));
+ await tick();
+ assert.equal(helper.launchState().valid,true);
+ assert.deepEqual(writes[0].library.models.map(model=>model.id),['vendor/first']);
+ await helper.launchState().prepare();
+ assert.deepEqual(writes[1].library.models.map(model=>model.id),['vendor/first']);
 });

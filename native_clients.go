@@ -17,6 +17,8 @@ import (
 )
 
 type nativeClients struct {
+	CLIPreferences              nativeCLIPreferencesState
+	OpenCodePreferences         nativeOpenCodePreferencesState
 	ManagedTools                *nativeManagedTools
 	Grids                       map[string]*nativeModelGridState
 	Selections                  map[string]*nativeClientSelection
@@ -129,6 +131,8 @@ func nativeClientEndpoint(key string) string {
 		return "/api/clients/openmausbot"
 	case "t3-code":
 		return "/api/clients/t3-code"
+	case "opencode2":
+		return "/api/clients/opencode2"
 	case "synara":
 		return "/api/clients/synara"
 	case "open-design":
@@ -150,13 +154,13 @@ func nativeClientEndpoint(key string) string {
 }
 
 func nativeClientPayload(key string, s *nativeClientSelection) (any, error) {
-	if key == "openmausbot" || key == "t3-code" || key == "synara" {
+	if key == "openmausbot" || key == "t3-code" || key == "synara" || key == "opencode2" {
 		library := modelLibrary{SchemaVersion: 1, DefaultModel: s.Initial}
 		for _, m := range s.Models {
 			library.Models = append(library.Models, nativeLibraryItem(m))
 		}
 		if key == "t3-code" {
-			return map[string]any{"library": library}, validateT3CodeLibrary(library)
+			return map[string]any{"library": library}, validateModelLibrary(library)
 		}
 		if key == "synara" {
 			return map[string]any{"library": library}, validateSynaraLibrary(library)
@@ -487,22 +491,28 @@ func (u *nativeUI) clientsPanel() layout.Widget {
 		u.detectLaunchers()
 	}
 	if u.client == "claude" && !c.ClaudeDetectStarted {
-		c.ClaudeDetectStarted = true
-		u.call("GET", "/api/claude/info", nil, func(data json.RawMessage) {
-			if json.Unmarshal(data, &c.Claude) == nil {
-				c.ClaudeChecked = true
-			}
-		})
+		u.detectAgentCapabilities()
 	}
 	if u.client == "xcode" && !c.XcodeDetectStarted {
 		c.XcodeDetectStarted = true
+		generation := c.CLIPreferences.Generation
 		u.call("GET", "/api/xcode/info", nil, func(data json.RawMessage) {
+			if generation != c.CLIPreferences.Generation {
+				c.XcodeDetectStarted = false
+				return
+			}
 			if json.Unmarshal(data, &c.Xcode) == nil {
 				c.XcodeChecked = true
 			}
 		})
 	}
 	if key := u.client; key != "xcode" && key != "generic" {
+		if key == "opencode" {
+			if !c.OpenCodePreferences.Requested {
+				u.refreshOpenCodePreferencesAfter(nil)
+			}
+			key = u.openCodeClientKey()
+		}
 		s := u.sharedClientSelection(key)
 		u.syncClientSelection(key, s)
 		return u.uxhHarnessPage(key, s, u.uxhClientDetail(key, s))
@@ -1148,6 +1158,157 @@ func (u *nativeUI) prepareClient(key string) {
 }
 
 func (u *nativeUI) prepareClientAfter(key string, done func(error)) {
+	if !nativeCLIPathClient(key) {
+		u.prepareClientAfterCLIPathsChecked(key, done)
+		return
+	}
+	preferences := &u.clientState().CLIPreferences
+	if !preferences.Loaded && !u.cliPreferencesBusy() && preferences.Pending == nil {
+		u.refreshCLIPreferencesAfter(func(err error) {
+			if err != nil {
+				done(err)
+				return
+			}
+			u.prepareClientAfter(key, done)
+		})
+		return
+	}
+	if key == "t3-code" && !u.clientState().OpenCodePreferences.Loaded && !u.openCodePreferencesBusy() {
+		u.refreshOpenCodePreferencesAfter(func(err error) {
+			if err != nil {
+				done(err)
+				return
+			}
+			u.prepareClientAfter(key, done)
+		})
+		return
+	}
+	expected := preferences.Preferences
+	expectedOpenCode := u.clientState().OpenCodePreferences.Preferences
+	verify := func(after func(error)) {
+		u.verifyCLIPreferencesAfter(expected, func(err error) {
+			if err != nil || key != "t3-code" {
+				after(err)
+				return
+			}
+			u.verifyT3OpenCodePathsAfter(expectedOpenCode, after)
+		})
+	}
+	before := u.launchSettingsFingerprintWithPreferences(key, "", false)
+	verify(func(err error) {
+		if err != nil {
+			done(err)
+			return
+		}
+		if before != u.launchSettingsFingerprintWithPreferences(key, "", false) {
+			done(errors.New(u.launchSettingsChangedMessage()))
+			return
+		}
+		u.prepareClientAfterCLIPathsChecked(key, func(err error) {
+			if err != nil {
+				done(err)
+				return
+			}
+			verify(func(err error) {
+				if err != nil {
+					u.sharedClientSelection(key).Saved = ""
+					if key == "t3-code" {
+						u.agentsState().T3Code.Info.Prepared = false
+					}
+					if key == "synara" {
+						u.agentsState().Synara.Info.Prepared = false
+					}
+				}
+				if err == nil {
+					u.clientPreparedNotice(key)
+				}
+				done(err)
+			})
+		})
+	})
+}
+
+func (u *nativeUI) prepareClientAfterCLIPathsChecked(key string, done func(error)) {
+	if key != "opencode" && key != "opencode2" {
+		u.prepareClientAfterPreferencesChecked(key, done)
+		return
+	}
+	before := u.launchSettingsFingerprintWithPreferences(key, "", false)
+	u.verifyOpenCodePreferencesAfter(key, func(err error) {
+		if err != nil {
+			done(err)
+			return
+		}
+		if before != u.launchSettingsFingerprintWithPreferences(key, "", false) {
+			done(errors.New(u.launchSettingsChangedMessage()))
+			return
+		}
+		u.prepareClientAfterPreferencesChecked(key, func(err error) {
+			if err != nil {
+				done(err)
+				return
+			}
+			u.verifyOpenCodePreferencesAfter(key, func(err error) {
+				if err == nil {
+					u.setNotice(nativeToneSuccess, u.tr("Editor profile prepared.", "Perfil del editor preparado."))
+				}
+				done(err)
+			})
+		})
+	})
+}
+
+func (u *nativeUI) prepareClientAfterPreferencesChecked(key string, done func(error)) {
+	if key == "opencode" || key == "opencode2" {
+		prefs := &u.clientState().OpenCodePreferences
+		if u.openCodePreferencesBusy() || prefs.Pending != nil {
+			done(errors.New(u.tr("Finish saving the OpenCode version before preparing.", "Termina de guardar la versión de OpenCode antes de preparar.")))
+			return
+		}
+		if !prefs.Loaded {
+			u.refreshOpenCodePreferencesAfter(func(err error) {
+				if err != nil {
+					done(err)
+					return
+				}
+				u.prepareClientAfter(key, done)
+			})
+			return
+		}
+		if key != u.openCodeClientKey() {
+			done(errors.New(u.launchSettingsChangedMessage()))
+			return
+		}
+	}
+	var t3Preferences nativeT3CodePreferences
+	if key == "t3-code" {
+		prefs := &u.agentsState().T3Code.PreferencesState
+		if u.t3CodePreferencesBusy() || prefs.Pending != nil {
+			done(errors.New(u.tr("Finish saving T3 Code settings before preparing.", "Termina de guardar los ajustes de T3 Code antes de preparar.")))
+			return
+		}
+		if !prefs.Loaded {
+			before := u.launchSettingsFingerprintWithPreferences(key, "", false)
+			u.refreshT3CodePreferencesAfter(func(err error) {
+				if err != nil {
+					done(err)
+					return
+				}
+				if before != u.launchSettingsFingerprintWithPreferences(key, "", false) {
+					done(errors.New(u.launchSettingsChangedMessage()))
+					return
+				}
+				u.prepareClientAfter(key, done)
+			})
+			return
+		}
+		if !validNativeT3CodePreferences(prefs.Preferences) {
+			done(errors.New(u.tr("Invalid T3 Code preferences. Reload settings before preparing.", "Preferencias de T3 Code no válidas. Carga los ajustes antes de preparar.")))
+			return
+		}
+		t3Preferences = prefs.Preferences
+		t3Preferences.Providers = append([]string{}, t3Preferences.Providers...)
+	}
 	if key == "claude-desktop" && u.busy["POST/api/claude-desktop/options"] {
 		done(errors.New(u.tr("Wait for the current agent operation to finish.", "Espera a que termine la operación actual del agente.")))
 		return
@@ -1163,10 +1324,19 @@ func (u *nativeUI) prepareClientAfter(key string, done func(error)) {
 		done(err)
 		return
 	}
+	if key == "t3-code" {
+		library := payload.(map[string]any)["library"].(modelLibrary)
+		if err := nativeT3CodePreferenceLibraryError(t3Preferences, library); err != nil {
+			done(err)
+			return
+		}
+		payload.(map[string]any)["preferences"] = t3Preferences
+	}
 	base, local, _ := u.clientBase()
 	fingerprint := nativeSelectionFingerprint(key, s, base, local, u.clientCaps(key))
 	imagesSent := cloneClientImageSettings(s.ImageGeneration)
 	openMausBotConnection := u.launchConnectionFingerprint()
+	openCodeGeneration := u.clientState().OpenCodePreferences.Generation
 	u.clientRequest(http.MethodPost, nativeClientEndpoint(key), payload, func(data json.RawMessage, err error) {
 		if err != nil {
 			done(err)
@@ -1182,6 +1352,18 @@ func (u *nativeUI) prepareClientAfter(key string, done func(error)) {
 		}
 		if result.ProfileDir == "" && result.ConfigPath == "" {
 			done(errors.New("Prepared profile did not return a path"))
+			return
+		}
+		if key == "t3-code" {
+			prefs := &u.agentsState().T3Code.PreferencesState
+			var confirmed nativeT3CodeInfo
+			if json.Unmarshal(data, &confirmed) != nil || !nativeT3CodePreferencesEqual(confirmed.Preferences, t3Preferences) || !nativeT3CodePreferencesEqual(prefs.Preferences, t3Preferences) || prefs.Pending != nil || u.t3CodePreferencesBusy() || openMausBotConnection != u.launchConnectionFingerprint() {
+				done(errors.New(u.launchSettingsChangedMessage()))
+				return
+			}
+		}
+		if (key == "opencode" || key == "opencode2") && (openCodeGeneration != u.clientState().OpenCodePreferences.Generation || key != u.openCodeClientKey() || !u.openCodePreferencesReady()) {
+			done(errors.New(u.launchSettingsChangedMessage()))
 			return
 		}
 		s.Path = result.ProfileDir
@@ -1201,18 +1383,27 @@ func (u *nativeUI) prepareClientAfter(key string, done func(error)) {
 		if key == "codex" || key == "codex-cli" {
 			u.acceptClientImages(imagesSent)
 		}
-		u.setNotice(nativeToneSuccess, u.tr("Editor profile prepared.", "Perfil del editor preparado."))
-		if key == "claude-desktop" {
-			u.setNotice(nativeToneSuccess, u.tr("Kilo profile prepared. Open Claude Desktop · Kilo to apply changes.", "Perfil Kilo preparado. Abre Claude Desktop · Kilo para aplicar los cambios."))
+		if !nativeCLIPathClient(key) {
+			u.clientPreparedNotice(key)
 		}
-		if key == "t3-code" {
-			u.setNotice(nativeToneSuccess, u.tr("Four agents prepared. Open T3 Code · Kilo and start a new chat to choose an agent.", "Cuatro agentes preparados. Abre T3 Code · Kilo e inicia un chat nuevo para elegir un agente."))
-		}
-		if key == "synara" {
-			u.setNotice(nativeToneSuccess, u.tr("Four agents prepared. Open Synara · Kilo and start a new chat to choose an agent.", "Cuatro agentes preparados. Abre Synara · Kilo e inicia un chat nuevo para elegir un agente."))
-		}
+
 		done(nil)
 	})
+}
+
+func (u *nativeUI) clientPreparedNotice(key string) {
+	if key != "opencode" && key != "opencode2" {
+		u.setNotice(nativeToneSuccess, u.tr("Editor profile prepared.", "Perfil del editor preparado."))
+	}
+	if key == "claude-desktop" {
+		u.setNotice(nativeToneSuccess, u.tr("Kilo profile prepared. Open Claude Desktop · Kilo to apply changes.", "Perfil Kilo preparado. Abre Claude Desktop · Kilo para aplicar los cambios."))
+	}
+	if key == "t3-code" {
+		u.setNotice(nativeToneSuccess, u.tr("Your saved accounts and models are prepared. Open T3 Code · Kilo to choose an account.", "Las cuentas y modelos guardados están preparados. Abre T3 Code · Kilo para elegir una cuenta."))
+	}
+	if key == "synara" {
+		u.setNotice(nativeToneSuccess, u.tr("Four agents prepared. Open Synara · Kilo and start a new chat to choose an agent.", "Cuatro agentes preparados. Abre Synara · Kilo e inicia un chat nuevo para elegir un agente."))
+	}
 }
 
 func (u *nativeUI) loadClient(key string) {
@@ -1473,6 +1664,8 @@ func (u *nativeUI) uxhClientDetail(key string, s *nativeClientSelection) uxhDeta
 		return u.openDesignDetail(s)
 	case "claude-desktop":
 		return u.claudeDesktopDetail(s)
+	case "opencode", "opencode2":
+		return u.openCodeDetail(key, s)
 	}
 	d := uxhDetail{}
 	if key == "codex" || key == "codex-cli" {

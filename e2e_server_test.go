@@ -70,13 +70,58 @@ func TestE2EServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	openCodeBinary := syntheticOpenCodeExecutable(t, root)
+	openCode2Binary := syntheticOpenCodeExecutable(t, filepath.Join(root, "opencode2-cli"))
+	// Synthetic CLI version boundary: never inspect an installed personal CLI.
+	a.openCodeVersionProbe = func(binary string) (string, error) {
+		if binary == openCode2Binary {
+			if version, ok := readLaunchControl()["openCode2Version"].(string); ok {
+				return version, nil
+			}
+			return "2.0.27", nil
+		}
+		if binary == openCodeBinary {
+			return "1.19.0", nil
+		}
+		return "", errors.New("Unknown synthetic OpenCode CLI")
+	}
+
 	openMausBotBinary := syntheticOpenMausBotExecutable(t, root, "macos")
 	synaraBinary := syntheticSynaraExecutable(t, root, "macos")
 	t3CodeBinary := syntheticT3CodeExecutable(t, root, "macos")
 	t3CodeNightlyBinary := syntheticT3CodeExecutable(t, filepath.Join(root, "nightly"), "macos", t3CodeNightlyVersion)
+	t3CodeCapabilitiesBinary := syntheticT3CodeExecutable(t, filepath.Join(root, "capabilities"), "macos", t3CodeNightlyVersion)
+	archive, err := t3CodeOpenPackage(t3CodeCapabilitiesBinary, "macos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string][]byte{}
+	var copyEntries func(t3CodeASAREntry, string)
+	copyEntries = func(entry t3CodeASAREntry, prefix string) {
+		for name, child := range entry.Files {
+			name = prefix + name
+			if len(child.Files) > 0 {
+				copyEntries(child, name+"/")
+				continue
+			}
+			files[name], err = archive.read(name, 16<<20)
+			if err != nil {
+				archive.file.Close()
+				t.Fatal(err)
+			}
+		}
+	}
+	copyEntries(archive.tree, "")
+	archive.file.Close()
+	files["apps/server/dist/bin.mjs"] = append(files["apps/server/dist/bin.mjs"], []byte("\n"+t3CodeOptionalCapabilityFixture())...)
+	writeT3CodeFixtureASAR(t, filepath.Join(t3CodeCapabilitiesBinary, "Contents", "Resources", "app.asar"), files)
+
 	t.Setenv("CODEX_HOME", filepath.Join(root, ".codex"))
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(root, ".claude"))
 	codexBinary := writeOpenDesignCodexFixture(t, filepath.Join(root, "codex-cli"), syntheticSynaraNativeHeader("macos"))
+	t3ClaudeBinary := filepath.Join(root, "t3-claude-cli")
+	if err := os.WriteFile(t3ClaudeBinary, []byte("#!/bin/sh\n[ \"$1\" = --version ] || exit 2\nprintf '2.1.288 (Claude Code)\\n'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
 	a.synaraRuntimeDisabled = true
 	a.openDesignCheckRunning = func(string) (bool, error) { return readLaunchControl()["openDesignRunning"] == true, nil }
 	a.openMausBotCheckRunning = func(openMausBotPaths) (bool, error) { return readLaunchControl()["openMausBotRunning"] == true, nil }
@@ -102,7 +147,13 @@ func TestE2EServer(t *testing.T) {
 			if client == "synara" {
 				return synaraBinary, nil
 			}
+			if client == "claude" && readLaunchControl()["t3Models"] == true {
+				return t3ClaudeBinary, nil
+			}
 			if client == "t3-code" {
+				if readLaunchControl()["t3Capabilities"] == true {
+					return t3CodeCapabilitiesBinary, nil
+				}
 				if readLaunchControl()["t3CodeVersion"] == t3CodeNightlyVersion {
 					return t3CodeNightlyBinary, nil
 				}
@@ -111,6 +162,13 @@ func TestE2EServer(t *testing.T) {
 			if client == "opencode" {
 				return openCodeBinary, nil
 			}
+			if client == "opencode2" {
+				if readLaunchControl()["openCode2"] != true {
+					return "", errors.New("Install OpenCode 2.0.18 or newer manually.")
+				}
+				return openCode2Binary, nil
+			}
+
 			if client == "codex-cli" {
 				return codexBinary, nil
 			}
@@ -193,6 +251,11 @@ func TestE2EServer(t *testing.T) {
 			models := []any{
 				map[string]any{"id": "vendor/one", "name": "Very Long First Model Name", "context_length": 128000, "top_provider": map[string]int{"max_completion_tokens": 4000}, "pricing": map[string]string{"prompt": "0.000001", "completion": "0.000002"}, "supported_parameters": []string{"tools", "reasoning"}, "architecture": map[string]any{"output_modalities": []string{"text"}}, "opencode": map[string]any{"variants": map[string]any{"low": map[string]any{"reasoning": map[string]string{"effort": "low"}}, "high": map[string]any{"reasoning": map[string]string{"effort": "high"}}}}},
 				map[string]any{"id": "anthropic/claude-sonnet-4.6", "name": "Claude Sonnet", "context_length": 128000, "pricing": map[string]string{"prompt": "0.000003", "completion": "0.000015"}, "supported_parameters": []string{"tools"}, "architecture": map[string]any{"output_modalities": []string{"text"}}},
+			}
+			if readLaunchControl()["t3Models"] == true {
+				for _, model := range []struct{ ID, Name string }{{"openai/gpt-fixture", "Fixture GPT"}, {"anthropic/claude-opus-5.5", "Claude Opus 5.5"}, {"anthropic/claude-sonnet-5.5", "Claude Sonnet 5.5"}, {"anthropic/claude-fable-5.1", "Claude Fable 5.1"}} {
+					models = append(models, map[string]any{"id": model.ID, "name": model.Name, "context_length": 128000, "supported_parameters": []string{"tools", "reasoning"}, "architecture": map[string]any{"output_modalities": []string{"text"}}})
+				}
 			}
 			if readLaunchControl()["imageModels"] == true {
 				models = append(models, map[string]any{"id": "image-lab/painter", "name": "Synthetic Image Painter", "architecture": map[string]any{"input_modalities": []string{"text", "image"}, "output_modalities": []string{"image"}}})
@@ -280,6 +343,27 @@ func TestE2EServer(t *testing.T) {
 	admin := a.adminHandler()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		control := readLaunchControl()
+		if control["t3Models"] == true && strings.HasPrefix(r.URL.Path, "/api/clients/t3-code") {
+			// The terminal fixture has no native window to populate its catalog cache.
+			// Seed the same scoped metadata used by the native Models page, explicitly
+			// opted into by T3 policy E2Es, without changing another test's catalog.
+			a.mu.Lock()
+			scope := a.catalogScopeLocked()
+			a.mu.Unlock()
+			catalog := append(t3CodeOfficialCatalogFixture(), modelInfo{ID: "openai/gpt-fixture", Name: "Fixture GPT", ContextWindow: 128000})
+			cache, cacheErr := json.Marshal(nativeCachedCatalog{SchemaVersion: 1, OrgID: scope, Models: catalog, FetchedAt: time.Now().UTC()})
+			if cacheErr == nil {
+				cacheErr = os.MkdirAll(a.dir, 0700)
+			}
+			if cacheErr == nil {
+				cacheErr = atomicCatalogFile(filepath.Join(a.dir, "model-catalog.json"), cache)
+			}
+			if cacheErr != nil {
+				t.Error(cacheErr)
+				jsonError(w, 500, "Synthetic catalog unavailable")
+				return
+			}
+		}
 		if connected, controlled := control["chatgptConnected"].(bool); controlled {
 			a.mu.Lock()
 			a.chatgpt.mu.Lock()
@@ -343,6 +427,7 @@ func TestE2EServer(t *testing.T) {
 		"url": "http://" + a.adminHost + "/#" + a.adminToken, "token": a.adminToken,
 		"proxyPort": a.config.Port, "baseURL": "http://127.0.0.1:" + strconv.Itoa(a.config.Port) + "/v1", "root": root,
 		"imageRecords": imageRecords, "imageBase64": imageBase64,
+		"openCodeExecutable": openCodeBinary, "openCode2Executable": openCode2Binary, "codexExecutable": codexBinary, "claudeExecutable": t3ClaudeBinary,
 		"launchControl": launchControl, "launchRecords": launchRecords, "prepareWaiting": prepareWaiting, "stateWaiting": stateWaiting,
 		"profiles": map[string]string{"codex": a.codexProfileDir, "codex-cli": a.codexCLIProfileDir, "claude": a.claudeProfileDir, "omp": a.ompProfileDir, "opencode": filepath.Join(root, ".opencode-kilo"), "zed": filepath.Join(root, ".config", "zed")},
 	})

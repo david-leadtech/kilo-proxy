@@ -23,7 +23,7 @@ export function openDesignCanLaunch(state, engine, engines, library) {
 export function createOpenDesignHelper({api, refreshCatalog, onChange = () => {}}) {
  const $ = id => document.getElementById(id), selected = new Map();
  let ctx = {language:'en', catalog:[]}, initial = '', signature = '', engine = 'codex-cli';
- let profile = null, loaded = false, loading = false, working = false, edited = false, engineEdited = false, error = '';
+ let profile = null, loaded = false, loading = false, working = false, edited = false, engineEdited = false, error = '', generation = 0, reloadQueued = false;
  const L = (en, es) => ctx.language === 'es' ? es : en;
  const library = () => openDesignLibrary([...selected.values()], initial);
  const fingerprint = () => JSON.stringify([engine, library(), ctx.state?.baseURL, ctx.state?.localKey]);
@@ -54,34 +54,52 @@ export function createOpenDesignHelper({api, refreshCatalog, onChange = () => {}
   $('open-design-engine').disabled = loading || working;
   $('open-design-detect').disabled = loading || working;
   $('open-design-add').disabled = working || selected.size >= 50 || !validModelID($('open-design-id').value.trim());
-  $('open-design-engine-status').textContent = loading ? L('Checking installed CLI engines…', 'Comprobando los motores CLI instalados…') : profile?.engines?.[engine]?.available ? L('Installed · runs inside Open Design, without opening a terminal.', 'Instalado · se ejecuta dentro de Open Design, sin abrir una terminal.') : profile?.engines?.[engine]?.reason || L('This CLI is not installed. Install it and check again.', 'Este CLI no está instalado. Instálalo y vuelve a comprobar.');
+  $('open-design-engine-status').textContent = loading || reloadQueued ? L('Checking installed CLI engines…', 'Comprobando los motores CLI instalados…') : profile?.engines?.[engine]?.available ? L('Installed · runs inside Open Design, without opening a terminal.', 'Instalado · se ejecuta dentro de Open Design, sin abrir una terminal.') : profile?.engines?.[engine]?.reason || L('This CLI is not installed. Install it and check again.', 'Este CLI no está instalado. Instálalo y vuelve a comprobar.');
   $('open-design-status').textContent = error || (working ? L('Preparing the CLI and Open Design profile…', 'Preparando el CLI y el perfil de Open Design…') : L('Select an engine and models, then use Launch above. Settings are prepared on every launch.', 'Elige un motor y modelos y usa Abrir arriba. Los ajustes se preparan en cada arranque.'));
   $('open-design-status').classList.toggle('error', !!error);
   onChange();
  }
  async function load() {
   if (loading || working) return;
+  const requestGeneration = generation;
   loading = true; error = ''; controls();
   try {
-   const result = await api('open-design/profile'); profile = result;
+   const result = await api('open-design/profile');
+   if (requestGeneration !== generation) return;
+   profile = result;
    if (!engineEdited && openDesignEngines.includes(result.engine)) engine = result.engine;
    if (!edited && !selected.size) {
     for (const model of result.library?.models || []) selected.set(model.id, contextModel(model,ctx.catalog.find(entry=>entry.id===model.id),true));
     initial = result.library?.defaultModel || selected.keys().next().value || '';
    }
-  } catch (failure) {profile = null; error = failure.message;}
-  finally {loaded = true; loading = false; render(ctx);}
+  } catch (failure) {if (requestGeneration === generation) {profile = null; error = failure.message;}}
+  finally {
+   loading = false;
+   if (reloadQueued) {reloadQueued = false; void load();}
+   else {loaded = true; render(ctx);}
+  }
+ }
+ function reload() {
+  // A path change can arrive while detection or preparation is still pending.
+  // Discard the old availability result and recheck after that operation ends.
+  generation++; profile = null; loaded = false; error = '';
+  if (loading || working) {reloadQueued = true; controls(); return;}
+  return load();
  }
  async function prepare() {
   if (working || loading) throw new Error(L('Wait for engine preparation to finish.', 'Espera a que termine la preparación del motor.'));
   const body = {engine, library:library()}; working = true; error = ''; render(ctx);
   try {await api('open-design/profile', body);}
   catch (failure) {error = failure.message; throw failure;}
-  finally {working = false; render(ctx);}
+  finally {
+   working = false;
+   if (reloadQueued) {reloadQueued = false; void load();}
+   else render(ctx);
+  }
  }
  function render(context) {
   ctx = context;
-  if (!loaded && !loading) void load();
+  if (!loaded && !loading && !working && !reloadQueued) void load();
   controls();
   const all = new Map(ctx.catalog.map(model => [model.id, model]));
   for (const [id, model] of selected) if (!all.has(id)) all.set(id, model);
@@ -122,7 +140,7 @@ export function createOpenDesignHelper({api, refreshCatalog, onChange = () => {}
  $('open-design-sort').addEventListener('change', () => {setModelSort($('open-design-sort').value); render(ctx);});
  $('open-design-lab').addEventListener('change', () => {setModelLab($('open-design-lab').value); render(ctx);});
  $('open-design-refresh').addEventListener('click', () => refreshCatalog());
- $('open-design-detect').addEventListener('click', () => load());
+ $('open-design-detect').addEventListener('click', () => reload());
  $('open-design-engine').addEventListener('change', () => {engine = $('open-design-engine').value; engineEdited = true; error = ''; render(ctx);});
  $('open-design-id').addEventListener('input', controls);
  $('open-design-add').addEventListener('click', () => {
@@ -130,7 +148,7 @@ export function createOpenDesignHelper({api, refreshCatalog, onChange = () => {}
   edited = true; selected.set(id, {...ctx.catalog.find(model => model.id === id),id,name:ctx.catalog.find(model=>model.id===id)?.name||id}); if (!initial) initial = id;
   $('open-design-id').value = ''; $('open-design-search').value = ''; $('open-design-selected').checked = true; render(ctx);
  });
- return {render, setCatalog:catalog=>syncContextModels(selected,catalog), reload:load, launchState:() => ({id:'open-design', engine, count:selected.size, ready:false, working:working || loading, prepare,
+ return {render, setCatalog:catalog=>syncContextModels(selected,catalog), reload, launchState:() => ({id:'open-design', engine, count:selected.size, ready:false, working:working || loading || reloadQueued, prepare,
   valid:loaded && !contextError(selected) && openDesignCanLaunch(ctx.state, engine, profile?.engines, library()),
   reason:!connectionReady(ctx.state) ? L('Connect your selected provider first.', 'Conecta primero el proveedor seleccionado.') : contextError(selected) || error || (!loading && !profile?.engines?.[engine]?.available ? profile?.engines?.[engine]?.reason || L('Install the selected CLI and check again.', 'Instala el CLI elegido y vuelve a comprobar.') : ''),
   fingerprint:fingerprint()})};

@@ -20,7 +20,7 @@ export function xcodeSelectionPayload(variant,models,initial,aliases={}) {
 }
 export function createXcodeHelper({api,notify,refreshCatalog,onChange=()=>{}}) {
  const $=id=>document.getElementById(id), states=Object.fromEntries(['chat','codex','claude'].map(id=>[id,{models:new Map(),initial:'',aliases:{},saved:null}]));
- let variant='chat',context={catalog:[],language:'en'},installation=null,loading=false,saving=false,signature='',detected=false;
+ let variant='chat',context={catalog:[],language:'en'},installation=null,loading=false,saving=false,signature='',detected=false,detectionRevision=0;
  const L=(en,es)=>context.language==='en'?en:es;
  const selection=()=>states[variant];
  const payload=(v=variant,s=selection())=>xcodeSelectionPayload(v,[...s.models.values()],s.initial,s.aliases);
@@ -97,7 +97,7 @@ export function createXcodeHelper({api,notify,refreshCatalog,onChange=()=>{}}) {
  $('xcode-selected').addEventListener('change',()=>render());
  $('xcode-refresh').addEventListener('click',async()=>{$('xcode-refresh').disabled=true;try{await refreshCatalog()}finally{$('xcode-refresh').disabled=false;render()}});
  $('xcode-add').addEventListener('click',()=>{const id=$('xcode-id').value.trim(),s=selection();if(!validModelID(id)){notify(L('Enter a valid model ID','Introduce un ID de modelo válido'),true);return}const max=variant==='claude'&&!caps().picker?3:50;if(!s.models.has(id)&&s.models.size>=max){notify(L('Model limit reached','Límite de modelos alcanzado'),true);return}s.models.set(id,s.models.get(id)||{...context.catalog.find(m=>m.id===id),id});if(!s.initial)s.initial=id;$('xcode-id').value='';$('xcode-search').value='';render()});
- async function detect(){loading=true;render();try{installation=await api('xcode/info')}catch(e){notify(e.message,true)}finally{loading=false;render()}}
+ async function detect(){const revision=++detectionRevision;loading=true;render();try{const next=await api('xcode/info');if(revision===detectionRevision)installation=next}catch(e){if(revision===detectionRevision)notify(e.message,true)}finally{if(revision===detectionRevision){loading=false;render()}}}
  $('xcode-detect').addEventListener('click',detect);
  async function prepare(){
   if(saving)throw new Error(L('This variant is already being prepared.','Esta variante ya se está preparando.'));
@@ -107,5 +107,5 @@ export function createXcodeHelper({api,notify,refreshCatalog,onChange=()=>{}}) {
  $('xcode-save').addEventListener('click',()=>prepare().catch(e=>notify(e.message,true)));
  $('xcode-load').addEventListener('click',async()=>{const target=variant,s=selection();try{const data=await api('xcode/'+target);s.models.clear();if(target==='codex'){for(const m of data.models)s.models.set(m.slug,{id:m.slug,displayName:m.display_name,contextPreset:'custom',contextTokens:m.context_window,contextMaximum:context.catalog.find(entry=>entry.id===m.slug)?.contextWindow||0,contextWindow:m.context_window,inputModalities:m.input_modalities,reasoningLevels:(m.supported_reasoning_levels||[]).map(r=>r.effort),defaultReasoning:m.default_reasoning_level});s.initial=data.models[0]?.slug||''}else{for(const m of data.models)s.models.set(m.id,contextModel(m,context.catalog.find(entry=>entry.id===m.id),true));s.initial=data.initial;s.aliases=data.aliases||{}}s.saved=null;render()}catch(e){notify(e.message,true)}});
  $('xcode-copy').addEventListener('click',async()=>{try{await writeClipboard(xcodeChatGuide(context.state?.baseURL||'',context.state?.localKey||'',context.language));notify(L('Connection copied with the local key','Conexión copiada con la clave local'))}catch(e){notify(L('Clipboard unavailable','Portapapeles no disponible'),true)}});
- return {render,setCatalog:catalog=>{for(const selection of Object.values(states))syncContextModels(selection.models,catalog);},launchState:()=>({id:'xcode-'+variant,count:selection().models.size,valid:!contextError(selection().models),reason:contextError(selection().models),ready:selection().saved?.signature===fingerprint(),fingerprint:fingerprint(),working:saving||loading,prepare})};
+ return {render,detect,setCatalog:catalog=>{for(const selection of Object.values(states))syncContextModels(selection.models,catalog);},launchState:()=>({id:'xcode-'+variant,count:selection().models.size,valid:!contextError(selection().models),reason:contextError(selection().models),ready:selection().saved?.signature===fingerprint(),fingerprint:fingerprint(),working:saving||loading,prepare})};
 }

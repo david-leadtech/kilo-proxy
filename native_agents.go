@@ -237,8 +237,14 @@ func (u *nativeUI) detectAgentCapabilities() {
 		return
 	}
 	c.ClaudeDetectStarted = true
+	generation := c.CLIPreferences.Generation
 	a.ClaudeError = ""
 	u.clientRequest("GET", "/api/claude/info", nil, func(data json.RawMessage, err error) {
+		if generation != c.CLIPreferences.Generation {
+			c.ClaudeDetectStarted = false
+			u.detectAgentCapabilities()
+			return
+		}
 		if err == nil {
 			err = json.Unmarshal(data, &c.Claude)
 		}
@@ -261,11 +267,13 @@ func (u *nativeUI) agentCompatibility(key string) string {
 	case "synara":
 		return u.tr("Opens a separate Synara workspace with four Codex and Claude agents. Normal agents use existing CLI sessions; Kilo agents use shared models through the proxy. Start a new chat to change accounts and select the prepared exact gateway model ID.", "Abre un espacio Synara separado con cuatro agentes Codex y Claude. Los agentes normales usan sesiones CLI existentes; los agentes Kilo usan modelos compartidos a través del proxy. Inicia un chat nuevo para cambiar de cuenta y elige el ID exacto de modelo del gateway preparado.")
 	case "t3-code":
-		return u.tr("Opens a separate T3 Code workspace with Codex, Codex · Kilo, Claude and Claude · Kilo. Normal agents use your existing CLI login; Kilo agents use your shared models through the proxy. Choose the agent when creating a new chat. Codex supports the model's reasoning levels; Claude offers only levels supported by its CLI and model.", "Abre un espacio T3 Code separado con Codex, Codex · Kilo, Claude y Claude · Kilo. Los agentes normales usan tu sesión CLI existente; los agentes Kilo usan tus modelos compartidos a través del proxy. Elige el agente al crear un chat nuevo. Codex admite los niveles de razonamiento del modelo; Claude ofrece solo los compatibles con su CLI y modelo.")
+		return u.tr("Opens a separate T3 Code workspace with the accounts and model lists chosen in Kilo Settings. Codex and Claude use existing CLI login; Kilo accounts use the proxy. Claude's official models use its native reasoning selector.", "Abre un espacio T3 Code separado con las cuentas y listas de modelos elegidas en Ajustes de Kilo. Codex y Claude usan su sesión CLI existente; las cuentas Kilo usan el proxy. Los modelos oficiales de Claude usan su selector nativo de razonamiento.")
 	case "claude-desktop":
 		return u.tr("Opens a separate Kilo data profile. Regular Claude can stay open; use its usual icon to open it. Quit only the Kilo window before applying changes or opening it again. Other providers require the experimental option in these settings.", "Abre un perfil de datos Kilo separado. Claude normal puede seguir abierto; ábrelo desde su icono habitual. Cierra solo la ventana Kilo antes de aplicar cambios o volver a abrirla. Los demás proveedores requieren la opción experimental de estos ajustes.")
 	case "opencode":
 		return u.tr("Uses Chat Completions with shared names and default model; reasoning stays automatic. Opens a terminal in your project. Local OpenCode settings can override this profile.", "Usa Chat Completions con nombres y modelo inicial compartidos; el razonamiento sigue automático. Abre una terminal en tu proyecto. Los ajustes de OpenCode pueden prevalecer.")
+	case "opencode2":
+		return u.tr("Uses your shared model library in an isolated OpenCode 2 profile and opens a terminal in your project. Requires a separately installed OpenCode 2.0.18 or newer within major version 2.", "Usa tu biblioteca compartida en un perfil aislado de OpenCode 2 y abre una terminal en tu proyecto. Requiere OpenCode 2.0.18 o posterior de la versión 2 instalado por separado.")
 	case "omp":
 		return u.tr("Uses Responses with your shared models in an isolated Oh My Pi profile. Opens a terminal in your project; choose another model with /model. Reasoning follows each model's supported levels.", "Usa Responses con tus modelos compartidos en un perfil separado de Oh My Pi. Abre una terminal en tu proyecto; cambia de modelo con /model. El razonamiento sigue los niveles compatibles de cada modelo.")
 	case "zed":
@@ -283,7 +291,9 @@ func (u *nativeUI) agentPurpose(key string) string {
 		return u.tr("OpenAI desktop app", "App de escritorio de OpenAI")
 	case "claude-desktop":
 		return u.tr("Chat, Cowork and Code · your regular Claude can stay open", "Chat, Cowork y Code · tu Claude normal puede seguir abierto")
-	case "t3-code", "synara":
+	case "t3-code":
+		return u.tr("One workspace with your chosen accounts and models", "Un espacio con las cuentas y modelos que elijas")
+	case "synara":
 		return u.tr("One workspace, four Codex and Claude agent options", "Un espacio, cuatro opciones de agentes Codex y Claude")
 	case "openmausbot":
 		return u.tr("Desktop assistant with your shared models", "Asistente de escritorio con tus modelos compartidos")

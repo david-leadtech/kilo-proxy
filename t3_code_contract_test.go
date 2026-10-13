@@ -56,7 +56,7 @@ func TestT3CodeContractRejectsMissingCapabilitiesWithoutChangingProfiles(t *test
 				t.Fatal(err)
 			}
 			files := map[string][]byte{}
-			for _, path := range []string{"package.json", "apps/desktop/dist-electron/main.cjs", "apps/server/dist/bin.mjs"} {
+			for _, path := range []string{"package.json", "apps/desktop/dist-electron/main.cjs", "apps/server/dist/bin.mjs", "apps/server/dist/client/index.html", "apps/server/dist/client/assets/settings.providers-Fixture.js", "apps/server/dist/client/assets/utils-Fixture.js"} {
 				files[path], err = archive.read(path, 64<<10)
 				if err != nil {
 					t.Fatal(err)
@@ -89,7 +89,7 @@ func TestT3CodePreparedTracksSourceChangesWithSameVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	files := map[string][]byte{}
-	for _, path := range []string{"package.json", "apps/desktop/dist-electron/main.cjs", "apps/server/dist/bin.mjs"} {
+	for _, path := range []string{"package.json", "apps/desktop/dist-electron/main.cjs", "apps/server/dist/bin.mjs", "apps/server/dist/client/index.html", "apps/server/dist/client/assets/settings.providers-Fixture.js", "apps/server/dist/client/assets/utils-Fixture.js"} {
 		files[path], err = archive.read(path, 64<<10)
 		if err != nil {
 			t.Fatal(err)
@@ -177,7 +177,7 @@ func TestT3CodeRejectsUnrelatedIdentityAndUnsafeMain(t *testing.T) {
 				t.Fatal(err)
 			}
 			files := map[string][]byte{}
-			for _, key := range []string{"package.json", "apps/desktop/dist-electron/main.cjs", "apps/server/dist/bin.mjs"} {
+			for _, key := range []string{"package.json", "apps/desktop/dist-electron/main.cjs", "apps/server/dist/bin.mjs", "apps/server/dist/client/index.html", "apps/server/dist/client/assets/settings.providers-Fixture.js", "apps/server/dist/client/assets/utils-Fixture.js"} {
 				files[key], err = archive.read(key, 64<<10)
 				if err != nil {
 					t.Fatal(err)
@@ -207,7 +207,7 @@ func TestT3CodePreparedTracksMainOutsideSourceFolders(t *testing.T) {
 		t.Fatal(err)
 	}
 	files := map[string][]byte{}
-	for _, path := range []string{"package.json", "apps/desktop/dist-electron/main.cjs", "apps/server/dist/bin.mjs"} {
+	for _, path := range []string{"package.json", "apps/desktop/dist-electron/main.cjs", "apps/server/dist/bin.mjs", "apps/server/dist/client/index.html", "apps/server/dist/client/assets/settings.providers-Fixture.js", "apps/server/dist/client/assets/utils-Fixture.js"} {
 		files[path], err = archive.read(path, 64<<10)
 		if err != nil {
 			t.Fatal(err)

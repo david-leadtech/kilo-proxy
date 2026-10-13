@@ -1,9 +1,9 @@
-// Opt-in acceptance of the unmodified frontend shipped inside T3 Desktop.
+// Opt-in acceptance of the prepared frontend shipped inside T3 Desktop.
 // Chromium is headless and disposable. Desktop persistence/bootstrap IPC is
 // injected; the packaged frontend, server and native provider drivers are real.
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { isAbsolute, join } from 'node:path';
 import { chromium } from 'playwright';
 
@@ -23,11 +23,12 @@ export async function verifyT3ModelPicker(input) {
     assert.equal(provider.displayName, expectedName, 'Kilo provider name does not produce its native KP badge');
     assert.equal(provider.accentColor, '#327653', 'Kilo provider lost its brand accent');
   }
-  assert.equal(normal.displayName, 'Claude · Normal');
-  assert.equal(codexNormal.displayName, 'Codex · Normal');
+  assert.equal(normal.displayName, 'Claude');
+  assert.equal(codexNormal.displayName, 'Codex');
   for (const provider of [normal, codexNormal]) assert.ok(!provider.accentColor, 'Normal acquired a Kilo brand accent');
-  const builtin = 'claude-opus-5-5';
+  const builtin = 'claude-opus-4-5';
   assert.ok(proxy.models.some(model => model.slug === builtin), 'Baseline catalog did not contain the old built-in');
+  console.log(`Native Claude defaults ${fixture.version}: ${JSON.stringify(proxy.models.filter(model => model.isDefault).map(model => model.slug))}`);
   const v2 = fixture.protocolV2 === true;
   const threadId = randomUUID();
   const initialSelection = { instanceId: proxy.instanceId, model: fixture.defaultModel };
@@ -85,9 +86,39 @@ export async function verifyT3ModelPicker(input) {
         `${provider.displayName} acquired the Kilo accent`);
     }
   };
-  const contextFor = async (settings, storageState) => {
+  const contextFor = async (settings, storageState, privateRuntime = true) => {
     const context = await browser.newContext({ viewport: { width: 1500, height: 1000 }, deviceScaleFactor: 2,
       ...(storageState ? { storageState } : {}) });
+    // Desktop's custom scheme already has access to its own local backend.
+    // Chromium asks separately for that permission even for the same loopback
+    // origin when static files are fulfilled by Playwright.
+    await context.grantPermissions(['local-network-access'], { origin: base });
+    await context.route('**/*', route => {
+      if (new URL(route.request().url()).origin === base) return route.continue();
+      // This acceptance uses local synthetic accounts only; do not contact
+      // optional hosted login, telemetry or provider services from Chromium.
+      return route.abort('blockedbyclient');
+    });
+    assert.ok(fixture.runtimeAssetsURL && fixture.runtimeAssetFiles?.['index.html'],
+      'Packaged picker acceptance must load the prepared private runtime');
+    // Desktop normally proxies these exact public files into t3code-dev://app.
+    // Chromium uses the backend origin with only that transport step injected;
+    // every returned byte must match the prepared runtime's digest.
+    const assetsURL = privateRuntime ? fixture.runtimeAssetsURL : fixture.baselineAssetsURL;
+    const assetFiles = privateRuntime ? fixture.runtimeAssetFiles : fixture.baselineAssetFiles;
+    assert.ok(assetsURL && assetFiles?.['index.html'], 'Missing original model-assets baseline');
+    await context.route(`${base}/**`, async route => {
+      const url = new URL(route.request().url());
+      const name = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
+      const digest = assetFiles[name];
+      if (route.request().method() !== 'GET' || !digest) return route.continue();
+      const response = await route.fetch({ url: `${assetsURL}/${name}`,
+        headers: { ...route.request().headers(), host: new URL(assetsURL).host, origin: 't3code-dev://app' } });
+      assert.equal(response.status(), 200, `Private runtime asset failed: ${name}`);
+      const body = await response.body();
+      assert.equal(createHash('sha256').update(body).digest('hex'), digest, `Private runtime asset changed: ${name}`);
+      await route.fulfill({ response, body });
+    });
     await context.addInitScript(({ settings, base, token, credential }) => {
       let currentSettings = structuredClone(settings);
       const noSubscription = () => () => {};
@@ -107,6 +138,10 @@ export async function verifyT3ModelPicker(input) {
     }, { settings, base, token, credential });
     page = await context.newPage();
     page.on('pageerror', error => browserErrors.push(error.message));
+    page.on('console', message => { if (message.type() === 'error') browserErrors.push(message.text().replace(/(https?:\/\/|wss?:\/\/)[^\s'"]+/g,
+      value => { try { const url = new URL(value); return `${url.protocol}//${url.host}${url.pathname}`; } catch { return '[URL]'; } })); });
+    page.on('requestfailed', request => browserErrors.push(`${request.method()} ${new URL(request.url()).pathname}: ${request.failure()?.errorText}`));
+    page.on('response', response => { if (response.status() >= 400) browserErrors.push(`HTTP ${response.status()} ${new URL(response.url()).pathname}`); });
     await page.goto(`${base}/#/`, { waitUntil: 'domcontentloaded' });
     // The backend descriptor supplies the actual environment ID. Let T3's
     // official sidebar produce its route rather than inventing that ID.
@@ -130,23 +165,34 @@ export async function verifyT3ModelPicker(input) {
     assert.ok(model, `No frontend catalog model for ${slug}`);
     return model.shortName ?? model.name ?? slug;
   };
+  const selectEffort = async effort => {
+    const control = page.locator('[data-composer-shortcut="composer.effort"]:visible');
+    assert.equal(await control.count(), 1, 'Native Claude reasoning control is missing');
+    await control.click();
+    const label = effort[0].toUpperCase() + effort.slice(1);
+    await page.getByRole('menuitemradio').filter({ hasText: new RegExp(`^${label}(?:\\s|$)`) }).click();
+    assert.ok((await control.innerText()).includes(label), `Native effort control did not select ${label}`);
+  };
+  const effortOf = selection => Array.isArray(selection.options)
+    ? selection.options.find(option => option.id === 'effort')?.value : selection.options?.effort;
   try {
-    const before = await contextFor(baseline);
+    const before = await contextFor(baseline, undefined, false);
     let content = await openPicker(proxy);
     await expandLegacy(content);
     const beforeRows = await content.getByRole('option').allTextContents();
     console.log(`Picker baseline ${fixture.version}: ${JSON.stringify(beforeRows)}`);
-    assert.ok(beforeRows.some(text => /^Claude Opus 5\.5/.test(text)), 'Baseline did not reproduce the built-in 5.5 picker row');
+    const staleLabel = labelFor(proxy, builtin);
+    assert.ok(beforeRows.some(text => text.includes(staleLabel)), 'Baseline did not reproduce the stale built-in picker row');
     await page.keyboard.press('Escape');
     const beforeSelection = await page.locator('[data-chat-provider-model-picker-label]').first().innerText();
-    assert.ok(/^Claude Opus 5\.5/.test(beforeSelection), `Baseline changed stale built-in unexpectedly: ${beforeSelection}`);
+    assert.ok(beforeSelection.includes(staleLabel), `Baseline changed stale built-in unexpectedly: ${beforeSelection}`);
     // Let the official UI write a draft carrying an explicit stale selection.
     // Reuse that exact persisted payload after reopening with prepared settings.
     await page.getByRole('button', { name: 'New thread', exact: true }).click();
     await page.locator('[data-chat-provider-model-picker]').first().waitFor();
     content = await openPicker(proxy);
     await expandLegacy(content);
-    await content.getByRole('option').filter({ hasText: /^Claude Opus 5\.5/ }).click();
+    await content.getByRole('option').filter({ hasText: staleLabel }).click();
     await page.locator('[contenteditable="true"]').first().fill('Synthetic stale builtin draft');
     const draftURL = page.url();
     assert.ok(new URL(draftURL).hash.startsWith('#/draft/'), `UI did not create a draft: ${draftURL}`);
@@ -162,7 +208,10 @@ export async function verifyT3ModelPicker(input) {
 
     const after = await contextFor(prepared, saved);
     content = await openPicker(proxy);
-    const proxyRows = await content.getByRole('option').allTextContents();
+    await expandLegacy(content);
+    // Native older Claude versions retain T3's legacy grouping. Its expand
+    // control has role=option, but is not an extra selectable model.
+    const proxyRows = (await content.getByRole('option').allTextContents()).filter(text => !text.startsWith('Legacy models'));
     console.log(`Picker prepared ${fixture.version}: ${JSON.stringify(proxyRows)}`);
     assert.equal(proxyRows.length, fixture.libraryModels.length, 'Kilo picker contained extra or missing model rows');
     const modelLabels = fixture.libraryModels.map(model => labelFor(proxy, model));
@@ -188,8 +237,10 @@ export async function verifyT3ModelPicker(input) {
     console.log(`Picker normal ${fixture.version}: ${JSON.stringify(normalRows)}`);
     assert.ok(normalRows.some(text => /^Claude Opus 5\.5/.test(text)), 'Normal Claude lost its built-in 5.5 model');
     const normalModels = normal.models.filter(model => !model.isCustom);
-    assert.equal(normalModels.length, 12, 'Unexpected built-in contract in pinned T3 version');
-    assert.equal(normalRows.filter(text => !text.startsWith('Legacy models')).length, 12, 'Normal Claude lost built-in picker rows');
+    assert.ok(normalModels.length >= 12, 'Official Claude catalog lost existing native models');
+    assert.equal(normalRows.filter(text => !text.startsWith('Legacy models')).length, normalModels.length, 'Normal Claude lost built-in picker rows');
+    for (const model of normalModels) assert.ok(normalRows.some(text => text.includes(labelFor(normal, model.slug ?? model.id))),
+      `Normal Claude lost native picker model ${model.slug ?? model.id}`);
     await assertProviderRail(content);
     await capture('four-provider-picker');
     await capture('four-provider-picker-detail', content);
@@ -198,13 +249,22 @@ export async function verifyT3ModelPicker(input) {
     await page.locator('[data-chat-provider-model-picker-label]').first().waitFor();
 
     for (let turn = 0; turn < 3; turn++) {
+      const selected = fixture.officialClaude ? fixture.uiClaudeModels[turn] : { model: fixture.defaultModel };
+      if (fixture.officialClaude) {
+        content = await openPicker(proxy);
+        await content.getByRole('option').filter({ hasText: labelFor(proxy, selected.model) }).click();
+        await selectEffort(selected.effort);
+        await capture(`claude-native-${selected.model}-${selected.effort}`);
+      }
       const editor = page.locator('[contenteditable="true"]').first();
       await editor.fill(`Reply with the synthetic fixture response. UI turn ${turn + 1}.`);
       await page.getByRole('button', { name: /^(Submit|Send) message$/ }).click();
       const replied = await awaitReply(threadId, turn + 1);
       assert.equal(replied.modelSelection.instanceId, proxy.instanceId);
-      assert.equal(replied.modelSelection.model, fixture.defaultModel,
-        'Frontend sent the stale built-in instead of the exact configured gateway ID');
+      assert.equal(replied.modelSelection.model, selected.model,
+        'Frontend sent a model other than its prepared native selection');
+      if (fixture.officialClaude) assert.equal(effortOf(replied.modelSelection), selected.effort,
+        'Frontend lost the native effort selected for this turn');
       if (turn === 1) await stopSession(threadId);
     }
     await stopSession(threadId);
@@ -213,6 +273,7 @@ export async function verifyT3ModelPicker(input) {
     const reopenedDraft = await page.locator('[data-chat-provider-model-picker-label]').first().innerText();
     assert.ok(reopenedDraft.includes(labelFor(proxy, fixture.defaultModel)),
       `Persisted draft changed after continuing the old chat: ${reopenedDraft}`);
+    if (fixture.officialClaude) await selectEffort('medium');
     await page.getByRole('button', { name: /^(Submit|Send) message$/ }).click();
     await page.waitForFunction(() => location.hash.includes('/') && !location.hash.startsWith('#/draft/'));
     const promotedThread = new URL(page.url()).hash.split('/').at(-1);
@@ -240,7 +301,7 @@ export async function verifyT3ModelPicker(input) {
     await capture('four-provider-settings');
     await after.close();
     console.log(`Passed packaged T3 branding ${fixture.version}: Claude/Codex native KP badges with computed Kilo green in composer and four-provider picker; both Normal instances remain distinct and unbranded (injected Desktop IPC).`);
-    console.log(`Passed packaged T3 frontend ${fixture.version}: baseline built-in reproduced; Kilo Models only, default first; all 12 Normal built-ins preserved; old chat continued for three UI turns with stop/resume and old draft promoted using exact gateway ID (injected Desktop IPC).`);
+    console.log(`Passed packaged T3 frontend ${fixture.version}: baseline built-in reproduced; Kilo Models only, default first; all ${normalModels.length} native Claude models preserved; old chat continued for three UI turns with stop/resume and old draft promoted using its prepared native model (injected Desktop IPC).`);
   } catch (error) {
     if (page && !page.isClosed()) {
       console.error('Frontend acceptance URL:', page.url());

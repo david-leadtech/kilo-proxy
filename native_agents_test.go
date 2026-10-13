@@ -82,7 +82,7 @@ func TestNativeAgentLaunchRejectsProjectAndConnectionChangesDuringPrepare(t *tes
 			u, r := nativeLaunchTestUI(t, "codex-cli", true, false)
 			u.page = "agents"
 			u.launchAgent("codex-cli")
-			<-r.entered
+			r.waitForPrepare(t, u)
 			if changed == "project" {
 				u.setValue(agentProjectField("codex-cli"), t.TempDir())
 			} else {

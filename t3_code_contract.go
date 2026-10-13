@@ -19,6 +19,8 @@ type t3CodeInstallation struct {
 	ProtocolV2          bool
 	ClaudeModelDefaults bool
 	ClaudeBuiltins      []string
+	SupportedProviders  []t3CodeProviderSupport
+	OpenCode2Supported  bool
 }
 
 type t3CodePackageMetadata struct{ Name, Version, Main string }
@@ -191,6 +193,7 @@ func inspectT3CodeInstallation(executable, platform string) (t3CodeInstallation,
 	// V2 resolves Claude effort through the builtin catalog. For exact custom
 	// gateway IDs use the CLI's per-model defaults instead of an ineffective picker.
 	result.ClaudeModelDefaults = result.ProtocolV2
+	result.SupportedProviders, result.OpenCode2Supported = t3CodeOptionalProviderCapabilities(string(server))
 	seen := map[string]bool{}
 	for _, match := range t3CodePackagedClaudeSlug.FindAllSubmatch(server, -1) {
 		slug := string(match[1])
@@ -205,6 +208,53 @@ func inspectT3CodeInstallation(executable, platform string) (t3CodeInstallation,
 	data, _ := json.Marshal([]any{string(archive.header), metadata, openDesignHash(main), openDesignHash(desktop), openDesignHash(server)})
 	result.SourceDigest = openDesignHash(data)
 	return result, nil
+}
+
+// A provider name alone is not a capability: older bundles can contain UI
+// labels without shipping the corresponding server driver. Require its bound
+// driver kind, settings schema, factory and inclusion in the live registry.
+func t3CodeOptionalProviderCapabilities(source string) ([]t3CodeProviderSupport, bool) {
+	providers := []t3CodeProviderSupport{}
+	registryPattern := regexp.MustCompile(`(?s)const\s+BUILT_IN_DRIVERS\s*=\s*\[(.*?)\n\];`)
+	registry := registryPattern.FindStringSubmatch(source)
+	if len(registry) != 2 {
+		return providers, false
+	}
+	for _, provider := range t3CodeOptionalProviders {
+		name := map[string]string{"cursor": "Cursor", "grok": "Grok", "opencode": "OpenCode", "antigravity": "Antigravity", "muse": "Muse", "pi": "Pi"}[provider.ID]
+		bindings := regexp.MustCompile(`const\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*ProviderDriverKind\.make\(["']`+regexp.QuoteMeta(provider.ID)+`["']\);`).FindAllStringSubmatch(source, -1)
+		for _, binding := range bindings {
+			body := source
+			if provider.ID == "pi" {
+				body = registry[1]
+			} else {
+				if !regexp.MustCompile(`\b` + name + `Driver\s*,`).MatchString(registry[1]) {
+					continue
+				}
+				declaration := regexp.MustCompile(`const\s+` + name + `Driver\s*=\s*\{`).FindStringIndex(source)
+				if len(declaration) != 2 {
+					continue
+				}
+				body = source[declaration[1]:]
+				if len(body) > 1200 {
+					body = body[:1200]
+				}
+			}
+			contract := regexp.MustCompile(`(?s)driverKind:\s*` + regexp.QuoteMeta(binding[1]) + `\s*,.{0,250}configSchema:\s*` + name + `Settings\s*,.{0,180}defaultConfig:.*?create:`)
+			if contract.MatchString(body) {
+				providers = append(providers, provider)
+				break
+			}
+		}
+	}
+	openCode := false
+	for _, provider := range providers {
+		openCode = openCode || provider.ID == "opencode"
+	}
+	for _, marker := range []string{"classifyOpenCodeCliVersion", "selectOpenCodeRuntimeAdapter", "selectOpenCodeRuntimeTextGeneration", "decodeApiInfo", `"/api/info"`, `"@opencode/cli"`} {
+		openCode = openCode && strings.Contains(source, marker)
+	}
+	return providers, openCode
 }
 
 func t3CodeInstallationName(name string) bool {

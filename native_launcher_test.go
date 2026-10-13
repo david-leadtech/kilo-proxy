@@ -37,9 +37,28 @@ type nativeLaunchRecorder struct {
 func (r *nativeLaunchRecorder) count() int { r.mu.Lock(); defer r.mu.Unlock(); return len(r.plans) }
 func (r *nativeLaunchRecorder) unblock()   { r.once.Do(func() { close(r.release) }) }
 
+func (r *nativeLaunchRecorder) waitForPrepare(t *testing.T, u *nativeUI) {
+	t.Helper()
+	// The CLI preference check completes on the UI queue before preparation.
+	// Drain it while waiting for the same gated POST, using the usual deadline.
+	nativeTestWait(t, u, func() bool {
+		select {
+		case <-r.entered:
+			return true
+		default:
+			return false
+		}
+	})
+}
+
 func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nativeUI, *nativeLaunchRecorder) {
 	t.Helper()
 	u := nativeTestUI(t)
+	u.owner.openCodeVersionProbe = func(string) (string, error) { return "1.19.0", nil }
+	if key == "t3-code" {
+		u.owner.config.T3Code = normalizeT3CodePreferences(t3CodePreferences{})
+		u.owner.config.T3Code.CodexModels, u.owner.config.T3Code.ClaudeModels = "shared", "shared"
+	}
 	if key == "t3-code" || key == "synara" {
 		t.Setenv("CODEX_HOME", filepath.Join(u.owner.editorTestRoot, ".codex"))
 		t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(u.owner.editorTestRoot, ".claude"))
@@ -182,6 +201,14 @@ func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nat
 		nativeTestWait(t, u, func() bool { return u.clientState().OpenDesignChecked })
 	}
 	u.page = "clients"
+	if nativeCLIPathClient(key) {
+		u.refreshCLIPreferencesAfter(nil)
+		nativeTestWait(t, u, func() bool { return u.clientState().CLIPreferences.Loaded })
+	}
+	if key == "opencode" || key == "opencode2" || key == "t3-code" {
+		u.refreshOpenCodePreferencesAfter(nil)
+		nativeTestWait(t, u, func() bool { return u.clientState().OpenCodePreferences.Loaded })
+	}
 	return u, recorder
 }
 
@@ -246,7 +273,7 @@ func TestNativeLaunchPreservesEditsWhilePreparing(t *testing.T) {
 			nativeTestFrame(t, u)
 			u.clickable("client:" + key + ":launch").Click()
 			nativeTestFrame(t, u)
-			<-r.entered
+			r.waitForPrepare(t, u)
 			switch field {
 			case "model":
 				u.setValue(nativeClientField(sharedModelKey, "vendor/one", "name"), "Newest name")
@@ -417,7 +444,7 @@ func TestNativeLaunchRejectsInvalidRawLimitDuringProfilePreparation(t *testing.T
 	u.persistLibraryEdits()
 	u.flushModelLibrary()
 	u.launchAgent("codex")
-	<-r.entered
+	r.waitForPrepare(t, u)
 	u.setValue(nativeClientField(sharedModelKey, "vendor/one", "output"), "not a number")
 	r.unblock()
 	nativeTestWait(t, u, func() bool { return u.clients.Launching == "" })

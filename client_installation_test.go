@@ -19,6 +19,7 @@ func TestClientInstallationURLsOnlySupportedCLIs(t *testing.T) {
 		"codex-cli":   "https://developers.openai.com/codex/cli/",
 		"claude":      "https://code.claude.com/docs/en/setup#install-claude-code",
 		"opencode":    "https://opencode.ai/docs/#install",
+		"opencode2":   "https://dev.opencode.ai/v2/docs/",
 		"omp":         "https://github.com/can1357/oh-my-pi#install",
 		"openmausbot": "https://github.com/milind-soni/OpenMausBot/releases",
 	}
@@ -138,7 +139,7 @@ func TestClientInstallationDiscoveryRefreshesWithoutMutations(t *testing.T) {
 				t.Fatal("discovery returned a stale executable path", id)
 			}
 		}
-		if starts != 0 || vault.calls != 0 || a.proxyServer != nil || a.config != beforeConfig || a.apiKey != beforeKey {
+		if starts != 0 || vault.calls != 0 || a.proxyServer != nil || !reflect.DeepEqual(a.config, beforeConfig) || a.apiKey != beforeKey {
 			t.Fatal("discovery launched a program or changed connection credentials")
 		}
 		if !reflect.DeepEqual(beforeSettings, clientInstallationTree(t, a.dir)) || !reflect.DeepEqual(beforeHome, clientInstallationTree(t, a.launcher.home)) {

@@ -55,9 +55,12 @@ func syntheticT3CodeVersionExecutable(t *testing.T, root, platform, version stri
 		server += " message.dispatch provider-session.detach"
 	}
 	writeT3CodeFixtureASAR(t, filepath.Join(resources, "app.asar"), map[string][]byte{
-		"package.json":                        metadata,
-		"apps/desktop/dist-electron/main.cjs": []byte("T3CODE_HOME T3CODE_DISABLE_AUTO_UPDATE userData client-settings.json providerModelPreferences hiddenModels modelOrder"),
-		"apps/server/dist/bin.mjs":            []byte(server),
+		"package.json":                                                 metadata,
+		"apps/desktop/dist-electron/main.cjs":                          []byte("T3CODE_HOME T3CODE_DISABLE_AUTO_UPDATE userData client-settings.json providerModelPreferences hiddenModels modelOrder VITE_DEV_SERVER_URL T3CODE_PORT configuredBackendPort getDesktopScheme targetOrigin proxyRequest DesktopDevelopmentBackendPortRequiredError t3code-dev"),
+		"apps/server/dist/bin.mjs":                                     []byte(server),
+		"apps/server/dist/client/index.html":                           []byte(`<html><script type="module" src="/assets/settings.providers-Fixture.js"></script></html>`),
+		"apps/server/dist/client/assets/settings.providers-Fixture.js": []byte(t3CodeRuntimeFixtureProvidersSource),
+		"apps/server/dist/client/assets/utils-Fixture.js":              []byte(t3CodeRuntimeFixtureProjectionSource),
 	})
 	if platform == "macos" || platform == "darwin" {
 		if err := os.WriteFile(filepath.Join(appRoot, "Contents", "Info.plist"), []byte(`<plist><dict><key>CFBundleExecutable</key><string>`+appName+`</string></dict></plist>`), 0600); err != nil {
@@ -75,6 +78,10 @@ func t3CodeTestApp(t *testing.T, platform string, versions ...string) *app {
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(a.launcher.home, ".claude"))
 	a.config.Port = 9988
 	a.config.Language = "en"
+	// Existing contract fixtures exercise arbitrary shared catalogs. Official
+	// defaults have their own complete connected-catalog acceptance fixtures.
+	a.config.T3Code = normalizeT3CodePreferences(t3CodePreferences{})
+	a.config.T3Code.CodexModels, a.config.T3Code.ClaudeModels = "shared", "shared"
 	binary := syntheticT3CodeExecutable(t, a.launcher.home, platform, versions...)
 	cli := filepath.Join(a.launcher.home, "codex-native")
 	claude := filepath.Join(a.launcher.home, "claude-native")

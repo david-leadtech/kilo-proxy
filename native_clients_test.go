@@ -4,11 +4,17 @@ package main
 
 import (
 	"encoding/json"
+	"image"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -240,6 +246,19 @@ func TestNativeClientsWidgetActionsPrepareEveryEditor(t *testing.T) {
 					t.Fatal("Codex CLI export included desktop queue mode")
 				}
 			}
+			if key == "opencode" {
+				// The first client frame starts an asynchronous settings read.
+				// Wait for its real callback before clicking the enabled control.
+				nativeTestWait(t, u, u.openCodePreferencesReady)
+				nativeTestFrame(t, u)
+			}
+			if nativeCLIPathClient(key) {
+				if !u.clientState().CLIPreferences.Requested {
+					u.refreshCLIPreferencesAfter(nil)
+				}
+				nativeTestWait(t, u, u.cliPreferencesReady)
+				nativeTestFrame(t, u)
+			}
 			u.clickable("client:" + key + ":prepare").Click()
 			nativeTestFrame(t, u)
 			nativeTestWait(t, u, func() bool { return s.Saved != "" })
@@ -290,6 +309,172 @@ func TestNativeClientsWidgetActionsPrepareEveryEditor(t *testing.T) {
 			}
 			if stored := u.owner.modelLibrary.snapshot().Library; stored.DefaultModel != "vendor/one" || len(stored.Models) != 2 || nativeSavedLibraryItem(t, stored, "vendor/one").DisplayName != "Short Native" {
 				t.Fatalf("preparation changed the shared library: %#v", stored)
+			}
+		})
+	}
+}
+
+func TestNativeClientsPrepareWaitsForConfirmedCLIPaths(t *testing.T) {
+	for _, key := range []string{"codex-cli", "claude", "xcode-codex", "xcode-claude"} {
+		for _, language := range []string{"en", "es"} {
+			t.Run(key+"/"+language, func(t *testing.T) {
+				u := nativeTestUI(t)
+				u.setLanguage(language)
+				nativeTestWait(t, u, func() bool {
+					return u.language == language && u.languageTarget == "" && len(u.busy) == 0
+				})
+				u.models = nativeClientModelsForTest()
+				u.models[0].ContextWindow = 128000
+				model := u.models[0]
+				nativeSeedSharedForTest(t, u, model)
+				u.page, u.client = "clients", key
+				if strings.HasPrefix(key, "xcode-") {
+					u.client = "xcode"
+					u.clientState().Variant = strings.TrimPrefix(key, "xcode-")
+					u.clients.Xcode = u.owner.xcodeInfo()
+					u.clients.XcodeChecked, u.clients.XcodeDetectStarted = true, true
+				}
+				if key == "claude" {
+					u.setValue("clients-claude-mode", "modern")
+				}
+				entered, release := make(chan struct{}, 1), make(chan struct{})
+				var once sync.Once
+				unblock := func() { once.Do(func() { close(release) }) }
+				var prepares atomic.Int32
+				handler := u.owner.adminHandler()
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Method == http.MethodGet && r.URL.Path == nativeCLIPreferencesEndpoint {
+						select {
+						case entered <- struct{}{}:
+						default:
+						}
+						select {
+						case <-release:
+						case <-r.Context().Done():
+							return
+						}
+					}
+					if r.Method == http.MethodPost && r.URL.Path == nativeClientEndpoint(key) {
+						prepares.Add(1)
+					}
+					handler.ServeHTTP(w, r)
+				}))
+				t.Cleanup(func() { unblock(); server.Close() })
+				u.owner.adminHost = strings.TrimPrefix(server.URL, "http://")
+				h := &nativePointerHarness{t: t, u: u, size: image.Pt(1280, 5000), now: time.Now()}
+				h.frame()
+				if !u.clientState().CLIPreferences.Requested {
+					// Xcode can inherit an in-flight read started in Settings.
+					u.refreshCLIPreferencesAfter(nil)
+				}
+				nativeTestWait(t, u, func() bool {
+					select {
+					case <-entered:
+						return true
+					default:
+						return false
+					}
+				})
+				h.frame()
+				if u.cliPreferencesReady() || !u.cliPreferencesBusy() {
+					t.Fatal("the retained settings response did not keep CLI paths unconfirmed")
+				}
+				s := u.sharedClientSelection(key)
+				u.clickable("client:" + key + ":prepare").Click()
+				h.frame()
+				if prepares.Load() != 0 || s.Saved != "" || !strings.Contains(u.notice, u.tr("Load or finish saving CLI executable settings before opening.", "Carga o termina de guardar las rutas de las CLI antes de abrir.")) {
+					t.Fatalf("a click while CLI paths were loading did not preserve the guard: posts=%d saved=%q notice=%q", prepares.Load(), s.Saved, u.notice)
+				}
+				unblock()
+				nativeTestWait(t, u, u.cliPreferencesReady)
+				h.frame()
+				u.clickable("client:" + key + ":prepare").Click()
+				h.frame()
+				nativeTestWait(t, u, func() bool { return s.Saved != "" && !u.cliPreferencesBusy() })
+				if prepares.Load() != 1 || !u.uxhProfileReady(key, s) || s.Path == "" {
+					t.Fatalf("confirmed paths did not prepare exactly one current profile: posts=%d saved=%q path=%q", prepares.Load(), s.Saved, s.Path)
+				}
+			})
+		}
+	}
+}
+
+func TestNativeOpenCodePrepareWaitsForConfirmedPreferences(t *testing.T) {
+	for _, language := range []string{"en", "es"} {
+		t.Run(language, func(t *testing.T) {
+			u := nativeTestUI(t)
+			u.setLanguage(language)
+			nativeTestWait(t, u, func() bool {
+				return u.language == language && u.languageTarget == "" && len(u.busy) == 0
+			})
+			model := nativeClientModelsForTest()[0]
+			shared := nativeSeedSharedForTest(t, u, model)
+			shared.choice(model.ID).DisplayName = "Slow load model"
+			u.seedClientChoice(sharedModelKey, *shared.choice(model.ID))
+			u.persistLibraryEdits()
+			u.flushModelLibrary()
+			entered, release := make(chan struct{}, 1), make(chan struct{})
+			var once sync.Once
+			unblock := func() { once.Do(func() { close(release) }) }
+			var prepares atomic.Int32
+			handler := u.owner.adminHandler()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet && r.URL.Path == nativeOpenCodePreferencesEndpoint {
+					select {
+					case entered <- struct{}{}:
+					default:
+					}
+					select {
+					case <-release:
+					case <-r.Context().Done():
+						return
+					}
+				}
+				if r.Method == http.MethodPost && r.URL.Path == nativeClientEndpoint("opencode") {
+					prepares.Add(1)
+				}
+				handler.ServeHTTP(w, r)
+			}))
+			t.Cleanup(func() { unblock(); server.Close() })
+			u.owner.adminHost = strings.TrimPrefix(server.URL, "http://")
+			u.page, u.client = "clients", "opencode"
+			h := &nativePointerHarness{t: t, u: u, size: image.Pt(1280, 5000), now: time.Now()}
+			h.frame()
+			nativeTestWait(t, u, func() bool {
+				select {
+				case <-entered:
+					return true
+				default:
+					return false
+				}
+			})
+			h.frame()
+			s := u.sharedClientSelection("opencode")
+			detail := u.openCodeDetail("opencode", s)
+			if u.openCodePreferencesReady() || detail.canPrepare == nil || *detail.canPrepare || !nativeUpdateHasText(h, u.tr("Loading version…", "Cargando versión…")) {
+				t.Fatal("pending preferences did not expose a loading state with preparation disabled")
+			}
+			u.clickable("client:opencode:prepare").Click()
+			h.frame()
+			if prepares.Load() != 0 || s.Saved != "" {
+				t.Fatal("a click while settings were loading reached profile preparation")
+			}
+			unblock()
+			nativeTestWait(t, u, u.openCodePreferencesReady)
+			h.frame()
+			detail = u.openCodeDetail("opencode", s)
+			if detail.canPrepare == nil || !*detail.canPrepare || nativeUpdateHasText(h, u.tr("Loading version…", "Cargando versión…")) {
+				t.Fatal("confirmed preferences did not enable preparation and clear loading")
+			}
+			u.clickable("client:opencode:prepare").Click()
+			h.frame()
+			nativeTestWait(t, u, func() bool { return s.Saved != "" && !u.openCodePreferencesBusy() })
+			if prepares.Load() != 1 {
+				t.Fatalf("the enabled control prepared %d times; want exactly once", prepares.Load())
+			}
+			data, err := os.ReadFile(s.Path)
+			if err != nil || !strings.Contains(string(data), "Slow load model") || !strings.Contains(string(data), "vendor/one") {
+				t.Fatalf("the confirmed control did not save the chosen model: %v", err)
 			}
 		})
 	}

@@ -51,9 +51,12 @@ func TestTerminalAgentWindowsProductionPowerShell(t *testing.T) {
 	}
 	fixture := filepath.Join(t.TempDir(), "client.go")
 	const source = `package main
-import ("encoding/json"; "fmt"; "io"; "os")
+import ("encoding/json"; "fmt"; "io"; "os"; "path/filepath"; "strings")
 func main() {
- if len(os.Args) == 2 && os.Args[1] == "--version" { fmt.Println("2.1.251 (synthetic client)"); return }
+ if len(os.Args) == 2 && os.Args[1] == "--version" {
+  if strings.HasPrefix(strings.ToLower(filepath.Base(os.Args[0])), "opencode") { fmt.Println("1.19.0") } else { fmt.Println("2.1.251 (synthetic client)") }
+  return
+ }
  input, _ := io.ReadAll(os.Stdin)
  cwd, _ := os.Getwd()
  json.NewEncoder(os.Stdout).Encode(map[string]any{

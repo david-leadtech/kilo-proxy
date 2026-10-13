@@ -1,0 +1,280 @@
+//go:build desktop
+
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"reflect"
+	"sort"
+	"strings"
+
+	"gioui.org/layout"
+)
+
+const nativeT3CodePreferencesEndpoint = "/api/clients/t3-code/preferences"
+
+type nativeT3CodePreferences struct {
+	Version      int      `json:"version"`
+	Codex        bool     `json:"codex"`
+	Claude       bool     `json:"claude"`
+	KiloCodex    bool     `json:"kiloCodex"`
+	KiloClaude   bool     `json:"kiloClaude"`
+	CodexModels  string   `json:"codexModels"`
+	ClaudeModels string   `json:"claudeModels"`
+	Providers    []string `json:"providers"`
+	OpenCode2    bool     `json:"openCode2"`
+}
+
+type nativeT3CodeProvider struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+type nativeT3CodeProviderChoice struct {
+	nativeT3CodeProvider
+	Supported bool
+}
+
+func nativeT3CodeProviderChoices(p nativeT3CodePreferences, supported []nativeT3CodeProvider) []nativeT3CodeProviderChoice {
+	known := map[string]string{}
+	for _, provider := range t3CodeOptionalProviders {
+		known[provider.ID] = provider.Label
+	}
+	result, seen := []nativeT3CodeProviderChoice{}, map[string]bool{}
+	for _, provider := range supported {
+		if known[provider.ID] != "" && !seen[provider.ID] {
+			result = append(result, nativeT3CodeProviderChoice{nativeT3CodeProvider: provider, Supported: true})
+			seen[provider.ID] = true
+		}
+	}
+	for _, id := range p.Providers {
+		if known[id] != "" && !seen[id] {
+			result = append(result, nativeT3CodeProviderChoice{nativeT3CodeProvider: nativeT3CodeProvider{ID: id, Label: known[id]}})
+			seen[id] = true
+		}
+	}
+	return result
+}
+
+type nativeT3CodeModelSummary struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+type nativeT3CodePreferencesResponse struct {
+	Preferences         nativeT3CodePreferences `json:"preferences"`
+	RequiresPreparation bool                    `json:"requiresPreparation"`
+	SupportedProviders  []nativeT3CodeProvider  `json:"supportedProviders"`
+	OpenCode2Supported  bool                    `json:"openCode2Supported"`
+}
+type nativeT3CodePreferencesState struct {
+	nativeT3CodePreferencesResponse
+	Requested, Loaded bool
+	Generation        uint64
+	Error             string
+	Pending           *nativeT3CodePreferences
+}
+
+func nativeT3CodePreferencesEqual(a, b nativeT3CodePreferences) bool {
+	a.Providers = append([]string(nil), a.Providers...)
+	b.Providers = append([]string(nil), b.Providers...)
+	sort.Strings(a.Providers)
+	sort.Strings(b.Providers)
+	if len(a.Providers) == 0 {
+		a.Providers = nil
+	}
+	if len(b.Providers) == 0 {
+		b.Providers = nil
+	}
+	return reflect.DeepEqual(a, b)
+}
+
+func validNativeT3CodePreferences(p nativeT3CodePreferences) bool {
+	return p.Version == 1 && (p.CodexModels == "official" || p.CodexModels == "shared") && (p.ClaudeModels == "official" || p.ClaudeModels == "shared") && (!p.OpenCode2 || helperContains(p.Providers, "opencode"))
+}
+
+func nativeT3CodePreferenceLibraryError(p nativeT3CodePreferences, library modelLibrary) error {
+	if len(library.Models) > 32 && (p.KiloCodex && p.CodexModels == "shared" || p.KiloClaude && p.ClaudeModels == "shared") {
+		return errors.New("T3 Code supports up to 32 shared models per account. Reduce your selection in Models or choose official models.")
+	}
+	return nil
+}
+
+func (u *nativeUI) t3CodePreferencesBusy() bool {
+	return u.busy["POST"+nativeT3CodePreferencesEndpoint]
+}
+
+func (u *nativeUI) refreshT3CodePreferences() {
+	u.refreshT3CodePreferencesAfter(nil)
+}
+
+func (u *nativeUI) refreshT3CodePreferencesAfter(done func(error)) {
+	finish := func(err error) {
+		if done != nil {
+			done(err)
+		}
+	}
+	s := &u.agentsState().T3Code.PreferencesState
+	if u.busy["GET"+nativeT3CodePreferencesEndpoint] || u.t3CodePreferencesBusy() {
+		finish(errors.New(u.tr("Wait for T3 Code settings to finish loading or saving.", "Espera a que terminen de cargarse o guardarse los ajustes de T3 Code.")))
+		return
+	}
+	s.Requested, s.Error = true, ""
+	s.Generation++
+	generation := s.Generation
+	u.clientRequest("GET", nativeT3CodePreferencesEndpoint, nil, func(raw json.RawMessage, err error) {
+		if s.Generation != generation {
+			finish(errors.New(u.launchSettingsChangedMessage()))
+			return
+		}
+		if err != nil {
+			s.Error = nativeMessage(err.Error(), u.language)
+			finish(err)
+			return
+		}
+		var response nativeT3CodePreferencesResponse
+		if json.Unmarshal(raw, &response) != nil || !validNativeT3CodePreferences(response.Preferences) {
+			s.Error = u.tr("Could not read T3 Code preferences. Refresh to try again.", "No se pudieron leer las preferencias de T3 Code. Actualiza para reintentarlo.")
+			finish(errors.New(s.Error))
+			return
+		}
+		s.nativeT3CodePreferencesResponse, s.Loaded = response, true
+		finish(nil)
+	})
+}
+
+func (u *nativeUI) saveT3CodePreferences(next nativeT3CodePreferences) {
+	t3 := &u.agentsState().T3Code
+	s := &t3.PreferencesState
+	if !s.Loaded || u.t3CodePreferencesBusy() || !validNativeT3CodePreferences(next) {
+		return
+	}
+	next.Providers = append([]string{}, next.Providers...)
+	s.Pending, s.Error = &next, ""
+	s.Generation++
+	generation := s.Generation
+	// Invalidate any profile read started before this settings operation.
+	t3.Generation++
+	t3.Info.Prepared = false
+	u.clientRequest("POST", nativeT3CodePreferencesEndpoint, next, func(raw json.RawMessage, err error) {
+		if s.Generation != generation {
+			return
+		}
+		if err != nil {
+			s.Error = nativeMessage(err.Error(), u.language)
+			return
+		}
+		var response nativeT3CodePreferencesResponse
+		if json.Unmarshal(raw, &response) != nil || !validNativeT3CodePreferences(response.Preferences) || !nativeT3CodePreferencesEqual(response.Preferences, next) {
+			s.Error = u.tr("T3 Code did not confirm the saved preferences. Refresh before preparing.", "T3 Code no confirmó las preferencias guardadas. Actualiza antes de preparar.")
+			return
+		}
+		s.nativeT3CodePreferencesResponse, s.Pending, s.Loaded = response, nil, true
+		s.RequiresPreparation = true
+		u.refreshT3CodeProfile()
+	})
+}
+
+func nativeT3CodeToggleProvider(p nativeT3CodePreferences, id string, enabled bool) nativeT3CodePreferences {
+	providers := []string{}
+	for _, existing := range p.Providers {
+		if existing != id {
+			providers = append(providers, existing)
+		}
+	}
+	if enabled {
+		providers = append(providers, id)
+	}
+	p.Providers = providers
+	if id == "opencode" && !enabled {
+		p.OpenCode2 = false
+	}
+	return p
+}
+
+func (u *nativeUI) t3CodePreferencesPanel() layout.Widget {
+	s := &u.agentsState().T3Code.PreferencesState
+	if !s.Requested {
+		u.refreshT3CodePreferences()
+	}
+	checking, saving := u.busy["GET"+nativeT3CodePreferencesEndpoint], u.t3CodePreferencesBusy()
+	ready := s.Loaded && !checking && !saving && s.Pending == nil
+	status := u.tr("Choose the accounts T3 offers. Changes save automatically.", "Elige las cuentas que ofrece T3. Los cambios se guardan solos.")
+	if checking || !s.Loaded {
+		status = u.tr("Loading T3 Code preferences…", "Cargando preferencias de T3 Code…")
+	}
+	if !checking && !s.Loaded && s.Error != "" {
+		status = u.tr("T3 Code preferences are unavailable.", "Las preferencias de T3 Code no están disponibles.")
+	}
+	if saving {
+		status = u.tr("Saving T3 Code preferences…", "Guardando preferencias de T3 Code…")
+	}
+	statusWidgets := []layout.Widget{u.note(status)}
+	if s.Error != "" {
+		statusWidgets = append(statusWidgets, u.message(nativeToneError, s.Error))
+		if s.Pending != nil {
+			statusWidgets = append(statusWidgets, u.note(u.tr("The change is not confirmed. Retry saving or reload the saved settings.", "El cambio no está confirmado. Reintenta el guardado o carga los ajustes guardados.")), u.disabled(!saving, u.button("t3-preferences:retry", u.tr("Retry saving", "Reintentar guardado"), func() {
+				if s.Pending != nil {
+					u.saveT3CodePreferences(*s.Pending)
+				}
+			})))
+		}
+	}
+	if s.RequiresPreparation {
+		statusWidgets = append(statusWidgets, u.hint(u.tr("Close T3 Code · Kilo and prepare it again to apply these settings. Your chats are kept.", "Cierra T3 Code · Kilo y prepara de nuevo para aplicar estos ajustes. Tus chats se conservan.")))
+	}
+	statusWidgets = append(statusWidgets, u.note(u.tr("These settings apply only to the separate Kilo workspace. Existing CLI logins and your regular T3 workspace are kept.", "Estos ajustes solo afectan al espacio Kilo separado. Se conservan las sesiones CLI y tu espacio T3 habitual.")))
+	rows := []layout.Widget{u.uxsRow(u.tr("Private workspace", "Espacio privado"), "", u.column(statusWidgets...), u.disabled(!saving && !checking, u.button("t3-preferences:refresh", u.tr("Reload settings", "Cargar ajustes"), func() { s.Pending = nil; u.refreshT3CodePreferences() })), nil)}
+	p := s.Preferences
+	if saving && s.Pending != nil {
+		p = *s.Pending
+	}
+	account := func(id, label, help string, on bool, set func(*nativeT3CodePreferences, bool)) layout.Widget {
+		return u.uxsRow(label, "", u.disabled(ready, u.uxsToggle("t3-preferences:"+id, label, help, on, func(value bool) { next := p; set(&next, value); u.saveT3CodePreferences(next) })), nil, nil)
+	}
+	rows = append(rows,
+		account("codex", "Codex", u.tr("Your existing Codex CLI session", "Tu sesión existente de Codex CLI"), p.Codex, func(p *nativeT3CodePreferences, v bool) { p.Codex = v }),
+		account("claude", "Claude", u.tr("Your existing Claude Code session", "Tu sesión existente de Claude Code"), p.Claude, func(p *nativeT3CodePreferences, v bool) { p.Claude = v }),
+		account("kilo-codex", "Kilo Proxy · Codex", u.tr("Models through Kilo Proxy", "Modelos a través de Kilo Proxy"), p.KiloCodex, func(p *nativeT3CodePreferences, v bool) { p.KiloCodex = v }),
+		u.uxsRow(u.tr("Codex Kilo models", "Modelos de Codex Kilo"), "", u.uxsRadioList("t3-preferences:codex-models:", []nativeChoice{{Value: "official", Label: u.tr("OpenAI and ChatGPT", "OpenAI y ChatGPT")}, {Value: "shared", Label: u.tr("All shared models", "Todos los modelos compartidos")}}, p.CodexModels, ready && p.KiloCodex, func(value string) { next := p; next.CodexModels = value; u.saveT3CodePreferences(next) }), nil, nil),
+		account("kilo-claude", "Kilo Proxy · Claude", u.tr("Models through Kilo Proxy", "Modelos a través de Kilo Proxy"), p.KiloClaude, func(p *nativeT3CodePreferences, v bool) { p.KiloClaude = v }),
+		u.uxsRow(u.tr("Claude Kilo models", "Modelos de Claude Kilo"), "", u.uxsRadioList("t3-preferences:claude-models:", []nativeChoice{{Value: "official", Label: u.tr("Opus 5.5, Sonnet 5.5 and Fable 5.1", "Opus 5.5, Sonnet 5.5 y Fable 5.1")}, {Value: "shared", Label: u.tr("All shared models", "Todos los modelos compartidos")}}, p.ClaudeModels, ready && p.KiloClaude, func(value string) { next := p; next.ClaudeModels = value; u.saveT3CodePreferences(next) }), nil, u.note(u.tr("Choose reasoning in T3 for its native Claude models. Shared models depend on the installed driver and provider.", "Elige el razonamiento en T3 para sus modelos nativos de Claude. Los modelos compartidos dependen del driver y proveedor instalados."))),
+	)
+	for _, provider := range nativeT3CodeProviderChoices(p, s.SupportedProviders) {
+		id, label := provider.ID, strings.TrimSpace(provider.Label)
+		if id == "" || label == "" {
+			continue
+		}
+		help := u.tr("Uses this provider's own installation and login", "Usa la instalación y sesión propias de este proveedor")
+		if !provider.Supported {
+			label += u.tr(" · unavailable in this build", " · no disponible en esta compilación")
+			help = u.tr("Turn off this saved choice or install a compatible T3 build before preparing.", "Desactiva esta selección guardada o instala una compilación T3 compatible antes de preparar.")
+		}
+		rows = append(rows, account("provider:"+id, label, help, helperContains(p.Providers, id), func(p *nativeT3CodePreferences, enabled bool) {
+			if provider.Supported || !enabled {
+				*p = nativeT3CodeToggleProvider(*p, id, enabled)
+			}
+		}))
+		if id == "opencode" && (s.OpenCode2Supported || p.OpenCode2) {
+			choose := func(value string) {
+				if value == "2" && !s.OpenCode2Supported {
+					return
+				}
+				next := p
+				next.OpenCode2 = value == "2"
+				u.saveT3CodePreferences(next)
+			}
+			version := u.uxsRadioList("t3-preferences:opencode-version:", []nativeChoice{{Value: "1", Label: "OpenCode 1"}, {Value: "2", Label: "OpenCode 2"}}, map[bool]string{false: "1", true: "2"}[p.OpenCode2], ready && helperContains(p.Providers, id), choose)
+			versionHelp := u.tr("Choose one version for this account. OpenCode 2 requires 2.0.18 or newer; both versions are never started together with the same profile.", "Elige una versión para esta cuenta. OpenCode 2 requiere 2.0.18 o posterior; nunca se abren ambas versiones a la vez con el mismo perfil.")
+			if !s.OpenCode2Supported {
+				version = u.column(u.uxsRadio("t3-preferences:opencode-version:1", nativeChoice{Value: "1", Label: "OpenCode 1"}, false, ready, choose), u.uxsRadio("t3-preferences:opencode-version:2", nativeChoice{Value: "2", Label: "OpenCode 2"}, true, false, nil))
+				versionHelp = u.tr("This T3 build cannot use the saved OpenCode 2 choice. Choose OpenCode 1, disable OpenCode or install a compatible T3 build.", "Esta compilación de T3 no admite la selección guardada de OpenCode 2. Elige OpenCode 1, desactiva OpenCode o instala una compilación T3 compatible.")
+			}
+			rows = append(rows, u.uxsRow(u.tr("OpenCode version", "Versión de OpenCode"), "", version, nil, u.note(versionHelp)))
+		}
+	}
+	if s.Loaded && len(s.SupportedProviders) == 0 {
+		rows = append(rows, u.uxsRow(u.tr("Other providers", "Otros proveedores"), "", u.note(u.tr("This T3 build does not expose additional compatible providers.", "Esta compilación de T3 no ofrece proveedores compatibles adicionales.")), nil, nil))
+	}
+	return u.uxsBlock("T3 Code", u.tr("Accounts and models", "Cuentas y modelos"), rows...)
+}

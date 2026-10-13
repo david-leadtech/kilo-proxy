@@ -83,7 +83,7 @@ func TestNativeT3CodeWideCardAndIntegrationSettings(t *testing.T) {
 			for _, node := range h.nodes() {
 				labels += node.Desc.Label + "\n"
 			}
-			for _, expected := range []string{"Codex · Normal", u.tr("Existing Codex CLI login", "Sesión existente de Codex CLI"), "Claude · Normal", u.tr("Existing Claude Code login", "Sesión existente de Claude Code"), "Kilo Proxy · Codex", "Kilo Proxy · Claude", u.tr("green KP badge", "insignia verde KP"), u.tr("Choose one of these four options for each new chat.", "Elige una de estas cuatro opciones para cada chat nuevo."), u.tr("Preparation hides the built-in Claude entries", "La preparación oculta las entradas de Claude incluidas en T3"), u.tr("check the selected model before continuing", "revisa el modelo elegido antes de continuar")} {
+			for _, expected := range []string{u.tr("Accounts and models", "Cuentas y modelos"), u.tr("T3 Code settings", "Ajustes de T3 Code"), u.tr("Choose which accounts and models T3 offers in Kilo Settings.", "Elige qué cuentas y modelos ofrece T3 en Ajustes de Kilo."), u.tr("green KP badge", "insignia verde KP"), u.tr("Opus 5.5, Sonnet 5.5 and Fable 5.1", "Opus 5.5, Sonnet 5.5 y Fable 5.1"), u.tr("native reasoning selector", "selector nativo de razonamiento"), u.tr("check the selected account and model", "revisa la cuenta y el modelo elegidos")} {
 				if !strings.Contains(labels, expected) {
 					t.Fatalf("missing agent guidance: %q", expected)
 				}
@@ -97,15 +97,17 @@ func TestNativeT3CodeWideCardAndIntegrationSettings(t *testing.T) {
 }
 
 func TestNativeT3CodePreparationFailureAndEditsNeverLaunch(t *testing.T) {
-	for _, failure := range []string{"prepare", "library", "connection"} {
+	for _, failure := range []string{"prepare", "library", "connection", "preferences"} {
 		t.Run(failure, func(t *testing.T) {
 			u, recorder := nativeLaunchTestUI(t, "t3-code", true, failure == "prepare")
 			before := append([]modelLibraryItem(nil), u.modelLibraryValue().Models...)
 			u.launchAgent("t3-code")
-			<-recorder.entered
+			nativeTestWait(t, u, func() bool { return recorder.prepares.Load() == 1 })
 			switch failure {
 			case "library":
 				u.setValue(nativeClientField(sharedModelKey, "vendor/one", "name"), "Changed during preparation")
+			case "preferences":
+				u.agentsState().T3Code.PreferencesState.Preferences.Codex = false
 			case "connection":
 				u.owner.mu.Lock()
 				u.owner.config.OrgID = "changed-team"

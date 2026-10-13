@@ -14,6 +14,7 @@ import (
 func launchTestApp(t *testing.T) *app {
 	t.Helper()
 	a := testApp(t)
+	a.openCodeVersionProbe = func(string) (string, error) { return "1.19.0", nil }
 	home := t.TempDir()
 	a.config.Port = 0
 	a.apiKey = "synthetic-kilo"

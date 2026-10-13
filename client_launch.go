@@ -40,7 +40,7 @@ type clientLaunchAvailability struct {
 	InstallURL string `json:"installURL,omitempty"`
 }
 
-var launchClients = []string{"codex", "claude-desktop", "codex-cli", "claude", "opencode", "omp", "open-design", "openmausbot", "t3-code", "synara", "zed", "xcode-chat", "xcode-codex", "xcode-claude"}
+var launchClients = []string{"codex", "claude-desktop", "codex-cli", "claude", "opencode", "opencode2", "omp", "open-design", "openmausbot", "t3-code", "synara", "zed", "xcode-chat", "xcode-codex", "xcode-claude"}
 
 func clientLaunchUsesProject(client string) bool {
 	return client != "codex" && client != "claude-desktop" && client != "open-design" && client != "openmausbot" && client != "t3-code" && client != "synara"
@@ -58,6 +58,8 @@ func launchClientIdentity(id string) (string, string) {
 		return "Claude Code", "terminal"
 	case "opencode":
 		return "OpenCode", "terminal"
+	case "opencode2":
+		return "OpenCode 2", "terminal"
 	case "omp":
 		return "Oh My Pi", "terminal"
 	case "open-design":
@@ -115,6 +117,38 @@ func (a *app) launchRuntime() clientLaunchRuntime {
 			rt.start = x.start
 		}
 	}
+	resolve := rt.resolve
+	rt.resolve = func(client, custom string) (string, error) {
+		if custom == "" && (client == "codex-cli" || client == "claude") {
+			if path := a.cliExecutable(client); path != "" {
+				if err := a.validateSelectedClientExecutable(client, path); err != nil {
+					return "", err
+				}
+				if client == "codex-cli" {
+					// Resolve only this npm installation's native dependency. An
+					// unrelated Desktop bundle must never replace an explicit CLI.
+					native, err := resolveOpenDesignCodex(path, rt.platform, runtime.GOARCH, nil)
+					if err != nil {
+						return "", err
+					}
+					if err := a.validateSelectedClientExecutable(client, native); err != nil {
+						return "", err
+					}
+					return native, nil
+				}
+				return path, nil
+			}
+		}
+		if custom == "" && (client == "opencode" || client == "opencode2") {
+			if path := a.openCodeExecutable(client); path != "" {
+				if err := a.validateSelectedClientExecutable(client, path); err != nil {
+					return "", err
+				}
+				return path, nil
+			}
+		}
+		return resolve(client, custom)
+	}
 	return rt
 }
 func (a *app) clientsLaunch(w http.ResponseWriter, r *http.Request) {
@@ -133,6 +167,15 @@ func (a *app) clientsLaunch(w http.ResponseWriter, r *http.Request) {
 				info.Path = path
 				info.Installed = true
 				info.Available = true
+				if id == "opencode2" {
+					// A fallback command named opencode can still be major 1.
+					// Verify only on explicit discovery, not in path resolution or
+					// the per-request T3 readiness fingerprint.
+					if err := a.checkOpenCodeVersion(path, 2); err != nil {
+						info.Installed, info.Available = false, false
+						info.Reason = err.Error()
+					}
+				}
 				if id == "open-design" {
 					if err := openDesignCompatibility(path, rt.platform); err != nil {
 						info.Available = false
@@ -146,7 +189,10 @@ func (a *app) clientsLaunch(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 				if id == "t3-code" {
-					if err := a.t3CodeAvailability(path, rt); err != nil {
+					a.mu.Lock()
+					prefs := normalizeT3CodePreferences(a.config.T3Code)
+					a.mu.Unlock()
+					if err := a.t3CodeAvailability(path, rt, prefs); err != nil {
 						info.Available = false
 						info.Reason = err.Error()
 					}
@@ -191,10 +237,16 @@ func (a *app) clientsLaunch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err = a.start(); err != nil {
+		if input.Client == "t3-code" {
+			a.closeT3CodeAssets()
+		}
 		a.writeProxyStartError(w, err)
 		return
 	}
 	if err = rt.start(plan); err != nil {
+		if input.Client == "t3-code" {
+			a.closeT3CodeAssets()
+		}
 		// Process errors can contain arguments or environment values. Keep them out of API responses and logs.
 		message := "Could not open " + plan.Name + ". Check that the application and a terminal are available, then try again."
 		if plan.Kind == "desktop" {
@@ -223,7 +275,7 @@ func (a *app) clientsLaunch(w http.ResponseWriter, r *http.Request) {
 		a.mu.Unlock()
 	}
 	if input.Client == "t3-code" {
-		message = "T3 Code opened with four agents in its separate Kilo workspace."
+		message = "T3 Code opened with your selected providers in its separate Kilo workspace."
 		a.mu.Lock()
 		a.t3CodeLaunchUntil = time.Now().Add(30 * time.Second)
 		a.mu.Unlock()

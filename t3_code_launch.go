@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -113,15 +113,23 @@ func t3CodeBundleExecutable(bundle string) string {
 	return managedToolBundleExecutable(bundle)
 }
 
-func (a *app) t3CodeAvailability(executable string, rt clientLaunchRuntime) error {
+func (a *app) t3CodeAvailability(executable string, rt clientLaunchRuntime, preferences ...t3CodePreferences) error {
+	prefs := normalizeT3CodePreferences(t3CodePreferences{})
+	if len(preferences) > 0 {
+		prefs = normalizeT3CodePreferences(preferences[0])
+	}
 	if err := t3CodeCompatibility(executable, rt.platform); err != nil {
 		return err
 	}
-	if _, err := resolveOpenDesignCLI("codex-cli", rt); err != nil {
-		return errors.New("Install a native Codex CLI executable before preparing T3 Code.")
+	if prefs.Codex || prefs.KiloCodex {
+		if _, err := resolveOpenDesignCLI("codex-cli", rt); err != nil {
+			return errors.New("Install a native Codex CLI executable before preparing T3 Code, or disable its T3 connections in Kilo Settings.")
+		}
 	}
-	if _, err := rt.resolve("claude", ""); err != nil {
-		return errors.New("Install Claude Code CLI before preparing T3 Code. Claude Desktop is a separate application.")
+	if prefs.Claude || prefs.KiloClaude {
+		if _, err := rt.resolve("claude", ""); err != nil {
+			return errors.New("Install Claude Code CLI before preparing T3 Code, or disable its T3 connections in Kilo Settings. Claude Desktop is a separate application.")
+		}
 	}
 	return nil
 }
@@ -174,13 +182,20 @@ func t3CodeUnsetEnvironment(parent []string) []string {
 }
 
 func (a *app) t3CodeClaudeCapabilities(executable string, rt clientLaunchRuntime) claudeCapabilities {
+	if a.t3CodeProbeClaude != nil {
+		return a.t3CodeProbeClaude(executable, rt)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, executable, "--version")
-	hideOpenDesignProbeWindow(command)
 	paths := t3CodePaths(a.dir)
-	command.Env = clientChildEnvironment(os.Environ(), map[string]string{"HOME": paths.UIHome, "USERPROFILE": paths.UIHome, "CLAUDE_CONFIG_DIR": filepath.Join(paths.Root, "profiles", "claude-kilo")}, t3CodeUnsetEnvironment(os.Environ()), rt.platform)
+	environment := clientChildEnvironment(os.Environ(), map[string]string{"HOME": paths.UIHome, "USERPROFILE": paths.UIHome, "CLAUDE_CONFIG_DIR": filepath.Join(paths.Root, "profiles", "claude-kilo")}, t3CodeUnsetEnvironment(os.Environ()), rt.platform)
+	command, cleanup, err := managedToolProbeCommand(ctx, executable, environment)
+	if err != nil {
+		return claudeCapabilities{}
+	}
+	defer cleanup()
 	command.Dir = paths.UIHome
+	command.WaitDelay = time.Second
 	output := &openDesignLimitedOutput{limit: 256}
 	command.Stdout = output
 	if err := command.Run(); err != nil || output.exceeded {
@@ -190,13 +205,23 @@ func (a *app) t3CodeClaudeCapabilities(executable string, rt clientLaunchRuntime
 }
 
 func (a *app) applyT3CodeLaunch(plan *clientLaunchPlan, rt clientLaunchRuntime) error {
+	original := plan.Executable
 	saved, err := a.readT3CodePrepared()
 	if err != nil || !a.t3CodeReady(saved, plan.Executable, rt) {
 		return errors.New("Prepare T3 Code again: its private profiles or proxy connection changed.")
 	}
+	if len(saved.ClaudeRoutes) > 0 {
+		claude, err := rt.resolve("claude", "")
+		if err != nil {
+			return err
+		}
+		if err := validateT3CodeNativeClaudeVersion(saved.ClaudeLibrary, a.t3CodeClaudeCapabilities(claude, rt)); err != nil {
+			return err
+		}
+	}
 	if saved.ClaudeModelDefaults {
 		var caps *claudeCapabilities
-		for _, model := range saved.Library.Models {
+		for _, model := range saved.ClaudeLibrary.Models {
 			if model.ReasoningEffort == "" || !validClaudeEffort(model.ID, model.ReasoningEffort) {
 				continue
 			}
@@ -252,6 +277,28 @@ func (a *app) applyT3CodeLaunch(plan *clientLaunchPlan, rt clientLaunchRuntime) 
 			plan.Executable = binary
 		}
 	}
+	if !t3CodeRuntimeReady(saved.Runtime, original, rt.platform) {
+		return errors.New("Prepare T3 Code again: its private interface or installed assets changed.")
+	}
+	installation, err := inspectT3CodeInstallation(original, rt.platform)
+	if err != nil {
+		return err
+	}
+	if _, err := planT3CodeOptionalProviders(saved.Preferences, installation, rt, paths.Root); err != nil {
+		return err
+	}
+	assets, err := startT3CodeRuntimeAssets(saved.Runtime)
+	if err != nil {
+		return err
+	}
+	if a.t3CodeAssets != nil {
+		a.t3CodeAssets.Close()
+	}
+	a.t3CodeAssets = assets
+	plan.Env["VITE_DEV_SERVER_URL"] = assets.URL
+	plan.Env["T3CODE_PORT"] = strconv.Itoa(assets.BackendPort)
+	plan.Env["T3CODE_HOST"] = "127.0.0.1"
+	go assets.closeOnQuit(a.quit)
 	plan.Directory = rt.home
 	return nil
 }

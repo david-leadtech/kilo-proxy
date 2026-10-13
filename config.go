@@ -31,6 +31,12 @@ func (systemVault) Delete(account string) error {
 
 // Only the local proxy key is stored here. The upstream API key never enters this file.
 type settings struct {
+	CodexCLIExecutable              string                  `json:"codexCLIExecutable,omitempty"`
+	ClaudeCodeExecutable            string                  `json:"claudeCodeExecutable,omitempty"`
+	OpenCodeMajor                   int                     `json:"openCodeMajor,omitempty"`
+	OpenCode1Executable             string                  `json:"openCode1Executable,omitempty"`
+	OpenCode2Executable             string                  `json:"openCode2Executable,omitempty"`
+	T3Code                          t3CodePreferences       `json:"t3Code"`
 	ClaudeDesktopExperimentalModels bool                    `json:"claudeDesktopExperimentalModels,omitempty"`
 	ImageTransport                  imageTransportSettings  `json:"imageTransport"`
 	CaptureActivity                 bool                    `json:"captureActivity"`
@@ -46,7 +52,7 @@ type settings struct {
 }
 
 func readSettings(dir string) (settings, error) {
-	s := settings{Port: 8877, LocalKey: randomKey("kl_local_"), VaultID: randomKey("profile_"), TrayDisplay: trayDisplayIcon, ImageTransport: normalizeImageTransportSettings(imageTransportSettings{})}
+	s := settings{T3Code: normalizeT3CodePreferences(t3CodePreferences{}), Port: 8877, LocalKey: randomKey("kl_local_"), VaultID: randomKey("profile_"), TrayDisplay: trayDisplayIcon, ImageTransport: normalizeImageTransportSettings(imageTransportSettings{})}
 	b, err := os.ReadFile(filepath.Join(dir, "settings.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
@@ -57,8 +63,21 @@ func readSettings(dir string) (settings, error) {
 	if err := json.Unmarshal(b, &s); err != nil {
 		return s, err
 	}
+	if s.OpenCodeMajor != 0 && s.OpenCodeMajor != 1 && s.OpenCodeMajor != 2 {
+		return s, errors.New("invalid OpenCode version preference")
+	}
+	if validateOpenCodeExecutable(s.OpenCode1Executable) != nil || validateOpenCodeExecutable(s.OpenCode2Executable) != nil {
+		return s, errors.New("invalid OpenCode executable preference")
+	}
+	if validateCLIExecutable(s.CodexCLIExecutable) != nil || validateCLIExecutable(s.ClaudeCodeExecutable) != nil {
+		return s, errors.New("Invalid CLI executable preferences.")
+	}
 	s.TrayDisplay = normalizeTrayDisplay(s.TrayDisplay)
 	s.ImageTransport = normalizeImageTransportSettings(s.ImageTransport)
+	s.T3Code = normalizeT3CodePreferences(s.T3Code)
+	if err := validateT3CodePreferences(s.T3Code); err != nil {
+		return s, errors.New("invalid T3 Code settings; restore a valid configuration")
+	}
 	if err := validateImageTransportSettings(s.ImageTransport); err != nil {
 		return s, errors.New("invalid image transport settings; restore a valid configuration")
 	}

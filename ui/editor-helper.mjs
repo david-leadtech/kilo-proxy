@@ -41,6 +41,7 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
  const launch=()=>ctx.client==='omp'?ompLaunch(s().profileDir,s().initial,$('editor-shell').value):editorLaunch(s().path,s().initial,$('editor-shell').value);
  const fingerprint=()=>JSON.stringify([ctx.client,contextPreview(payload),ctx.state?.baseURL,ctx.state?.zedBaseURL,ctx.state?.localKey,ctx.client==='omp'?ctx.state?.imageGeneration:null,ctx.client==='claude-desktop'?desktopExperimental:null]);
  const prepared=()=>s().saved===fingerprint();
+ const externallyBlocked=()=>ctx.client==='opencode'&&ctx.opencodeBlocked?.()===true;
  const selectionError=()=>ctx.client==='claude-desktop'?'':contextError(s().models);
  function controls(){
   const invalid=selectionError();
@@ -65,7 +66,7 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
   $('claude-desktop-experimental').disabled=working||!desktopLibraryLoaded||ctx.state?.chatgpt?.connected===true;
   if(ctx.state?.chatgpt?.connected===true)$('claude-desktop-experimental-label').textContent=L('Experimental aliases required for ChatGPT (Kilo preference preserved)','Alias experimentales necesarios para ChatGPT (se conserva la preferencia de Kilo)');
   configureModelSort($('editor-sort'),ctx.language);
-  $('editor-save').disabled=working||!s().models.size||!ctx.state||!!invalid;
+  $('editor-save').disabled=working||externallyBlocked()||!s().models.size||!ctx.state||!!invalid;
   $('editor-load').disabled=working;$('editor-refresh').disabled=working;$('editor-add').disabled=working||desktop&&!claudeDesktopModelAllowed($('editor-id').value.trim(),desktopExperimental);
   $('editor-id').placeholder=desktop&&!desktopExperimental?'anthropic/claude-sonnet-4.6':'provider/model';
   $('editor-copy').disabled=working||!prepared();$('editor-export').disabled=!s().models.size||!!invalid;
@@ -176,9 +177,10 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
   }catch(error){notify(error.message,true)}finally{desktopPending=null;working=false;render(ctx,true)}
  });
  async function prepare(){
+  if(externallyBlocked())throw new Error(L('Wait for the OpenCode version choice to finish saving.','Espera a que termine de guardarse la versión de OpenCode.'));
   if(working)throw new Error(L('This editor is already being prepared.','Este editor ya se está preparando.'));
   const client=ctx.client,selection=s(),fp=fingerprint(),body=payload();working=true;render(ctx);
-  try{const result=await api(endpoint(client),body);selection.path=result.configPath;selection.profileDir=result.profileDir;selection.saved=fp;notify(()=>L('Editor configuration saved.','Configuración del editor guardada.'))}finally{working=false;render(ctx)}
+  try{if(client==='opencode'){const prefs=await api('clients/opencode/preferences');if(prefs.version!==1||prefs.major!==1)throw new Error(L('Choose OpenCode 1 before preparing this profile.','Elige OpenCode 1 antes de preparar este perfil.'));}const result=await api(endpoint(client),body);selection.path=result.configPath;selection.profileDir=result.profileDir;selection.saved=fp;notify(()=>L('Editor configuration saved.','Configuración del editor guardada.'))}finally{working=false;render(ctx)}
  }
  $('editor-save').addEventListener('click',()=>prepare().catch(e=>notify(e.message,true)));
  $('editor-load').addEventListener('click',async()=>{
