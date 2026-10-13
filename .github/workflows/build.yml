@@ -229,6 +229,9 @@ jobs:
           - runner: macos-latest
             system: darwin
             arch: arm64
+            # The complete race suite can exceed the default 10m package budget.
+            test_timeout: 20m
+            job_timeout: 30
           - runner: macos-15-intel
             system: darwin
             arch: amd64
