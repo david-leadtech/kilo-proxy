@@ -9,15 +9,62 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 )
 
+// Keep the normal launch deadline and process boundary. Capture the outstanding
+// stage if a platform stalls, and save completed timings with CI screenshots.
+func nativeOpenDesignLaunchDiagnostics(t *testing.T, u *nativeUI, r *nativeLaunchRecorder, engine string, started time.Time) {
+	t.Helper()
+	busy := make([]string, 0, len(u.busy))
+	for request, active := range u.busy {
+		if active {
+			busy = append(busy, request)
+		}
+	}
+	sort.Strings(busy)
+	report := struct {
+		Engine         string                      `json:"engine"`
+		Elapsed        string                      `json:"elapsed"`
+		Failed         bool                        `json:"failed"`
+		Phase          string                      `json:"phase"`
+		Launching      string                      `json:"launching"`
+		Busy           []string                    `json:"busy"`
+		Prepares       int32                       `json:"prepares"`
+		LaunchRequests int32                       `json:"launchRequests"`
+		Requests       []nativeLaunchRequestTiming `json:"requests"`
+	}{engine, time.Since(started).String(), t.Failed(), u.agentsState().Phase, u.clientState().Launching, busy, r.prepares.Load(), r.launchRequests.Load(), r.requestTimings()}
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if t.Failed() {
+		t.Logf("OpenDesign launch diagnostics: %s", data)
+		stack := make([]byte, 1<<20)
+		n := runtime.Stack(stack, true)
+		t.Logf("OpenDesign goroutines at launch failure (truncated=%v):\n%s", n == len(stack), stack[:n])
+	}
+	if directory := os.Getenv("KILO_NATIVE_SCREENSHOTS"); directory != "" {
+		if err := os.MkdirAll(directory, 0700); err != nil {
+			t.Error(err)
+			return
+		}
+		path := filepath.Join(directory, "native-open-design-launch-"+engine+"-timing.json")
+		if err := os.WriteFile(path, append(data, '\n'), 0600); err != nil {
+			t.Error(err)
+		}
+	}
+}
+
 func TestNativeOpenDesignLaunchPreparesSelectedEngineAndStartsProxy(t *testing.T) {
 	for _, engine := range []string{"codex-cli", "claude", "opencode"} {
 		t.Run(engine, func(t *testing.T) {
 			u, r := nativeLaunchTestUI(t, "open-design", false, false)
+			defer nativeOpenDesignLaunchDiagnostics(t, u, r, engine, time.Now())
 			label := "Codex CLI"
 			if engine == "claude" {
 				label = "Claude Code"
