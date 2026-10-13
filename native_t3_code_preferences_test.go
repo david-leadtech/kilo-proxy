@@ -120,7 +120,12 @@ func newNativeT3PreferencesFixture(t *testing.T, language string) *nativeT3Prefe
 	t.Cleanup(server.Close)
 	f.h = &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 1000), now: time.Now()}
 	f.h.frame()
-	nativeTestWait(t, u, func() bool { return u.agentsState().T3Code.PreferencesState.Loaded })
+	// Opening the harness starts profile and preference reads together. Finish
+	// both before a test installs its own held profile response.
+	nativeTestWait(t, u, func() bool {
+		state := &u.agentsState().T3Code
+		return state.PreferencesState.Loaded && state.Loaded && !u.busy["GET/api/clients/t3-code"]
+	})
 	f.h.frame()
 	return f
 }
