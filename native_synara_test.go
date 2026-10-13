@@ -58,6 +58,8 @@ func TestNativeSynaraWideCardAndIntegrationSettings(t *testing.T) {
 			u.setValue(agentProjectField("synara"), "/does-not-exist/ignored")
 			h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 2200), now: time.Now()}
 			h.frame()
+			nativeTestWait(t, u, func() bool { return u.agentsState().T3Code.PreferencesState.Loaded })
+			h.frame()
 			codex := h.target(u.tr("Open Codex", "Abrir Codex"), semantic.Button).Desc.Bounds
 			t3 := h.target(u.tr("Open T3 Code", "Abrir T3 Code"), semantic.Button).Desc.Bounds
 			synara := h.target(u.tr("Open Synara", "Abrir Synara"), semantic.Button).Desc.Bounds

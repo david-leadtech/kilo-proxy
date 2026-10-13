@@ -42,7 +42,7 @@ func TestTerminalPowerShellAPIsAndProfileInstallation(t *testing.T) {
 	}
 	manualResponse := adminRequest(a, "terminal/manual", "")
 	var manual terminalManualResult
-	if manualResponse.Code != http.StatusOK || json.Unmarshal(manualResponse.Body.Bytes(), &manual) != nil || !manual.Supported || manual.Shell != "powershell" || len(manual.Commands) != 4 {
+	if manualResponse.Code != http.StatusOK || json.Unmarshal(manualResponse.Body.Bytes(), &manual) != nil || !manual.Supported || manual.Shell != "powershell" || len(manual.Commands) != 5 {
 		t.Fatal("invalid Windows manual response", manualResponse.Body.String())
 	}
 	if !strings.Contains(manual.All, "--encoded-args") || !strings.Contains(manual.All, "UseShellExecute = $false") || !strings.Contains(manual.All, "WaitForExit()") || strings.Contains(manual.All, "Set-ExecutionPolicy") {
@@ -67,7 +67,7 @@ func TestTerminalPowerShellAPIsAndProfileInstallation(t *testing.T) {
 		t.Fatal("unexpected PowerShell installation status", before)
 	}
 	installed := read("{}")
-	if !installed.Installed || !installed.PathConfigured || len(installed.Backups) != 2 || len(installed.Commands) != 4 {
+	if !installed.Installed || !installed.PathConfigured || len(installed.Backups) != 2 || len(installed.Commands) != 5 {
 		t.Fatal("PowerShell installation incomplete", installed)
 	}
 	for name, command := range installed.Commands {
@@ -138,7 +138,7 @@ func TestTerminalPowerShellPreservesProfileEncodings(t *testing.T) {
 }
 
 func TestTerminalPowerShellPreflightProtectsAllProfiles(t *testing.T) {
-	for _, conflict := range []string{"unowned function", "unowned alias", "signed", "broken markers", "duplicate markers", "profile link", "directory link", "invalid path"} {
+	for _, conflict := range []string{"unowned function", "unowned alias", "muse function", "muse alias", "signed", "broken markers", "duplicate markers", "profile link", "directory link", "invalid path"} {
 		t.Run(conflict, func(t *testing.T) {
 			a, profiles := terminalPowerShellFixture(t)
 			if err := os.MkdirAll(filepath.Dir(profiles[0]), 0700); err != nil {
@@ -158,7 +158,7 @@ func TestTerminalPowerShellPreflightProtectsAllProfiles(t *testing.T) {
 				if err := os.MkdirAll(filepath.Dir(profiles[1]), 0700); err != nil {
 					t.Fatal(err)
 				}
-				contents := map[string]string{"unowned function": "function global:kilo-codex { 'mine' }\n", "unowned alias": "Set-Alias -Name kilo-claude -Value other\n", "signed": "# SIG # Begin signature block\n", "broken markers": terminalPathBegin + "\n", "duplicate markers": terminalPathBegin + "\n" + terminalPathBegin + "\n" + terminalPathEnd + "\n"}
+				contents := map[string]string{"muse function": "function kilo-muse { 'mine' }\n", "muse alias": "Set-Alias -Name kilo-muse -Value other\n", "unowned function": "function global:kilo-codex { 'mine' }\n", "unowned alias": "Set-Alias -Name kilo-claude -Value other\n", "signed": "# SIG # Begin signature block\n", "broken markers": terminalPathBegin + "\n", "duplicate markers": terminalPathBegin + "\n" + terminalPathBegin + "\n" + terminalPathEnd + "\n"}
 				if conflict == "profile link" {
 					if err := os.Symlink(filepath.Join(t.TempDir(), "outside"), profiles[1]); err != nil {
 						t.Skip(err)
@@ -306,7 +306,7 @@ func main(){
 		t.Fatal(err)
 	}
 	for _, shell := range shells {
-		for name, client := range map[string]string{"kilo-codex": "codex-cli", "kilo-claude": "claude", "kilo-omp": "omp", "kilo-opencode": "opencode"} {
+		for name, client := range map[string]string{"kilo-codex": "codex-cli", "kilo-claude": "claude", "kilo-omp": "omp", "kilo-opencode": "opencode", "kilo-muse": "muse"} {
 			args := []string{"run", "", `one"two`, `tail\`, "with spaces", "$(literal)", "é😀", "--config-dir", "literal"}
 			if client == "claude" {
 				args = []string{}

@@ -1,28 +1,28 @@
 # Terminal commands
 
-`kilo-codex`, `kilo-claude`, `kilo-opencode` and `kilo-omp` launch your installed Codex CLI, Claude Code, OpenCode or Oh My Pi through Kilo Proxy in the terminal and project folder you are already using. These commands are available on macOS, Linux and Windows (PowerShell).
+`kilo-codex`, `kilo-claude`, `kilo-opencode` and `kilo-omp` launch your installed Codex CLI, Claude Code, OpenCode or Oh My Pi through Kilo Proxy in the terminal and project folder you are already using. `kilo-muse` opens Muse Code with its own Meta login and official models, without the Kilo gateway. These commands are available on macOS, Linux and Windows (PowerShell).
 
 ## Install once
 
-1. Open Kilo Proxy, save your account and organization under **Settings**, and choose your shared library in **Models**. Install the CLI you want to use separately: Codex CLI, Claude Code, OpenCode or Oh My Pi (`omp`).
-2. Open **Settings → Terminal commands** and click **Install terminal commands** on macOS/Linux or **Install PowerShell functions** on Windows. The Codex CLI, Claude Code, OpenCode and Oh My Pi cards also link here from the **Terminal commands** row on that harness's settings page (**Open in Settings**).
+1. Open Kilo Proxy and install the CLI you want to use. For Codex CLI, Claude Code, OpenCode or Oh My Pi (`omp`), save your Kilo account and organization under **Settings** and choose your shared library in **Models**. Muse Code uses its own login and catalog; it does not require that Kilo connection or shared library.
+2. Open **Settings → Terminal commands** and click **Install terminal commands** on macOS/Linux or **Install PowerShell functions** on Windows. The Codex CLI, Claude Code, OpenCode, Oh My Pi and Muse Code cards also link here from the **Terminal commands** row on that harness's settings page (**Open in Settings**).
 3. Open a new terminal so it reads the updated shell configuration. Change to your project folder and run the command for your installed CLI.
 
-On macOS/Linux, the installer writes all four commands into `~/.local/bin` for your user. It requires zsh, bash or fish as your login shell and manages a marked PATH block in that shell's startup files. You can install the commands even if you only use one of those agents. Settings shows the install location and startup files. Existing shell settings outside the marked block are preserved.
+On macOS/Linux, the installer writes all five commands into `~/.local/bin` for your user. It requires zsh, bash or fish as your login shell and manages a marked PATH block in that shell's startup files. You can install the commands even if you only use one of those agents. Settings shows the install location and startup files. Existing shell settings outside the marked block are preserved.
 
 On Windows, the installer adds a marked block of functions to the **CurrentUserAllHosts** profile of each detected PowerShell edition (Windows PowerShell 5.1 and PowerShell 7). It queries the shell's actual profile path, including redirected Documents/OneDrive folders, without loading your profiles. Settings shows those paths. Existing profile content and encoding are preserved, with backups when existing files change. There is no PATH or execution-policy change. Profiles must be allowed by your existing policy; signed profiles require manual editing and re-signing. These functions are for PowerShell, including PowerShell in Windows Terminal, rather than Command Prompt.
 
 **Update terminal commands** (or **Update PowerShell functions**) refreshes the managed commands after an application update or move. **Check installation** refreshes their status. Existing unrelated files or detected PowerShell definitions with the same names are not replaced.
 
-If you installed terminal commands before `kilo-opencode` was available, click **Install terminal commands** again to add it; complete installations show **Update terminal commands** instead. Installing a newer Kilo Proxy build alone does not create the new wrapper.
+If you installed terminal commands before `kilo-muse` was available, click **Install terminal commands** again to add it; complete installations show **Update terminal commands** instead. Installing a newer Kilo Proxy build alone does not create the new wrapper.
 
 ## Set up Zsh or Bash manually
 
-If you prefer to edit your shell configuration, open **Settings → Terminal commands → Manual setup · Zsh / Bash**. Copy the function for any of `kilo-codex`, `kilo-claude`, `kilo-opencode` or `kilo-omp`, or use **Copy all**.
+If you prefer to edit your shell configuration, open **Settings → Terminal commands → Manual setup · Zsh / Bash**. Copy the function for any of `kilo-codex`, `kilo-claude`, `kilo-opencode`, `kilo-omp` or `kilo-muse`, or use **Copy all**.
 
 Paste the copied block into your Zsh configuration (`~/.zshrc`, or `$ZDOTDIR/.zshrc` when you use a custom Zsh configuration directory) or your Bash configuration (`~/.bashrc`). Open a new terminal, or reload that file in an existing terminal. Bash login shells must source `.bashrc` from their login configuration for its functions to be available.
 
-Each block already contains this installation's application and Kilo configuration paths. It runs the same terminal entrypoint as the installer, using your current directory, arguments and saved models. No wrapper installation or PATH change is required. Copying a block does not modify shell files, launch an agent or save credentials. Keep Kilo Proxy open and install each underlying CLI separately.
+Each block already contains this installation's application and Kilo configuration paths. It runs the same terminal entrypoint as the installer, using your current directory and arguments. Kilo-backed commands prepare saved models; Muse uses its own catalog. No wrapper installation or PATH change is required. Copying a block does not modify shell files, launch an agent or save credentials. Install each underlying CLI separately. Keep Kilo Proxy open for Kilo-backed commands; Muse also works with it closed.
 
 The manual blocks are shell functions for Zsh and Bash; Fish users can use the automatic installer. If you previously defined an alias with the same name, remove that alias before using the function. To remove a manual shortcut later, delete its function from your shell configuration and open a new terminal. If you move Kilo Proxy, reopen it at the new location and replace your copied blocks with freshly generated ones.
 
@@ -39,7 +39,7 @@ $models = kilo-opencode models kilo-local | Write-Output
 kilo-opencode models kilo-local | Set-Content models.txt
 ```
 
-Explicit pipes use PowerShell's text-stream conversion. Input text is encoded as UTF-8 without adding a byte order mark, preserving Unicode prompts in PowerShell 5.1 and 7 without changing the caller's `$OutputEncoding` preference. These pipes are suitable for textual CLI output, not byte-for-byte binary transport. Native `.exe` clients preserve literal arguments; `.cmd`/`.bat` clients reject embedded double quotes and newlines. Use the agent's native executable for those arguments. Keep Kilo Proxy open and install the underlying CLI separately.
+Explicit pipes use PowerShell's text-stream conversion. Input text is encoded as UTF-8 without adding a byte order mark, preserving Unicode prompts in PowerShell 5.1 and 7 without changing the caller's `$OutputEncoding` preference. These pipes are suitable for textual CLI output, not byte-for-byte binary transport. Native `.exe` clients preserve literal arguments; `.cmd`/`.bat` clients reject embedded double quotes and newlines. Use the agent's native executable for those arguments. Keep Kilo Proxy open for the Kilo-backed commands and install the underlying CLI first. `kilo-muse` also works with Kilo Proxy closed.
 
 ## Use your current terminal
 
@@ -66,9 +66,18 @@ Or run Oh My Pi:
 kilo-omp
 ```
 
-Keep Kilo Proxy open while working; its window can be closed to the system tray or menu bar. If the saved proxy connection is stopped, the command starts it before launching the agent. If the app has been quit, reopen it and run the command again.
+Or run Muse Code with its own Meta login and models:
 
-Each invocation prepares that agent's latest **saved** model pack if one is assigned under **Models → Packs**, or the shared models, names, default and supported reasoning preferences otherwise. Finish any pending save in the app before launching. Changes made after an agent starts apply on its next launch.
+```sh
+kilo-muse
+kilo-muse login
+```
+
+Muse does not need Kilo Proxy to remain open or a saved Kilo gateway connection. See [Muse Code setup](muse-code.md).
+
+For `kilo-codex`, `kilo-claude`, `kilo-opencode` and `kilo-omp`, keep Kilo Proxy open while working; its window can be closed to the system tray or menu bar. If the saved proxy connection is stopped, the command starts it before launching the agent. If the app has been quit, reopen it and run the command again.
+
+Each Kilo-backed invocation prepares that agent's latest **saved** model pack if one is assigned under **Models → Packs**, or the shared models, names, default and supported reasoning preferences otherwise. Finish any pending save in the app before launching. Changes made after an agent starts apply on its next launch.
 
 The commands forward the arguments you supply to the underlying CLI. For example, select a previous conversation in the Kilo profile:
 
@@ -93,19 +102,21 @@ No additional terminal window opens. The CLI uses the current working directory 
 
 ## Profiles and authentication
 
+`kilo-muse` reads the Muse executable selected in **Settings → CLI installations** locally, forwards arguments to it and uses Muse's existing login, configuration and native sessions. It does not prepare a Kilo profile, start the proxy or inject a gateway model list. It clears an inherited `KILO_LOCAL_API_KEY` for the Muse child and disables Muse self-update for that launch. Automatic selection follows Kilo's verified installed copy; an explicit custom path remains selected until changed. See [Muse Code](muse-code.md).
+
 `kilo-codex` prepares `~/.codex-kilo-cli`; `kilo-claude` prepares `~/.claude-kilo`; `kilo-omp` prepares `~/.omp-kilo`. These are the same isolated profiles used by their **Open** buttons in Agents. Their saved sessions belong to those profiles. Normal `codex`, `claude` and `omp` keep their existing configuration and authentication. See [Oh My Pi setup](oh-my-pi.md) for its model picker, reasoning and image MCP support.
 
 `kilo-opencode` refreshes `~/.opencode-kilo/opencode.json`, the configuration used by **Open OpenCode**, with its assigned pack or shared models, display names, default and context limits. It also updates the managed `kilo_images` MCP entry from the image-generation setting while preserving unrelated settings and MCP servers. The command sets `OPENCODE_CONFIG` for its child process and clears inherited `OPENCODE_CONFIG_CONTENT`. It does not edit your ordinary OpenCode configuration or authentication; global/project settings still merge, and OpenCode's usual session storage is shared. Those settings can affect the effective configuration. See [OpenCode setup](opencode-and-zed.md).
 
-The installed commands and manual functions contain no API keys. They contact the running local Kilo Proxy app, which prepares the profile and supplies the local connection credential to the child process. Your personal Kilo key is not placed in the shell command or shell startup files. Profile compatibility and model protocol requirements are described in [client setup](clients.md).
+The installed commands and manual functions contain no API keys. Kilo-backed commands contact the running local Kilo Proxy app, which prepares the profile and supplies the local connection credential to the child process. Muse reads its saved executable selection locally. Your personal Kilo key is not placed in the shell command or shell startup files. Profile compatibility and model protocol requirements are described in [client setup](clients.md).
 
 ## Troubleshooting
 
 - **Command not found:** Open a new terminal after installation. On macOS/Linux, check the install directory and PATH in Settings. On Windows, check the listed profile for your PowerShell edition; profiles do not load with `-NoProfile`, and your execution policy must permit them. Existing aliases with the same names can take precedence over functions.
 - **Kilo Proxy is unavailable:** Reopen the app with the same configuration directory used when installing the commands. Save a working account and organization in Settings, then try again.
-- **Agent not found:** Install the matching client: Codex CLI, Claude Code, OpenCode or Oh My Pi (`omp`). The terminal commands launch existing clients; they do not install them.
+- **Agent not found:** Install the matching client: Codex CLI, Claude Code, OpenCode, Oh My Pi (`omp`) or Muse Code. For Muse, also check its saved executable path under **CLI installations**. The terminal commands launch existing clients; they do not install them.
 - **Commands stopped working after moving the app:** Open Kilo Proxy from its new location and use **Update terminal commands**, or replace your manual functions with newly copied blocks.
-- **Model selection is empty or stale:** Save models in the common library and launch again. An already running agent does not automatically reload it.
+- **Model selection is empty or stale:** For Kilo-backed commands, save models in the common library and launch again. Muse uses its own official catalog and login. An already running agent does not automatically reload it.
 
 ## Verification
 

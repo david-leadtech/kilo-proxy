@@ -12,7 +12,7 @@ import (
 const terminalAgentFlag = "--terminal-agent"
 
 func terminalClientSupported(client string) bool {
-	return client == "codex-cli" || client == "claude" || client == "omp" || client == "opencode"
+	return client == "codex-cli" || client == "claude" || client == "omp" || client == "opencode" || client == "muse"
 }
 
 func terminalPlatformSupported(platform string) bool {
@@ -78,7 +78,7 @@ func (a *app) terminalPrepareAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !terminalClientSupported(input.Client) || len(input.ClaudeVersion) > 64 || strings.ContainsAny(input.ClaudeVersion, "\r\n\x00") {
-		jsonError(w, 400, "Choose kilo-codex, kilo-claude, kilo-omp or kilo-opencode.")
+		jsonError(w, 400, "Choose kilo-codex, kilo-claude, kilo-omp, kilo-opencode or kilo-muse.")
 		return
 	}
 	if !a.launchMu.TryLock() {
@@ -94,6 +94,12 @@ func (a *app) terminalPrepareAPI(w http.ResponseWriter, r *http.Request) {
 	directory, err := launchPath(input.Directory, rt.home)
 	if err != nil {
 		jsonError(w, 400, err.Error())
+		return
+	}
+	if input.Client == "muse" {
+		plan := clientLaunchPlan{Client: "muse", Name: "Muse Code", Kind: "terminal", Directory: directory, Env: map[string]string{}}
+		applyMuseNativeLaunch(&plan)
+		jsonResponse(w, 200, plan)
 		return
 	}
 	state := a.modelLibrary.snapshot()

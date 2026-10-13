@@ -39,6 +39,19 @@ func planT3CodeOptionalProviders(prefs t3CodePreferences, installation t3CodeIns
 			config["binaryPath"], config["serverUrl"], config["serverPassword"] = "opencode", "", ""
 		}
 		environment := t3CodeOptionalProviderEnvironment(rt.home, os.Environ(), rt.platform)
+		if selected[provider.ID] && provider.ID == "muse" {
+			if rt.resolve == nil {
+				return nil, errors.New("Cannot resolve the selected Muse Code executable.")
+			}
+			binary, err := rt.resolve("muse", "")
+			if err != nil || !packageUpdateAbsolute(binary) || strings.ContainsAny(binary, "\x00\r\n") {
+				return nil, errors.New("Install Muse Code or choose its executable in Kilo Settings before enabling its T3 Code account.")
+			}
+			// Keep Muse on its native driver and normal login. T3 probes this
+			// exact executable over MSP and discovers its models and reasoning
+			// choices; neither readiness nor preparation starts a Muse session.
+			config["binaryPath"] = binary
+		}
 		if selected[provider.ID] && provider.ID == "opencode" {
 			client, major, minimum := "opencode", "1.", "1.14.19"
 			if prefs.OpenCode2 {

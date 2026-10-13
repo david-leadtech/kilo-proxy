@@ -21,7 +21,7 @@ func runTerminalAgentMode(args []string) int {
 	}
 	defer cleanup()
 	if !terminalPlatformSupported(runtime.GOOS) || len(args) == 0 || !terminalClientSupported(args[0]) {
-		fmt.Fprintln(os.Stderr, "Use kilo-codex, kilo-claude, kilo-omp or kilo-opencode on macOS, Linux or Windows.")
+		fmt.Fprintln(os.Stderr, "Use kilo-codex, kilo-claude, kilo-omp, kilo-opencode or kilo-muse on macOS, Linux or Windows.")
 		return 1
 	}
 	flags := flag.NewFlagSet(terminalAgentFlag, flag.ContinueOnError)
@@ -84,7 +84,13 @@ func runTerminalAgentMode(args []string) int {
 			input.ClaudeVersion = ""
 		}
 	}
-	plan, err := requestTerminalPlan(context.Background(), *dir, input)
+	var plan clientLaunchPlan
+	if input.Client == "muse" {
+		plan = clientLaunchPlan{Client: "muse", Name: "Muse Code", Kind: "terminal", Directory: directory, Env: map[string]string{}}
+		applyMuseNativeLaunch(&plan)
+	} else {
+		plan, err = requestTerminalPlan(context.Background(), *dir, input)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -116,7 +122,7 @@ func resolveTerminalExecutable(dir, client string) (string, error) {
 	if err != nil {
 		return "", errors.New("Cannot read Kilo Proxy settings.")
 	}
-	a := &app{dir: dir, cliExecutables: [2]string{config.CodexCLIExecutable, config.ClaudeCodeExecutable},
+	a := &app{dir: dir, cliExecutables: [2]string{config.CodexCLIExecutable, config.ClaudeCodeExecutable}, museExecutable: config.MuseCodeExecutable,
 		openCodeExecutables: [2]string{config.OpenCode1Executable, config.OpenCode2Executable}}
 	executable, err := a.launchRuntime().resolve(client, "")
 	if err != nil {

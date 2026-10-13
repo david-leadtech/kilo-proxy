@@ -20,6 +20,28 @@ async function records(gateway) {try{return JSON.parse(await readFile(gateway.la
 async function setControl(gateway,changes={}) {let prior={};try{prior=JSON.parse(await readFile(gateway.launchControl,'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}await writeFile(gateway.launchControl,JSON.stringify({...prior,t3Models:true,...changes}));}
 async function setupT3(request,gateway) {await setControl(gateway);await saveLibrary(request,gateway,library());}
 
+test('Muse-only T3 uses the selected CLI and opens without gateway credentials or shared models',async({page,gateway,request})=>{
+ await setControl(gateway,{t3Capabilities:true});
+ const preferences={version:1,codex:false,claude:false,kiloCodex:false,kiloClaude:false,codexModels:'official',claudeModels:'official',providers:['muse'],openCode2:false};
+ for(const [endpoint,data] of [['clients/cli/preferences',{version:1,museExecutable:gateway.codexExecutable}],['clients/t3-code/preferences',preferences]]) {
+  const result=await request.post(new URL('/api/'+endpoint,gateway.url).href,{headers:headers(gateway),data});expect(result.ok(),await result.text()).toBe(true);
+ }
+ expect((await getAPI(request,gateway,'model-library')).library.models).toEqual([]);
+ await page.reload();
+ await page.locator('#tab-t3-code').click();await expect(page.locator('#t3-code-provider-muse')).toBeChecked();
+ await expect(page.locator('#client-launch')).toBeEnabled();await page.locator('#client-launch').click();
+ await expect.poll(async()=>(await records(gateway)).length).toBe(1);
+ expect((await records(gateway))[0].client).toBe('t3-code');
+ await expect(page.locator('#status-label')).toHaveText('Proxy stopped');
+ expect((await getAPI(request,gateway,'model-library')).library.models).toEqual([]);
+ const profile=await getAPI(request,gateway,'clients/t3-code');expect(profile.prepared).toBe(true);expect(profile.effectiveCodexModels).toEqual([]);expect(profile.effectiveClaudeModels).toEqual([]);
+ await page.locator('#t3-code-settings-title').click();
+ await page.locator('#t3-code-account-kiloCodex').check();
+ await expect(page.locator('#t3-code-account-kiloCodex')).toBeEnabled();
+ await expect(page.locator('#client-launch')).toBeDisabled();await expect(page.locator('#client-launch-status')).toContainText('Connect your selected provider first.');
+ expect((await records(gateway)).length).toBe(1);
+});
+
 test('T3 Code prepares chosen accounts before desktop launch and guards a second opening',async({page,gateway,request},testInfo)=>{
  await setupT3(request,gateway);
  await startProxy(page,gateway);

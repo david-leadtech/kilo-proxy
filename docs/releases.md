@@ -21,6 +21,7 @@ a disposable profile on the host platform:
 ```sh
 KILO_TEST_MANAGED_TOOL=codex-cli go test -run '^TestManagedToolOfficialInstallation$' -count=1 -timeout=30m -v .
 KILO_TEST_MANAGED_TOOL=t3-code:nightly go test -run '^TestManagedToolOfficialInstallation$' -count=1 -timeout=30m -v .
+KILO_TEST_MANAGED_TOOL=muse go test -run '^TestManagedToolOfficialInstallation$' -count=1 -timeout=30m -v .
 ```
 
 This opt-in acceptance downloads the fixed official package, checks its SHA256,
@@ -28,6 +29,14 @@ architecture, packaged version and channel, then verifies atomic publication and
 managed-path resolution. It opens no desktop app. CLI version checks use
 disposable homes without personal authentication. A successful extraction does
 not establish native GUI coverage or satisfy missing Linux system dependencies.
+
+Muse Code uses its official stable feed and SHA256/size manifest. Its complete
+release identity includes the `-R` build suffix. The terminal launcher keeps
+Muse's own authentication and model arguments and can run with Kilo closed;
+the production terminal check covers that behavior with disposable state.
+For T3, verify the native Muse SDK/MSP contract, `model/list` and reasoning
+variants independently of Kilo's shared catalog. An offline echo turn verifies
+protocol handling, not account entitlement or paid Muse model inference.
 
 Run the Node glob from a shell that expands it, such as Bash or zsh. CI uses Bash on all three operating systems.
 

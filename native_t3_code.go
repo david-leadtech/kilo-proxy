@@ -32,6 +32,13 @@ type nativeT3CodeState struct {
 	PreferencesState nativeT3CodePreferencesState
 }
 
+// Only confirmed, current preferences can opt out of the Kilo model gateway.
+// Older or unloaded responses retain the existing Kilo readiness checks.
+func (u *nativeUI) t3CodeNativeOnly() bool {
+	prefs := &u.agentsState().T3Code.PreferencesState
+	return prefs.Loaded && validNativeT3CodePreferences(prefs.Preferences) && !prefs.Preferences.KiloCodex && !prefs.Preferences.KiloClaude
+}
+
 func (u *nativeUI) acceptT3CodeProfile(data json.RawMessage, connection [32]byte) {
 	state := &u.agentsState().T3Code
 	state.Generation++
@@ -69,10 +76,16 @@ func (u *nativeUI) refreshT3CodeProfile() {
 
 func (u *nativeUI) t3CodePrepared(s *nativeClientSelection) bool {
 	state := &u.agentsState().T3Code
-	if !state.Loaded || !state.Info.Prepared || state.Info.Library == nil || state.Connection != u.launchConnectionFingerprint() || u.t3CodePreferencesBusy() || state.PreferencesState.Pending != nil {
+	if !state.Loaded || !state.Info.Prepared || u.t3CodePreferencesBusy() || state.PreferencesState.Pending != nil {
 		return false
 	}
 	if prefs := &state.PreferencesState; prefs.Loaded && state.Info.Preferences.Version == 1 && !nativeT3CodePreferencesEqual(prefs.Preferences, state.Info.Preferences) {
+		return false
+	}
+	if u.t3CodeNativeOnly() {
+		return nativeT3CodePreferencesEqual(state.PreferencesState.Preferences, state.Info.Preferences)
+	}
+	if state.Info.Library == nil || state.Connection != u.launchConnectionFingerprint() {
 		return false
 	}
 	payload, err := nativeClientPayload("t3-code", s)
@@ -100,6 +113,9 @@ func (u *nativeUI) t3CodeDetail(s *nativeClientSelection) uxhDetail {
 	libraryStatus, libraryReady := u.libraryStatus()
 	working := u.clientState().Launching != "" || u.busy["POST"+nativeClientEndpoint(key)] || u.t3CodePreferencesBusy() || u.busy["GET"+nativeT3CodePreferencesEndpoint] || !state.PreferencesState.Loaded || state.PreferencesState.Pending != nil
 	canPrepare := libraryReady && u.agentConnectionReady() && !u.setupConnectionNeeded() && !u.connectionWorking() && len(s.Models) > 0 && validation == nil && !working
+	if u.t3CodeNativeOnly() {
+		validation, libraryReady, canPrepare = nil, true, !working
+	}
 	d := uxhDetail{canPrepare: &canPrepare}
 	d.prepareNote = u.tr("Prepare or open T3 Code · Kilo to apply your saved accounts and models.", "Prepara o abre T3 Code · Kilo para aplicar las cuentas y modelos guardados.")
 	if u.t3CodePrepared(s) {

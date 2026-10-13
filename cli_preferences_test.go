@@ -128,7 +128,7 @@ func TestCLIExecutablePreferencesManagedCurrentCannotBypassIntegrity(t *testing.
 	if runtime.GOOS == "windows" {
 		t.Skip("managed Unix installations")
 	}
-	for _, client := range []string{"codex-cli", "claude", "opencode"} {
+	for _, client := range []string{"codex-cli", "claude", "opencode", "muse"} {
 		t.Run(client, func(t *testing.T) {
 			a := launchTestApp(t)
 			record := managedToolRegistryFixture(t, a.dir, client, "current")

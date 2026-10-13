@@ -168,11 +168,9 @@ func (u *nativeUI) uxhFolderRow(key string) layout.Widget {
 	if override != "" {
 		scope = u.tr(" · only here", " · solo aquí")
 	}
-	value := func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Alignment: layout.Baseline}.Layout(gtx, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Alignment: layout.Baseline}.Layout(gtx, layout.Rigid(u.uxhValue(folder)), layout.Rigid(u.textStyle(14, scope, nativeTextSubtle, font.Normal)))
-		}))
-	}
+	// A long folder can use the value's full width without squeezing its scope
+	// into a one-character column beside it.
+	value := u.column(u.uxhValue(folder), u.textStyle(14, scope, nativeTextSubtle, font.Normal))
 	typeID := "agent:" + key + ":folder-type"
 	actions := []layout.Widget{u.disabled(a.FolderBusy == "", u.buttonWidget("agent:"+key+":folder", u.tr("Use another only here", "Usar otra solo aquí"), nativeButtonLink, nil, false, false, func() { u.chooseAgentProject(key) }))}
 	if override != "" {

@@ -178,6 +178,25 @@ func (u *nativeUI) launchSettingsFingerprint(key, directoryField string) [32]byt
 }
 
 func (u *nativeUI) launchSettingsFingerprintWithPreferences(key, directoryField string, includePreferences bool) [32]byte {
+	if key == "muse" {
+		values := []any{u.uxhLaunchDirectory(key, directoryField), u.clientState().LaunchInfo.Directory, u.clientState().LaunchInfo.Clients[key].Path}
+		if includePreferences {
+			prefs := &u.clientState().CLIPreferences
+			values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation, u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")), u.value(nativeCLIPathField("muse")))
+		}
+		data, _ := json.Marshal(values)
+		return sha256.Sum256(data)
+	}
+	if key == "t3-code" && includePreferences && u.t3CodeNativeOnly() {
+		paths := &u.clientState().CLIPreferences
+		openCode := &u.clientState().OpenCodePreferences
+		prefs := &u.agentsState().T3Code.PreferencesState
+		data, _ := json.Marshal([]any{paths.Loaded, paths.Preferences, paths.Pending, paths.Generation,
+			u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")), u.value(nativeCLIPathField("muse")),
+			openCode.Loaded, openCode.Preferences, openCode.Pending, openCode.Generation, u.value(nativeOpenCodePathField(1)), u.value(nativeOpenCodePathField(2)),
+			prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation})
+		return sha256.Sum256(data)
+	}
 	s := u.sharedClientSelection(key)
 	u.syncClientSelection(key, s)
 	base, local, _ := u.clientBase()
@@ -192,7 +211,7 @@ func (u *nativeUI) launchSettingsFingerprintWithPreferences(key, directoryField 
 	values := []any{nativeSelectionFingerprint(key, s, base, local, u.clientCaps(key)), u.modelLibraryValue(), limits, u.uxhLaunchDirectory(key, directoryField), appPath, u.launchConnectionFingerprint()}
 	if nativeCLIPathClient(key) && includePreferences {
 		prefs := &u.clientState().CLIPreferences
-		values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation, u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")))
+		values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation, u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")), u.value(nativeCLIPathField("muse")))
 	}
 	if key == "t3-code" && includePreferences {
 		paths := &u.clientState().OpenCodePreferences
@@ -215,6 +234,10 @@ func (u *nativeUI) launchSettingsChangedMessage() string {
 }
 
 func (u *nativeUI) launchClientFrom(key, directoryField string) {
+	if key == "muse" {
+		u.launchMuseFrom(directoryField)
+		return
+	}
 	if !clientLaunchUsesProject(key) {
 		directoryField = "" // Desktop apps manage their own project selection.
 	}
@@ -320,12 +343,15 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 			return
 		}
 	}
-	if err := u.packReadinessError(key); err != nil {
+	nativeT3 := key == "t3-code" && u.t3CodeNativeOnly()
+	if err := u.packReadinessError(key); !nativeT3 && err != nil {
 		u.noticeError(err)
 		return
 	}
-	u.persistLibraryEdits()
-	if status, ready := u.libraryStatus(); !ready {
+	if !nativeT3 {
+		u.persistLibraryEdits()
+	}
+	if status, ready := u.libraryStatus(); !nativeT3 && !ready {
 		w := u.library.writer
 		w.mu.Lock()
 		saving := w.running
@@ -356,7 +382,7 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 	}
 	s := u.sharedClientSelection(key)
 	u.syncClientSelection(key, s)
-	if _, err := nativeClientPayload(key, s); err != nil || len(s.Models) == 0 {
+	if _, err := nativeClientPayload(key, s); !nativeT3 && (err != nil || len(s.Models) == 0) {
 		u.setNotice(nativeToneWarning, u.tr("Choose valid models before launching.", "Elige modelos válidos antes de abrir."))
 		if err != nil {
 			u.noticeError(err)
@@ -389,7 +415,7 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 			return
 		}
 		current := u.sharedClientSelection(key)
-		if current != s || prepared != u.launchSettingsFingerprint(key, directoryField) {
+		if !nativeT3 && current != s || prepared != u.launchSettingsFingerprint(key, directoryField) {
 			finish(errors.New(u.launchSettingsChangedMessage()))
 			return
 		}
@@ -433,4 +459,97 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 	// A managed profile can be edited externally between launches. Reapply the
 	// shared library each time; the backend preserves unrelated preferences.
 	u.prepareClientAfter(key, launch)
+}
+
+// Muse launches the native Meta CLI without preparing a Kilo model profile or
+// starting the proxy. Confirm its selected executable before the process API.
+func (u *nativeUI) launchMuseFrom(directoryField string) {
+	const key = "muse"
+	a, c := u.agentsState(), u.clientState()
+	if c.Launching != "" || u.busy["POST"+nativeLaunchEndpoint] {
+		return
+	}
+	if u.cliPreferencesBusy() || c.CLIPreferences.Pending != nil || u.cliPathDirty() {
+		u.setNotice(nativeToneWarning, u.tr("Load or finish saving CLI executable settings before opening.", "Carga o termina de guardar las rutas de las CLI antes de abrir."))
+		return
+	}
+	if !c.CLIPreferences.Loaded {
+		before := u.launchSettingsFingerprintWithPreferences(key, directoryField, false)
+		c.Launching, a.Phase = key, u.tr("Loading CLI paths…", "Cargando rutas de las CLI…")
+		u.refreshCLIPreferencesAfter(func(err error) {
+			c.Launching, a.Phase = "", ""
+			if err != nil {
+				u.noticeError(err)
+				return
+			}
+			if before != u.launchSettingsFingerprintWithPreferences(key, directoryField, false) {
+				u.noticeError(errors.New(u.launchSettingsChangedMessage()))
+				return
+			}
+			u.launchMuseFrom(directoryField)
+		})
+		return
+	}
+	if !u.nativeLaunchAvailable(key) {
+		reason := nativeMessage(c.LaunchInfo.Clients[key].Reason, u.language)
+		if reason == "" {
+			reason = u.tr("Install Muse Code or choose its executable path in CLI settings, then refresh detection.", "Instala Muse Code o elige su ejecutable en los ajustes de las CLI y actualiza la detección.")
+		}
+		u.setNotice(nativeToneWarning, reason)
+		return
+	}
+	directory := u.uxhLaunchDirectory(key, directoryField)
+	resolvedDirectory, err := launchPath(directory, c.LaunchInfo.Directory)
+	if err != nil {
+		u.noticeError(err)
+		return
+	}
+	executable := c.LaunchInfo.Clients[key].Path
+	if executable == "" {
+		u.setNotice(nativeToneWarning, u.tr("Refresh Muse Code installation detection before opening.", "Actualiza la detección de la instalación de Muse Code antes de abrir."))
+		return
+	}
+	prepared, expected := u.launchSettingsFingerprint(key, directoryField), c.CLIPreferences.Preferences
+	c.Launching, a.Phase = key, u.tr("Checking executable…", "Comprobando ejecutable…")
+	finish := func(err error) {
+		c.Launching, a.Phase = "", ""
+		if err != nil {
+			u.noticeError(err)
+		}
+	}
+	u.verifyCLIPreferencesAfter(expected, func(err error) {
+		if err != nil {
+			finish(err)
+			return
+		}
+		if prepared != u.launchSettingsFingerprint(key, directoryField) {
+			finish(errors.New(u.launchSettingsChangedMessage()))
+			return
+		}
+		a.Phase = u.tr("Opening…", "Abriendo…")
+		u.clientRequest("POST", nativeLaunchEndpoint, map[string]string{"client": key, "directory": directory, "museExecutable": executable}, func(raw json.RawMessage, err error) {
+			if err != nil {
+				finish(err)
+				return
+			}
+			var result struct {
+				OK      bool   `json:"ok"`
+				Message string `json:"message"`
+			}
+			if err = json.Unmarshal(raw, &result); err != nil {
+				finish(err)
+				return
+			}
+			if !result.OK {
+				finish(errors.New(u.tr("Muse Code did not confirm launch.", "Muse Code no confirmó el arranque.")))
+				return
+			}
+			finish(nil)
+			u.uxhNoteOpened(key, resolvedDirectory)
+			u.setNotice(nativeToneWarning, result.Message)
+			if u.notice == "" {
+				u.setNotice(nativeToneSuccess, u.tr("Muse Code opened with its own login and models.", "Muse Code abierto con su propio inicio de sesión y modelos."))
+			}
+		})
+	})
 }

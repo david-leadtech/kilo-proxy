@@ -215,7 +215,7 @@ func terminalCommandsPlan(home, configDir, binary, shell, platform string, profi
 	}
 	files := []terminalInstallFile{}
 	result.Installed, result.PathConfigured = true, true
-	for _, command := range []struct{ name, client string }{{"kilo-codex", "codex-cli"}, {"kilo-claude", "claude"}, {"kilo-omp", "omp"}, {"kilo-opencode", "opencode"}} {
+	for _, command := range []struct{ name, client string }{{"kilo-codex", "codex-cli"}, {"kilo-claude", "claude"}, {"kilo-omp", "omp"}, {"kilo-opencode", "opencode"}, {"kilo-muse", "muse"}} {
 		path := filepath.Join(result.Directory, command.name)
 		result.Commands[command.name] = path
 		f, err := readTerminalInstallFile(home, path)
@@ -250,9 +250,9 @@ func terminalCommandsPlan(home, configDir, binary, shell, platform string, profi
 		files = append(files, f)
 	}
 	if result.Installed && result.PathConfigured {
-		result.Message = "kilo-codex, kilo-claude, kilo-omp and kilo-opencode are installed. Open a new terminal to use them; keep Kilo Proxy open."
+		result.Message = "kilo-codex, kilo-claude, kilo-omp, kilo-opencode and kilo-muse are installed. Open a new terminal to use them. Muse Code works with Kilo Proxy closed; the other commands require it open."
 	} else {
-		result.Message = "Install kilo-codex, kilo-claude, kilo-omp and kilo-opencode for your current login shell."
+		result.Message = "Install kilo-codex, kilo-claude, kilo-omp, kilo-opencode and kilo-muse for your current login shell."
 	}
 	return result, files, nil
 }
@@ -360,9 +360,9 @@ func installTerminalCommands(home, configDir, binary, shell, platform string, pr
 		changed = append(changed, f)
 	}
 	result.Installed, result.PathConfigured = true, true
-	result.Message = "kilo-codex, kilo-claude, kilo-omp and kilo-opencode are installed. Open a new terminal to use them; keep Kilo Proxy open."
+	result.Message = "kilo-codex, kilo-claude, kilo-omp, kilo-opencode and kilo-muse are installed. Open a new terminal to use them. Muse Code works with Kilo Proxy closed; the other commands require it open."
 	if result.Shell == "powershell" {
-		result.Message = "The four Kilo commands are installed in your PowerShell profiles. Open a new PowerShell window; keep Kilo Proxy open. Execution policy was not changed."
+		result.Message = "The five Kilo commands are installed in your PowerShell profiles. Open a new PowerShell window. Muse Code works with Kilo Proxy closed; the other commands require it open. Execution policy was not changed."
 	}
 	return result, nil
 }

@@ -60,12 +60,13 @@ func main() {
  input, _ := io.ReadAll(os.Stdin)
  cwd, _ := os.Getwd()
  json.NewEncoder(os.Stdout).Encode(map[string]any{
-  "args": os.Args[1:], "input": string(input), "cwd": cwd,
+  "args": os.Args[1:], "input": string(input), "cwd": cwd, "executable": os.Args[0],
   "codexHome": os.Getenv("CODEX_HOME"), "localKey": os.Getenv("KILO_LOCAL_API_KEY"),
   "claudeHome": os.Getenv("CLAUDE_CONFIG_DIR"), "anthropicKey": os.Getenv("ANTHROPIC_API_KEY"),
   "ompHome": os.Getenv("PI_CODING_AGENT_DIR"), "ompProfile": os.Getenv("OMP_PROFILE"),
   "stateful": os.Getenv("PI_OPENAI_STATEFUL"), "openCodeConfig": os.Getenv("OPENCODE_CONFIG"),
   "openCodeContent": os.Getenv("OPENCODE_CONFIG_CONTENT"),
+  "metaKey": os.Getenv("META_API_KEY"), "museNoAutoUpdate": os.Getenv("MUSE_NO_AUTO_UPDATE"),
  })
  os.Stderr.WriteString("synthetic client stderr\n")
  os.Exit(23)
@@ -83,12 +84,30 @@ func main() {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"claude.exe", "omp.exe", "opencode.exe"} {
+	for _, name := range []string{"claude.exe", "omp.exe", "opencode.exe", "muse.exe"} {
 		if err := os.WriteFile(filepath.Join(bin, name), data, 0700); err != nil {
 			t.Fatal(err)
 		}
 	}
+	// Match Meta's installer shim exactly; Kilo must invoke this installation's
+	// active native executable so quotes and multiline prompts never pass cmd.exe.
+	museShim := filepath.Join(bin, "muse.cmd")
+	const officialShim = "@echo off\r\nsetlocal\r\n\"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoProfile -ExecutionPolicy Bypass -File \"%~dp0.muse-launcher.ps1\" %*\r\nexit /b %ERRORLEVEL%\r\n"
+	museActive := filepath.Join(bin, "muse-bin-1.4.6-R6000.1.exe")
+	for path, contents := range map[string][]byte{museShim: []byte(officialShim), filepath.Join(bin, ".muse-version"): []byte("1.4.6-R6000.1\n"), museActive: data} {
+		if err := os.WriteFile(path, contents, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
 	a := terminalTestApp(t)
+	config, err := readSettings(a.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.MuseCodeExecutable = filepath.Join(bin, "muse.exe")
+	if err := writeSettings(a.dir, config); err != nil {
+		t.Fatal(err)
+	}
 	a.launcher.platform = "windows"
 	a.terminalCommandsBinary = binary
 	a.terminalCommandsProfiles = []string{filepath.Join(t.TempDir(), "PowerShell", "profile.ps1")}
@@ -130,9 +149,22 @@ func main() {
 				}
 				setup = ". " + quote(a.terminalCommandsProfiles[0]) + "\n"
 			}
-			for _, client := range []string{"codex-cli", "claude", "omp", "opencode"} {
-				t.Run(shell+"/"+mode+"/"+client, func(t *testing.T) {
-					name := map[string]string{"codex-cli": "kilo-codex", "claude": "kilo-claude", "omp": "kilo-omp", "opencode": "kilo-opencode"}[client]
+			for _, clientCase := range []string{"codex-cli", "claude", "omp", "opencode", "muse", "muse-official-shim"} {
+				client := clientCase
+				if clientCase == "muse-official-shim" {
+					client = "muse"
+				}
+				t.Run(shell+"/"+mode+"/"+clientCase, func(t *testing.T) {
+					if client == "muse" {
+						config.MuseCodeExecutable = filepath.Join(bin, "muse.exe")
+						if clientCase == "muse-official-shim" {
+							config.MuseCodeExecutable = museShim
+						}
+						if err := writeSettings(a.dir, config); err != nil {
+							t.Fatal(err)
+						}
+					}
+					name := map[string]string{"codex-cli": "kilo-codex", "claude": "kilo-claude", "omp": "kilo-omp", "opencode": "kilo-opencode", "muse": "kilo-muse"}[client]
 					code := "$ErrorActionPreference = 'Stop'\n[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)\n" + setup + "\n" + name + " " + strings.Join(literals, " ") + "\n$kiloResult = $LASTEXITCODE\n[Console]::Out.WriteLine('SHELL_ALIVE')\nexit $kiloResult\n"
 					script := filepath.Join(t.TempDir(), "test.ps1")
 					if err := os.WriteFile(script, append([]byte{0xef, 0xbb, 0xbf}, []byte(code)...), 0600); err != nil {
@@ -142,7 +174,7 @@ func main() {
 					defer cancel()
 					command := exec.CommandContext(ctx, path, "-NoLogo", "-NoProfile", "-NonInteractive", "-File", script)
 					command.Dir = project
-					command.Env = clientChildEnvironment(os.Environ(), map[string]string{"PATH": bin + string(os.PathListSeparator) + os.Getenv("PATH"), "CODEX_HOME": "wrong", "KILO_LOCAL_API_KEY": "wrong", "CLAUDE_CONFIG_DIR": "wrong", "ANTHROPIC_API_KEY": "wrong", "PI_CODING_AGENT_DIR": "wrong", "OMP_PROFILE": "wrong", "PI_OPENAI_STATEFUL": "1", "OPENCODE_CONFIG": "wrong", "OPENCODE_CONFIG_CONTENT": `{"model":"wrong/model"}`}, nil, "windows")
+					command.Env = clientChildEnvironment(os.Environ(), map[string]string{"PATH": bin + string(os.PathListSeparator) + os.Getenv("PATH"), "META_API_KEY": "synthetic-meta", "MUSE_NO_AUTO_UPDATE": "0", "CODEX_HOME": "wrong", "KILO_LOCAL_API_KEY": "wrong", "CLAUDE_CONFIG_DIR": "wrong", "ANTHROPIC_API_KEY": "wrong", "PI_CODING_AGENT_DIR": "wrong", "OMP_PROFILE": "wrong", "PI_OPENAI_STATEFUL": "1", "OPENCODE_CONFIG": "wrong", "OPENCODE_CONFIG_CONTENT": `{"model":"wrong/model"}`}, nil, "windows")
 					command.Stdin = strings.NewReader("stdin preserved\n")
 					var output, stderr bytes.Buffer
 					command.Stdout, command.Stderr = &output, &stderr
@@ -158,6 +190,7 @@ func main() {
 						Args                                                           []string
 						Input, Cwd, CodexHome, LocalKey, ClaudeHome, AnthropicKey      string
 						OMPHome, OMPProfile, Stateful, OpenCodeConfig, OpenCodeContent string
+						MetaKey, MuseNoAutoUpdate, Executable                          string
 					}
 					if err := json.Unmarshal([]byte(lines[0]), &got); err != nil {
 						t.Fatal(err, output.String())
@@ -187,6 +220,12 @@ func main() {
 					}
 					if client == "omp" && (got.OMPHome != a.ompProfileDir || got.OMPProfile != "" || got.Stateful != "0") {
 						t.Fatal("Oh My Pi profile lost")
+					}
+					if client == "muse" && (got.MetaKey != "synthetic-meta" || got.MuseNoAutoUpdate != "1" || got.LocalKey != "") {
+						t.Fatal("Muse native authentication or exact installation was lost")
+					}
+					if clientCase == "muse-official-shim" && !strings.EqualFold(filepath.Clean(got.Executable), filepath.Clean(museActive)) {
+						t.Fatal("Muse wrapper selected a different installation:", got.Executable)
 					}
 					if client == "opencode" {
 						_, config, _, err := a.editorPaths("opencode")

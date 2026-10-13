@@ -1313,6 +1313,10 @@ func (u *nativeUI) prepareClientAfterPreferencesChecked(key string, done func(er
 		done(errors.New(u.tr("Wait for the current agent operation to finish.", "Espera a que termine la operación actual del agente.")))
 		return
 	}
+	if key == "t3-code" && u.t3CodeNativeOnly() {
+		u.prepareT3CodeNativeAfter(t3Preferences, done)
+		return
+	}
 	if err := u.packReadinessError(key); err != nil {
 		done(err)
 		return
@@ -1387,6 +1391,40 @@ func (u *nativeUI) prepareClientAfterPreferencesChecked(key string, done func(er
 			u.clientPreparedNotice(key)
 		}
 
+		done(nil)
+	})
+}
+
+// Native-only T3 accounts do not consume Kilo's shared library, model packs or
+// gateway credentials. The endpoint still confirms the exact saved accounts,
+// while the surrounding preparation transaction verifies CLI path settings.
+func (u *nativeUI) prepareT3CodeNativeAfter(preferences nativeT3CodePreferences, done func(error)) {
+	before := u.launchSettingsFingerprint("t3-code", "")
+	u.clientRequest(http.MethodPost, nativeClientEndpoint("t3-code"), map[string]any{"preferences": preferences}, func(data json.RawMessage, err error) {
+		if err != nil {
+			done(err)
+			return
+		}
+		var confirmed struct {
+			nativeT3CodeInfo
+			ProfileDir string `json:"profileDir"`
+			ConfigPath string `json:"configPath"`
+		}
+		if json.Unmarshal(data, &confirmed) != nil || confirmed.ProfileDir == "" && confirmed.ConfigPath == "" {
+			done(errors.New("Prepared profile did not return a path"))
+			return
+		}
+		prefs := &u.agentsState().T3Code.PreferencesState
+		if !confirmed.Prepared || !nativeT3CodePreferencesEqual(confirmed.Preferences, preferences) || !nativeT3CodePreferencesEqual(prefs.Preferences, preferences) || prefs.Pending != nil || u.t3CodePreferencesBusy() || before != u.launchSettingsFingerprint("t3-code", "") {
+			done(errors.New(u.launchSettingsChangedMessage()))
+			return
+		}
+		selection := u.sharedClientSelection("t3-code")
+		selection.Path = confirmed.ProfileDir
+		if confirmed.ConfigPath != "" {
+			selection.Path = confirmed.ConfigPath
+		}
+		u.acceptT3CodeProfile(data, [32]byte{})
 		done(nil)
 	})
 }

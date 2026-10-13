@@ -21,7 +21,7 @@ var managedToolLabelPattern = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._+\-]{0
 // an operating-system/App Store installation, never a writable Kilo package.
 func managedToolClientValid(client string) bool {
 	switch client {
-	case "codex", "claude-desktop", "codex-cli", "claude", "opencode", "omp", "open-design", "openmausbot", "t3-code", "synara", "zed":
+	case "codex", "claude-desktop", "codex-cli", "claude", "opencode", "omp", "muse", "open-design", "openmausbot", "t3-code", "synara", "zed":
 		return true
 	}
 	return false

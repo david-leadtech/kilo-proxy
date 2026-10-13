@@ -262,6 +262,8 @@ func (u *nativeUI) agentCompatibility(key string) string {
 		return u.tr("Uses Responses through an isolated Kilo profile, with the library's names, default and supported reasoning levels. Model support depends on the gateway.", "Usa Responses con un perfil Kilo separado: nombres, modelo inicial y niveles de razonamiento compatibles de la biblioteca. La compatibilidad depende del gateway.")
 	case "claude":
 		return u.tr("Uses Anthropic Messages. Applies only reasoning levels supported by each model and installed Claude Code version. Gateway support is also required.", "Usa Anthropic Messages. Aplica solo niveles de razonamiento compatibles con cada modelo y la versión de Claude Code. También requiere compatibilidad del gateway.")
+	case "muse":
+		return u.tr("Uses Muse Code's own Meta login and official model catalog. Opens a terminal in your project with the installation selected in CLI settings. No Kilo connection or shared models are required.", "Usa el inicio de sesión de Meta y el catálogo oficial de Muse Code. Abre una terminal en tu proyecto con la instalación seleccionada en los ajustes de las CLI. No requiere conexión Kilo ni modelos compartidos.")
 	case "openmausbot":
 		return u.tr("Uses the local OpenAI-compatible connection with your shared models, listing the default first. OpenMausBot shows exact model IDs instead of custom names. Kilo Proxy applies each model’s supported reasoning level saved in Models. Generation and tools depend on the model and provider.", "Usa la conexión local compatible con OpenAI con tus modelos compartidos, mostrando primero el predeterminado. OpenMausBot muestra los ID exactos en lugar de nombres personalizados. Kilo Proxy aplica el nivel de razonamiento compatible de cada modelo guardado en Modelos. La generación y las herramientas dependen del modelo y del proveedor.")
 	case "synara":
@@ -308,6 +310,8 @@ func (u *nativeUI) agentPurpose(key string) string {
 		return u.tr("Terminal", "Terminal")
 	case "codex-cli", "opencode":
 		return u.tr("Terminal", "Terminal")
+	case "muse":
+		return u.tr("Meta terminal CLI · its own login and official models", "CLI de Meta en terminal · sesión propia y modelos oficiales")
 	case "omp":
 		return u.tr("Terminal with an isolated profile", "Terminal con perfil aislado")
 	case "zed":

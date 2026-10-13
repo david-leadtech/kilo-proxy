@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCLIPreferencesHelper,cliPreferenceOperation} from '../ui/cli-preferences-helper.mjs';
-const initial=()=>({version:1,codexExecutable:'',claudeExecutable:''});
+const initial=()=>({version:1,codexExecutable:'',claudeExecutable:'',museExecutable:''});
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function fixture(t,api,extra={}) {
  const old=globalThis.document,nodes=new Map(),messages=[];
@@ -14,7 +14,29 @@ function fixture(t,api,extra={}) {
 test('CLI operation guards target executable consumers and leave Codex Desktop and unrelated writes alone',()=>{
  for(const [path,client]of [['codex-cli/catalog','codex-cli'],['claude/profile','claude'],['clients/t3-code','t3-code'],['clients/synara','synara'],['open-design/profile','open-design'],['xcode/codex','xcode-codex'],['xcode/claude','xcode-claude']])assert.equal(cliPreferenceOperation(path,{},'POST'),client);
  assert.equal(cliPreferenceOperation('clients/launch',{client:'claude'},'POST'),'claude');
+ assert.equal(cliPreferenceOperation('clients/launch',{client:'muse'},'POST'),'muse');
  for(const [path,body,method]of [['codex/catalog',{},'POST'],['clients/launch',{client:'codex'},'POST'],['clients/cli/preferences',{},'POST'],['clients/t3-code',undefined,'GET']])assert.equal(cliPreferenceOperation(path,body,method),'');
+});
+test('Muse path settings accept older version 1 responses and preserve all three selections',async t=>{
+ let prefs={version:1,codexExecutable:'/custom/codex',claudeExecutable:'/custom/claude'},refreshes=0;const writes=[];
+ const {helper,nodes,input}=fixture(t,async(path,body)=>{if(body){writes.push({...body});prefs={...body}}return {...prefs}},{onPreferencesSaved:()=>refreshes++});
+ await tick();assert.equal(helper.blocked('muse'),false);assert.equal(nodes.get('cli-path-muse').value,'');
+ input('muse','/custom/muse');assert.equal(helper.blocked('t3-code'),true);nodes.get('cli-path-save-muse').dispatch('click');await tick();
+ assert.deepEqual(writes[0],{...initial(),codexExecutable:'/custom/codex',claudeExecutable:'/custom/claude',museExecutable:'/custom/muse'});assert.equal(helper.blocked('muse'),false);
+ helper.render({language:'es',launchInfo:{clients:{muse:{path:'/custom/muse'}}}});assert.equal(nodes.get('cli-path-resolved-muse').textContent,'Ejecutable detectado: /custom/muse');assert.match(nodes.get('cli-preferences-muse-help').textContent,/inicio de sesión de Meta/);
+ nodes.get('cli-path-auto-muse').dispatch('click');await tick();assert.equal(prefs.museExecutable,'');assert.equal(prefs.codexExecutable,'/custom/codex');assert.equal(prefs.claudeExecutable,'/custom/claude');assert.equal(refreshes,2);
+});
+test('Muse drafts and external path changes invalidate T3 preparation and unacknowledged Muse saves stay pending',async t=>{
+ let prefs=initial(),omitConfirmation=false;const oc={version:1,major:1,executable1:'',executable2:''};
+ const {helper,nodes,input}=fixture(t,async(path,body)=>{if(path==='clients/opencode/preferences')return {...oc};if(body){prefs={...body};if(omitConfirmation){const reply={...prefs};delete reply.museExecutable;return reply}}return {...prefs}});await tick();
+ await helper.guardOperation('t3-code',async()=>({prepared:true}));assert.equal(helper.prepared('t3-code'),true);
+ input('muse','/draft/muse');await assert.rejects(helper.guardOperation('t3-code',async()=>assert.fail('Muse draft reached T3 preparation')),/settings changed/);
+ omitConfirmation=true;nodes.get('cli-path-save-muse').dispatch('click');await tick();assert.equal(helper.blocked('muse'),true);assert.equal(nodes.get('cli-preferences-retry').hidden,false);assert.match(nodes.get('cli-preferences-status').textContent,/did not confirm/);
+ omitConfirmation=false;nodes.get('cli-preferences-retry').dispatch('click');await tick();assert.equal(helper.prepared('t3-code'),false);
+ await helper.guardOperation('t3-code',async()=>({prepared:true}));prefs.museExecutable='/external/muse';await assert.rejects(helper.guardOperation('t3-code',async()=>assert.fail('stale Muse executable launched T3'),{preparation:false}),/settings changed/);assert.equal(helper.prepared('t3-code'),false);assert.equal(nodes.get('cli-path-muse').value,'/external/muse');
+});
+test('a malformed Muse path response cannot make CLI preferences ready',async t=>{
+ const {helper,nodes}=fixture(t,async()=>({...initial(),museExecutable:42}));await tick();assert.equal(helper.blocked('muse'),true);assert.match(nodes.get('cli-preferences-status').textContent,/Could not read/);
 });
 test('CLI paths explicitly save one tool, preserve the other, reject relative paths and return to automatic detection',async t=>{
  let prefs={...initial(),claudeExecutable:'/old/claude'},refreshes=0;const writes=[];

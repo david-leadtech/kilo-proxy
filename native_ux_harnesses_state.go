@@ -37,12 +37,43 @@ func (u *nativeUI) uxhInstallState(key string) uxhInstall {
 	return uxhMissing
 }
 
+// Muse is a native Meta connection, so shared Kilo model and account readiness
+// must not prevent opening it. Executable settings still need confirmation.
+func (u *nativeUI) uxhMuseLaunchState() uxhLaunch {
+	c, a := u.clientState(), u.agentsState()
+	l := uxhLaunch{install: u.uxhInstallState("muse"), label: u.tr("Open Muse Code", "Abrir Muse Code")}
+	l.canOpen = u.nativeLaunchAvailable("muse") && u.cliPreferencesReady() && c.Launching == "" && !u.busy["POST"+nativeLaunchEndpoint]
+	switch {
+	case !c.LaunchChecked:
+		l.reason = u.tr("Wait for installation detection to finish.", "Espera a que termine la detección de la instalación.")
+	case !u.nativeLaunchAvailable("muse"):
+		l.reason, l.local = nativeMessage(c.LaunchInfo.Clients["muse"].Reason, u.language), true
+		if l.reason == "" {
+			l.reason = u.tr("Install Muse Code, then check again. It uses its own Meta login and official models.", "Instala Muse Code y vuelve a comprobarlo. Usa su propio inicio de sesión de Meta y sus modelos oficiales.")
+		}
+	case !u.cliPreferencesReady():
+		l.reason, l.local = u.tr("Load or finish saving CLI executable settings before opening.", "Carga o termina de guardar las rutas de las CLI antes de abrir."), true
+	case c.Launching != "" || u.busy["POST"+nativeLaunchEndpoint]:
+		l.reason = u.tr("Wait for the current harness operation to finish.", "Espera a que termine la operación actual del harness.")
+	}
+	if c.Launching == "muse" && a.Phase != "" {
+		l.label = a.Phase
+	}
+	return l
+}
+
 // uxhLaunchState mirrors the readiness checks performed by launchClientFrom so
 // Open is only enabled when a launch can succeed, and says why otherwise.
 func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 	a, c := u.agentsState(), u.clientState()
 	if nativeCLIPathClient(key) && !c.CLIPreferences.Requested {
 		u.refreshCLIPreferencesAfter(nil)
+	}
+	if key == "muse" {
+		return u.uxhMuseLaunchState()
+	}
+	if key == "t3-code" && !a.T3Code.PreferencesState.Requested {
+		u.refreshT3CodePreferences()
 	}
 	if key == "opencode" {
 		if !c.OpenCodePreferences.Requested {
@@ -57,8 +88,12 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 	_, validation := nativeClientPayload(key, s)
 	libraryStatus, libraryReady := u.libraryStatus()
 	connectionReady := u.agentConnectionReady() && !u.connectionWorking() && !u.setupConnectionNeeded()
+	nativeT3 := key == "t3-code" && u.t3CodeNativeOnly()
+	if nativeT3 {
+		packIssue, validation, libraryReady, connectionReady = nil, nil, true, true
+	}
 	busy := c.Launching != "" || u.busy["POST"+nativeClientEndpoint(key)] || key == "claude-desktop" && u.busy["POST/api/claude-desktop/options"]
-	l.canOpen = available && libraryReady && connectionReady && len(s.Models) > 0 && validation == nil && packIssue == nil && !busy
+	l.canOpen = available && libraryReady && connectionReady && (nativeT3 || len(s.Models) > 0) && validation == nil && packIssue == nil && !busy
 	if key == "codex" || key == "codex-cli" {
 		l.canOpen = l.canOpen && nativeClientImagesReady(s, u.models, u.state)
 	}
@@ -100,7 +135,7 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 		local(reason)
 	case len(s.Models) == 0 && key == "claude-desktop":
 		local(u.claudeDesktopModelSummary(s))
-	case len(s.Models) == 0:
+	case len(s.Models) == 0 && !nativeT3:
 		l.reason = u.tr("Add at least one shared model before opening a harness.", "Añade al menos un modelo compartido antes de abrir un harness.")
 	case validation != nil:
 		local(nativeMessage(validation.Error(), u.language))
@@ -146,18 +181,18 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 	return l
 }
 
-// uxhSharedReason is the reason no harness can open right now, shown once
-// above the list instead of on every row.
+// uxhSharedReason is shared by Kilo-backed harnesses. Native Muse does not need
+// this connection or model library.
 func (u *nativeUI) uxhSharedReason() string {
 	libraryStatus, libraryReady := u.libraryStatus()
 	u.initModelLibrary()
 	switch {
 	case !(u.agentConnectionReady() && !u.connectionWorking() && !u.setupConnectionNeeded()):
-		return u.tr("Connect Kilo or ChatGPT first.", "Conecta primero Kilo o ChatGPT.")
+		return u.tr("Connect Kilo or ChatGPT to use Kilo-backed harnesses. Muse Code uses its own login.", "Conecta Kilo o ChatGPT para usar los harnesses conectados a Kilo. Muse Code usa su propio inicio de sesión.")
 	case !libraryReady:
 		return libraryStatus
 	case len(u.library.selection.Models) == 0:
-		return u.tr("Add at least one shared model before opening a harness.", "Añade al menos un modelo compartido antes de abrir un harness.")
+		return u.tr("Add shared models for Kilo-backed harnesses. Muse Code uses its official catalog.", "Añade modelos compartidos para los harnesses conectados a Kilo. Muse Code usa su catálogo oficial.")
 	}
 	return ""
 }

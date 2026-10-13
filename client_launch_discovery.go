@@ -105,7 +105,18 @@ func resolveLaunchClient(id, custom string) (string, error) {
 			command = "codex"
 		}
 		if path := launchLookPath(command); path != "" {
+			if id == "muse" {
+				return resolveMuseWindowsLauncher(path, runtime.GOOS)
+			}
 			return path, nil
+		}
+		if id == "muse" {
+			home, _ := os.UserHomeDir()
+			for _, path := range museInstallationPaths(home, runtime.GOOS, os.Getenv("LOCALAPPDATA")) {
+				if launchExecutable(path) {
+					return resolveMuseWindowsLauncher(path, runtime.GOOS)
+				}
+			}
 		}
 		// The desktop bundle includes its matching CLI on macOS.
 		if id == "codex-cli" && runtime.GOOS == "darwin" {

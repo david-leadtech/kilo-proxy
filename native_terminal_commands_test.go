@@ -67,10 +67,10 @@ func TestNativeTerminalCommandsPointerInstallAndUpdate(t *testing.T) {
 				if !s.Info.Installed || !s.Info.PathConfigured || s.Error != "" {
 					t.Fatalf("install did not finish: %+v", s)
 				}
-				if len(s.Info.Commands) != 4 {
-					t.Fatalf("installer did not report all four commands: %#v", s.Info.Commands)
+				if len(s.Info.Commands) != 5 {
+					t.Fatalf("installer did not report all five commands: %#v", s.Info.Commands)
 				}
-				for _, name := range []string{"kilo-codex", "kilo-claude", "kilo-omp", "kilo-opencode"} {
+				for _, name := range []string{"kilo-codex", "kilo-claude", "kilo-omp", "kilo-opencode", "kilo-muse"} {
 					want := filepath.Join(u.owner.editorTestRoot, ".local", "bin", name)
 					if s.Info.Commands[name] != want {
 						t.Fatalf("command path escaped test home: %q", s.Info.Commands[name])
@@ -121,7 +121,7 @@ func TestNativeTerminalCommandsCopyWithAndWithoutPATH(t *testing.T) {
 				s := u.terminalCommandsState()
 				s.Started, s.Checked = true, true
 				s.Info = nativeTerminalCommandsInfo{Supported: true, Installed: true, Directory: directory, PathConfigured: configured, Commands: map[string]string{}}
-				for _, command := range []string{"kilo-codex", "kilo-claude", "kilo-omp", "kilo-opencode"} {
+				for _, command := range []string{"kilo-codex", "kilo-claude", "kilo-omp", "kilo-opencode", "kilo-muse"} {
 					s.Info.Commands[command] = filepath.Join(directory, command)
 				}
 				h := &nativePointerHarness{t: t, u: u, size: image.Pt(780, 700), now: time.Now()}
@@ -131,7 +131,7 @@ func TestNativeTerminalCommandsCopyWithAndWithoutPATH(t *testing.T) {
 				details := u.tr("Commands and paths", "Comandos y rutas")
 				h.reveal(details, semantic.Button)
 				h.click(details, semantic.Button)
-				for _, command := range []string{"kilo-omp", "kilo-opencode"} {
+				for _, command := range []string{"kilo-omp", "kilo-opencode", "kilo-muse"} {
 					label := u.tr("Copy ", "Copiar ") + command
 					h.reveal(label, semantic.Button)
 					h.click(label, semantic.Button)
@@ -186,7 +186,7 @@ func TestNativeTerminalCommandsPowerShellInstallUpdateAndCopy(t *testing.T) {
 			h.reveal(label, semantic.Button)
 			h.click(label, semantic.Button)
 			nativeTestWait(t, u, func() bool { return !u.busy["POST"+nativeTerminalCommandsEndpoint] })
-			if !s.Info.Installed || s.Error != "" || len(s.Info.Commands) != 4 {
+			if !s.Info.Installed || s.Error != "" || len(s.Info.Commands) != 5 {
 				t.Fatalf("PowerShell installation did not finish: %+v", s)
 			}
 			installed := map[string]string{}
@@ -383,10 +383,10 @@ func TestNativeTerminalManualAvailableWithoutInstallationOrHomeWrites(t *testing
 			if !s.Manual.Supported || s.Manual.Shell != wantShell || s.ManualError != "" || s.Info.Installed {
 				t.Fatalf("manual setup should be available before installing: %+v", s)
 			}
-			if len(s.Manual.Commands) != 4 || s.Manual.All == "" {
+			if len(s.Manual.Commands) != 5 || s.Manual.All == "" {
 				t.Fatalf("manual setup omitted functions: %+v", s.Manual)
 			}
-			for _, name := range []string{"kilo-codex", "kilo-claude", "kilo-omp", "kilo-opencode"} {
+			for _, name := range []string{"kilo-codex", "kilo-claude", "kilo-omp", "kilo-opencode", "kilo-muse"} {
 				function := s.Manual.Commands[name]
 				declaresFunction := strings.Contains(function, name+"()") || strings.Contains(function, "function "+name+" {")
 				if !declaresFunction || !strings.Contains(function, "--terminal-agent") || !strings.Contains(function, argumentForwarding) || !strings.Contains(s.Manual.All, function) {
@@ -463,7 +463,7 @@ func TestNativeTerminalManualPointerClipboardAndPreview(t *testing.T) {
 						}
 					}
 					copyAndCheck(u.tr("Copy all", "Copiar todo"), s.Manual.All)
-					for _, name := range []string{"kilo-codex", "kilo-claude", "kilo-omp", "kilo-opencode"} {
+					for _, name := range []string{"kilo-codex", "kilo-claude", "kilo-omp", "kilo-opencode", "kilo-muse"} {
 						h.reveal(name, semantic.Button)
 						h.click(name, semantic.Button)
 						if s.ManualSelected != name || preview.Text() != s.Manual.Commands[name] {

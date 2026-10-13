@@ -21,6 +21,7 @@ func TestClientInstallationURLsOnlySupportedCLIs(t *testing.T) {
 		"opencode":    "https://opencode.ai/docs/#install",
 		"opencode2":   "https://dev.opencode.ai/v2/docs/",
 		"omp":         "https://github.com/can1357/oh-my-pi#install",
+		"muse":        "https://dev.meta.ai/docs/muse-code/",
 		"openmausbot": "https://github.com/milind-soni/OpenMausBot/releases",
 	}
 	for _, id := range append(append([]string{}, launchClients...), "", "unknown", "https://example.test", "CLAUDE") {

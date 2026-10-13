@@ -38,6 +38,12 @@ func TestT3CodeOptionalProvidersRequireOptInAndNativeSupport(t *testing.T) {
 	t.Setenv("ANTHROPIC_AUTH_TOKEN", "must-not-copy")
 	t.Setenv("OPENAI_BASE_URL", "http://kilo.invalid")
 	t.Setenv("XDG_DATA_HOME", filepath.Join(rt.home, "custom-data"))
+	rt.resolve = func(id, custom string) (string, error) {
+		if id != "muse" || custom != "" {
+			t.Fatal("unselected executable resolved", id, custom)
+		}
+		return filepath.Join(rt.home, "selected-muse"), nil
+	}
 	providers, err = planT3CodeOptionalProviders(prefs, t3CodeInstallation{SupportedProviders: t3CodeOptionalProviders}, rt, t.TempDir())
 	if err != nil {
 		t.Fatal(err)

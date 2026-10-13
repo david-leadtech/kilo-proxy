@@ -33,6 +33,7 @@ func (systemVault) Delete(account string) error {
 type settings struct {
 	CodexCLIExecutable              string                  `json:"codexCLIExecutable,omitempty"`
 	ClaudeCodeExecutable            string                  `json:"claudeCodeExecutable,omitempty"`
+	MuseCodeExecutable              string                  `json:"museCodeExecutable,omitempty"`
 	OpenCodeMajor                   int                     `json:"openCodeMajor,omitempty"`
 	OpenCode1Executable             string                  `json:"openCode1Executable,omitempty"`
 	OpenCode2Executable             string                  `json:"openCode2Executable,omitempty"`
@@ -69,7 +70,7 @@ func readSettings(dir string) (settings, error) {
 	if validateOpenCodeExecutable(s.OpenCode1Executable) != nil || validateOpenCodeExecutable(s.OpenCode2Executable) != nil {
 		return s, errors.New("invalid OpenCode executable preference")
 	}
-	if validateCLIExecutable(s.CodexCLIExecutable) != nil || validateCLIExecutable(s.ClaudeCodeExecutable) != nil {
+	if validateCLIExecutable(s.CodexCLIExecutable) != nil || validateCLIExecutable(s.ClaudeCodeExecutable) != nil || validateCLIExecutable(s.MuseCodeExecutable) != nil {
 		return s, errors.New("Invalid CLI executable preferences.")
 	}
 	s.TrayDisplay = normalizeTrayDisplay(s.TrayDisplay)
