@@ -51,15 +51,14 @@ var uxsSections = []uxsSection{
 	{"accounts", "Accounts", "Cuentas"},
 	{"connection", "Connection", "Conexión"},
 	{"preferences", "Preferences", "Preferencias"},
-	{"cli-tools", "CLI installations", "Instalaciones CLI"},
-	{"t3-code", "T3 Code", "T3 Code"},
+	{"cli-tools", "Application and CLI installations", "Instalaciones de aplicaciones y CLI"},
 	{"images", "Large images", "Imágenes grandes"},
 	{"terminal", "Terminal commands", "Comandos de terminal"},
 	{"updates", "Updates", "Actualizaciones"},
 }
 
 // uxsLegacyTabs maps the former tab names, still used by links elsewhere, to blocks.
-var uxsLegacyTabs = map[string]string{"account": "accounts", "accounts": "accounts", "connection": "connection", "images": "images", "preferences": "preferences", "cli-tools": "cli-tools", "t3-code": "t3-code", "terminal": "terminal", "updates": "updates"}
+var uxsLegacyTabs = map[string]string{"account": "accounts", "accounts": "accounts", "connection": "connection", "images": "images", "preferences": "preferences", "cli-tools": "cli-tools", "terminal": "terminal", "updates": "updates"}
 
 func (u *nativeUI) uxs() *uxsSettingsState {
 	if u.uxSettings == nil {
@@ -73,7 +72,7 @@ func (u *nativeUI) uxsPageLead() ([2]string, bool) {
 	if u.page != "settings" && u.page != "connection" {
 		return [2]string{}, false
 	}
-	return [2]string{"Manage your connection, CLI installations and preferences.", "Gestiona la conexión, las instalaciones de las CLI y tus preferencias."}, true
+	return [2]string{"Manage your connection, application and CLI installations, and preferences.", "Gestiona la conexión, las instalaciones de aplicaciones y CLI, y tus preferencias."}, true
 }
 
 // uxsBlock is a bordered box with an ivory header (title + muted subtitle) and rows.
@@ -446,6 +445,13 @@ func uxsRadioMark(gtx layout.Context, selected, enabled bool) layout.Dimensions 
 // draws the index pinned to the top of the visible area.
 func (u *nativeUI) uxsSettingsPage() layout.Widget {
 	s := u.uxs()
+	// Older links targeted the former global block. Keep them useful without
+	// rendering a second copy of the harness's controls in Settings.
+	if u.settingsTab == "t3-code" || s.jump == "t3-code" {
+		u.settingsTab, s.jump, s.jumpTarget, s.verify = "", "", "", ""
+		u.agentSetup("t3-code")
+		return u.clientsPanel()
+	}
 	// Links elsewhere still name a former tab; treat it as a jump target.
 	if target := uxsLegacyTabs[u.settingsTab]; target != "" {
 		s.jump = target
@@ -469,7 +475,6 @@ func (u *nativeUI) uxsSettingsPage() layout.Widget {
 		{"connection", u.uxsConnectionBlock()},
 		{"preferences", u.appearancePanel()},
 		{"cli-tools", u.cliPreferencesPanel()},
-		{"t3-code", u.t3CodePreferencesPanel()},
 		{"images", u.imageTransportPanel()},
 		{"terminal", u.terminalCommandsPanel()},
 		{"updates", u.updatesPanel()},

@@ -107,6 +107,9 @@ func synaraTestApp(t *testing.T, platform string, versions ...string) *app {
 	platform = synaraTestPlatform(platform)
 	a := launchTestApp(t)
 	a.synaraRuntimeDisabled = true
+	// These filesystem/profile fixtures do not start Electron. Sandbox policy
+	// is exercised separately with restricted, allowed and unreadable controls.
+	a.synaraCheckSystem = func(string) string { return "" }
 	t.Setenv("CODEX_HOME", filepath.Join(a.launcher.home, ".codex"))
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(a.launcher.home, ".claude"))
 	a.config.Port = 9988

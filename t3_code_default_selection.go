@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 // Only Kilo instances have a fixed prepared model policy. Direct and optional
 // instances retain T3's own native catalog and stored model options.
 func t3CodeDefaultSelection(current any, providers map[string]any, policy t3CodeModelPolicy) any {
@@ -20,11 +22,16 @@ func t3CodeDefaultSelection(current any, providers map[string]any, policy t3Code
 		return false
 	}
 	claudePicker := t3CodeClaudePickerLibrary(policy.ClaudeLibrary, policy.ClaudeRoutes)
+	openCodePicker := t3CodeOpenCodePickerLibrary(policy.OpenCodeLibrary)
 	if selected, ok := current.(map[string]any); ok {
 		id, _ := selected["instanceId"].(string)
 		model, _ := selected["model"].(string)
 		if enabled(id) && model != "" {
 			switch id {
+			case t3CodeOpenCodeProxyID:
+				if contains(openCodePicker, model) {
+					return t3CodeOpenCodeSelectionVariants(selected, policy.OpenCodeVariantLevels)
+				}
 			case t3CodeCodexProxyID:
 				if contains(policy.CodexLibrary, model) {
 					return current
@@ -56,7 +63,7 @@ func t3CodeDefaultSelection(current any, providers map[string]any, policy t3Code
 	for _, candidate := range []struct {
 		id      string
 		library modelLibrary
-	}{{t3CodeCodexProxyID, policy.CodexLibrary}, {t3CodeClaudeProxyID, claudePicker}} {
+	}{{t3CodeCodexProxyID, policy.CodexLibrary}, {t3CodeClaudeProxyID, claudePicker}, {t3CodeOpenCodeProxyID, openCodePicker}} {
 		if enabled(candidate.id) && len(candidate.library.Models) > 0 {
 			return map[string]any{"instanceId": candidate.id, "model": candidate.library.DefaultModel}
 		}
@@ -64,4 +71,54 @@ func t3CodeDefaultSelection(current any, providers map[string]any, policy t3Code
 	// Null delegates direct/optional model choice to T3's enabled-instance
 	// resolver and native driver defaults. It also represents all accounts off.
 	return nil
+}
+
+// Only remove stale OpenCode variant values, preserving the account, model,
+// other options and every conversation. T3 accepts canonical option arrays and
+// its legacy object shape; both can be retained by previous settings.
+func t3CodeOpenCodeSelectionVariants(selected map[string]any, levels map[string][]string) any {
+	model, _ := selected["model"].(string)
+	allowed := levels[strings.TrimPrefix(model, "kilo-local/")]
+	valid := func(value any) bool {
+		variant, ok := value.(string)
+		return ok && helperContains(allowed, variant)
+	}
+	var next any
+	switch options := selected["options"].(type) {
+	case map[string]any:
+		value, exists := options["variant"]
+		if !exists || valid(value) {
+			return selected
+		}
+		copy := map[string]any{}
+		for name, value := range options {
+			if name != "variant" {
+				copy[name] = value
+			}
+		}
+		next = copy
+	case []any:
+		copy := []any{}
+		changed := false
+		for _, raw := range options {
+			option, ok := raw.(map[string]any)
+			if ok && option["id"] == "variant" && !valid(option["value"]) {
+				changed = true
+				continue
+			}
+			copy = append(copy, raw)
+		}
+		if !changed {
+			return selected
+		}
+		next = copy
+	default:
+		return selected
+	}
+	result := map[string]any{}
+	for key, value := range selected {
+		result[key] = value
+	}
+	result["options"] = next
+	return result
 }

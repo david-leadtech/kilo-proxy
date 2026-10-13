@@ -31,7 +31,7 @@ func (u *nativeUI) uxhInstallState(key string) uxhInstall {
 	if !c.LaunchChecked {
 		return uxhChecking
 	}
-	if u.nativeLaunchAvailable(key) || terminalClientSupported(key) && nativeLaunchClientInstalled(c.LaunchInfo.Clients[key]) {
+	if u.nativeLaunchAvailable(key) || nativeLaunchClientInstalled(c.LaunchInfo.Clients[key]) {
 		return uxhInstalled
 	}
 	return uxhMissing
@@ -161,6 +161,10 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 		if preferences.Pending != nil || u.t3CodePreferencesBusy() || u.busy["GET"+nativeT3CodePreferencesEndpoint] || preferences.Requested && !preferences.Loaded {
 			l.canOpen = false
 			l.reason, l.local = u.tr("Load or finish saving T3 Code settings before opening.", "Carga o termina de guardar los ajustes de T3 Code antes de abrir."), true
+		}
+		if err := u.t3CodeOpenCodeConnectionError(); err != nil {
+			l.canOpen = false
+			l.reason, l.local = err.Error(), true
 		}
 		if preferences.Loaded {
 			if payload, err := nativeClientPayload(key, s); err == nil {

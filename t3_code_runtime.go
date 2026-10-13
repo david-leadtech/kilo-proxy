@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-const t3CodeRuntimeRevision = 4
+const t3CodeRuntimeRevision = 5
 const t3CodeRuntimeFileLimit int64 = 32 << 20
 const t3CodeRuntimeTotalLimit int64 = 128 << 20
 
@@ -28,16 +28,17 @@ const t3CodeRuntimeTotalLimit int64 = 128 << 20
 // Its official development-assets contract serves these private public files
 // under the original desktop protocol and original bootstrap/authentication.
 type t3CodePrivateRuntime struct {
-	Revision       int                 `json:"revision"`
-	Root           string              `json:"root"`
-	SourceDigest   string              `json:"sourceDigest"`
-	SourceArchive  string              `json:"sourceArchive"`
-	SourceFiles    map[string]string   `json:"sourceFiles"`
-	Files          map[string]string   `json:"files"`
-	ProvidersAsset string              `json:"providersAsset"`
-	ModelsAsset    string              `json:"modelsAsset,omitempty"`
-	ModelAllowlist map[string][]string `json:"modelAllowlist"`
-	ModelDefaults  map[string]string   `json:"modelDefaults"`
+	Revision         int                 `json:"revision"`
+	Root             string              `json:"root"`
+	SourceDigest     string              `json:"sourceDigest"`
+	SourceArchive    string              `json:"sourceArchive"`
+	SourceFiles      map[string]string   `json:"sourceFiles"`
+	Files            map[string]string   `json:"files"`
+	ProvidersAsset   string              `json:"providersAsset"`
+	ModelsAsset      string              `json:"modelsAsset,omitempty"`
+	ModelAllowlist   map[string][]string `json:"modelAllowlist"`
+	ModelDefaults    map[string]string   `json:"modelDefaults"`
+	OpenCodeVariants map[string][]string `json:"openCodeVariants"`
 }
 
 var t3CodeRuntimeDefaultRow = regexp.MustCompile(`([A-Za-z_$][A-Za-z0-9_$]*)\.push\(\{instanceId:([A-Za-z_$][A-Za-z0-9_$]*),instance:([A-Za-z_$][A-Za-z0-9_$]*),driver:([A-Za-z_$][A-Za-z0-9_$]*),isDefault:!0,isDirty:([A-Za-z_$][A-Za-z0-9_$]*)\}\)`)
@@ -71,7 +72,7 @@ func patchT3CodeProvidersAsset(source []byte) ([]byte, error) {
 func normalizeT3CodeRuntimeModelAllowlist(input map[string][]string) (map[string][]string, error) {
 	result := map[string][]string{}
 	for id, models := range input {
-		if id != t3CodeCodexProxyID && id != t3CodeClaudeProxyID || len(models) > 2048 {
+		if id != t3CodeCodexProxyID && id != t3CodeClaudeProxyID && id != t3CodeOpenCodeProxyID || len(models) > 2048 {
 			return nil, errors.New("Invalid private T3 Code model policy.")
 		}
 		seen := map[string]bool{}
@@ -92,7 +93,7 @@ func normalizeT3CodeRuntimeModelDefaults(defaults map[string]string, policy map[
 	result := map[string]string{}
 	for id, model := range defaults {
 		models, exists := policy[id]
-		if !exists || id != t3CodeCodexProxyID && id != t3CodeClaudeProxyID {
+		if !exists || id != t3CodeCodexProxyID && id != t3CodeClaudeProxyID && id != t3CodeOpenCodeProxyID {
 			return nil, errors.New("Invalid private T3 Code default model account.")
 		}
 		valid := model == "" && len(models) == 0
@@ -107,10 +108,35 @@ func normalizeT3CodeRuntimeModelDefaults(defaults map[string]string, policy map[
 	return result, nil
 }
 
-func t3CodeRuntimeModelFilter(allowlist map[string][]string, defaults map[string]string) []byte {
+func normalizeT3CodeRuntimeOpenCodeVariants(input map[string][]string, policy map[string][]string) (map[string][]string, error) {
+	result := map[string][]string{}
+	for model, levels := range input {
+		if !helperContains(policy[t3CodeOpenCodeProxyID], model) || len(levels) > len(nativeReasoningLevels) {
+			return nil, errors.New("Invalid private T3 OpenCode variant policy.")
+		}
+		seen := map[string]bool{}
+		result[model] = []string{}
+		for _, level := range levels {
+			if !helperContains(nativeReasoningLevels, level) || seen[level] {
+				return nil, errors.New("Invalid private T3 OpenCode reasoning level.")
+			}
+			seen[level] = true
+			result[model] = append(result[model], level)
+		}
+	}
+	return result, nil
+}
+
+func t3CodeRuntimeModelFilter(allowlist map[string][]string, defaults map[string]string, requestedVariants ...map[string][]string) []byte {
 	policy, _ := json.Marshal(allowlist)
 	initial, _ := json.Marshal(defaults)
-	return []byte(`function __kiloT3InstanceModels(id,driver,models){const policy=` + string(policy) + `,defaults=` + string(initial) + `;const expected=id==="` + t3CodeCodexProxyID + `"?"codex":id==="` + t3CodeClaudeProxyID + `"?"claudeAgent":null;if(expected===null||expected!==driver||!Object.prototype.hasOwnProperty.call(policy,id))return models;return Array.isArray(models)?models.filter(model=>policy[id].includes(model.slug)).map(model=>defaults[id]&&((model.isDefault===true)!==(model.slug===defaults[id]))?{...model,isDefault:model.slug===defaults[id]}:model):models;}` + "\n" + `function __kiloT3InstanceSnapshot(snapshot){const models=__kiloT3InstanceModels(snapshot.instanceId,snapshot.driver,snapshot.models);return models===snapshot.models?snapshot:{...snapshot,models};}` + "\n")
+	variants := map[string][]string{}
+	if len(requestedVariants) > 0 && requestedVariants[0] != nil {
+		variants = requestedVariants[0]
+	}
+	variantJSON, _ := json.Marshal(variants)
+	return []byte(`function __kiloT3OpenCodeVariants(model){const variants=` + string(variantJSON) + `,allowed=variants[model.slug]??[],cap=model.capabilities;if(!cap||!Array.isArray(cap.optionDescriptors))return model;let changed=false;const descriptors=cap.optionDescriptors.flatMap(descriptor=>{if(descriptor.id!=="variant")return [descriptor];changed=true;const options=Array.isArray(descriptor.options)?descriptor.options.filter(option=>allowed.includes(option.id)):[];if(options.length===0)return [];const result={...descriptor,options};if(Object.prototype.hasOwnProperty.call(result,"currentValue")&&!allowed.includes(result.currentValue))delete result.currentValue;return [result];});return changed?{...model,capabilities:{...cap,optionDescriptors:descriptors}}:model;}
+function __kiloT3InstanceModels(id,driver,models){const policy=` + string(policy) + `,defaults=` + string(initial) + `;const expected=id==="` + t3CodeCodexProxyID + `"?"codex":id==="` + t3CodeClaudeProxyID + `"?"claudeAgent":id==="` + t3CodeOpenCodeProxyID + `"?"opencode":null;if(expected===null||expected!==driver||!Object.prototype.hasOwnProperty.call(policy,id))return models;return Array.isArray(models)?models.filter(model=>policy[id].includes(model.slug)).map(model=>id==="` + t3CodeOpenCodeProxyID + `"?__kiloT3OpenCodeVariants(model):model).map(model=>defaults[id]&&((model.isDefault===true)!==(model.slug===defaults[id]))?{...model,isDefault:model.slug===defaults[id]}:model):models;}` + "\n" + `function __kiloT3InstanceSnapshot(snapshot){const models=__kiloT3InstanceModels(snapshot.instanceId,snapshot.driver,snapshot.models);return models===snapshot.models?snapshot:{...snapshot,models};}` + "\n")
 }
 
 var t3CodeRuntimeModelsProjection = regexp.MustCompile(`snapshot:([A-Za-z_$][A-Za-z0-9_$]*),models:([A-Za-z_$][A-Za-z0-9_$]*)\.models`)
@@ -158,6 +184,10 @@ func patchT3CodeModelsProjection(source []byte, policy map[string][]string, defa
 	if len(defaults) > 0 {
 		initial = defaults[0]
 	}
+	return patchT3CodeModelsProjectionWithVariants(source, policy, initial, nil)
+}
+
+func patchT3CodeModelsProjectionWithVariants(source []byte, policy map[string][]string, initial map[string]string, variants map[string][]string) ([]byte, error) {
 	matches := t3CodeRuntimeModelsProjection.FindAllSubmatchIndex(source, -1)
 	if len(matches) != 1 || bytes.Contains(source, []byte("__kiloT3InstanceModels")) {
 		return nil, errors.New("This T3 Code model picker has an incompatible instance projection.")
@@ -186,7 +216,7 @@ func patchT3CodeModelsProjection(source []byte, policy map[string][]string, defa
 	m = t3CodeRuntimeModelsProjection.FindSubmatchIndex(labelSource)
 	filter := fmt.Sprintf("__kiloT3InstanceModels(%s.instanceId,%s.driver,%s.models)", snapshot, snapshot, snapshot)
 	replacement := []byte("snapshot:__kiloT3InstanceSnapshot(" + snapshot + "),models:" + filter)
-	result := append(t3CodeRuntimeModelFilter(policy, initial), labelSource[:m[0]]...)
+	result := append(t3CodeRuntimeModelFilter(policy, initial, variants), labelSource[:m[0]]...)
 	result = append(result, replacement...)
 	return append(result, labelSource[m[1]:]...), nil
 }
@@ -196,6 +226,10 @@ func patchT3CodeModelsCard(source []byte, policy map[string][]string, defaults .
 	if len(defaults) > 0 {
 		initial = defaults[0]
 	}
+	return patchT3CodeModelsCardWithVariants(source, policy, initial, nil)
+}
+
+func patchT3CodeModelsCardWithVariants(source []byte, policy map[string][]string, initial map[string]string, variants map[string][]string) ([]byte, error) {
 	matches := t3CodeRuntimeModelsCard.FindAllSubmatchIndex(source, -1)
 	if len(matches) != 1 || bytes.Contains(source, []byte("__kiloT3InstanceModels")) {
 		return nil, errors.New("This T3 Code Models settings interface has an incompatible contract.")
@@ -215,13 +249,13 @@ func patchT3CodeModelsCard(source []byte, policy map[string][]string, defaults .
 	}
 	id, instance := string(arguments[0][1]), string(arguments[0][2])
 	replacement := fmt.Sprintf("liveModels:__kiloT3InstanceModels(%s,%s.driver,%s?.models),customModels:__kiloT3InstanceModels(%s,%s.driver,%s)", id, instance, live, id, instance, custom)
-	result := append(t3CodeRuntimeModelFilter(policy, initial), source[:m[0]]...)
+	result := append(t3CodeRuntimeModelFilter(policy, initial, variants), source[:m[0]]...)
 	result = append(result, []byte(replacement)...)
 	return append(result, source[m[1]:]...), nil
 }
 
 func t3CodeRuntimeIdentity(record t3CodePrivateRuntime) []byte {
-	identity, _ := json.Marshal([]any{record.Revision, record.SourceDigest, record.SourceArchive, record.SourceFiles, record.ModelAllowlist, record.ModelDefaults})
+	identity, _ := json.Marshal([]any{record.Revision, record.SourceDigest, record.SourceArchive, record.SourceFiles, record.ModelAllowlist, record.ModelDefaults, record.OpenCodeVariants})
 	return identity
 }
 
@@ -236,6 +270,10 @@ func validT3CodeRuntimeRoot(record t3CodePrivateRuntime, privateRoot string) boo
 		}
 	}
 	record.ModelDefaults, err = normalizeT3CodeRuntimeModelDefaults(record.ModelDefaults, policy)
+	if err != nil {
+		return false
+	}
+	record.OpenCodeVariants, err = normalizeT3CodeRuntimeOpenCodeVariants(record.OpenCodeVariants, policy)
 	if err != nil {
 		return false
 	}
@@ -345,13 +383,24 @@ func prepareT3CodeRuntime(privateRoot, executable, platform string, allowlists .
 	return prepareT3CodeRuntimeWithModelDefaults(privateRoot, executable, platform, input, nil)
 }
 
-func prepareT3CodeRuntimeWithModelDefaults(privateRoot, executable, platform string, input map[string][]string, requestedDefaults map[string]string) (t3CodePrivateRuntime, error) {
+func prepareT3CodeRuntimeWithModelDefaults(privateRoot, executable, platform string, input map[string][]string, requestedDefaults map[string]string, requestedVariants ...map[string][]string) (t3CodePrivateRuntime, error) {
 	var result t3CodePrivateRuntime
 	policy, err := normalizeT3CodeRuntimeModelAllowlist(input)
 	if err != nil {
 		return result, err
 	}
 	defaults, err := normalizeT3CodeRuntimeModelDefaults(requestedDefaults, policy)
+	if err != nil {
+		return result, err
+	}
+	var variantInput map[string][]string
+	if len(requestedVariants) > 1 {
+		return result, errors.New("Ambiguous private T3 OpenCode variant policy.")
+	}
+	if len(requestedVariants) == 1 {
+		variantInput = requestedVariants[0]
+	}
+	variants, err := normalizeT3CodeRuntimeOpenCodeVariants(variantInput, policy)
 	if err != nil {
 		return result, err
 	}
@@ -368,7 +417,7 @@ func prepareT3CodeRuntimeWithModelDefaults(privateRoot, executable, platform str
 	if err != nil {
 		return result, err
 	}
-	result = t3CodePrivateRuntime{Revision: t3CodeRuntimeRevision, SourceDigest: installation.SourceDigest, SourceArchive: archive.file.Name(), ModelAllowlist: policy, ModelDefaults: defaults, Files: map[string]string{}, SourceFiles: map[string]string{}}
+	result = t3CodePrivateRuntime{Revision: t3CodeRuntimeRevision, SourceDigest: installation.SourceDigest, SourceArchive: archive.file.Name(), ModelAllowlist: policy, ModelDefaults: defaults, OpenCodeVariants: variants, Files: map[string]string{}, SourceFiles: map[string]string{}}
 	for name, data := range files {
 		result.SourceFiles[name] = openDesignHash(data)
 		if strings.HasPrefix(name, "assets/settings.providers-") && strings.HasSuffix(name, ".js") {
@@ -380,7 +429,7 @@ func prepareT3CodeRuntimeWithModelDefaults(privateRoot, executable, platform str
 				return t3CodePrivateRuntime{}, err
 			}
 			if len(policy) > 0 {
-				patched, err = patchT3CodeModelsCard(patched, policy, defaults)
+				patched, err = patchT3CodeModelsCardWithVariants(patched, policy, defaults, variants)
 				if err != nil {
 					return t3CodePrivateRuntime{}, err
 				}
@@ -396,7 +445,7 @@ func prepareT3CodeRuntimeWithModelDefaults(privateRoot, executable, platform str
 			if result.ModelsAsset != "" {
 				return t3CodePrivateRuntime{}, errors.New("Ambiguous T3 Code instance model projection assets.")
 			}
-			patched, err := patchT3CodeModelsProjection(data, policy, defaults)
+			patched, err := patchT3CodeModelsProjectionWithVariants(data, policy, defaults, variants)
 			if err != nil {
 				return t3CodePrivateRuntime{}, err
 			}
@@ -496,6 +545,9 @@ func verifyT3CodeRuntimeFiles(runtime t3CodePrivateRuntime) bool {
 	if _, err := normalizeT3CodeRuntimeModelDefaults(runtime.ModelDefaults, runtime.ModelAllowlist); err != nil {
 		return false
 	}
+	if _, err := normalizeT3CodeRuntimeOpenCodeVariants(runtime.OpenCodeVariants, runtime.ModelAllowlist); err != nil {
+		return false
+	}
 	if len(runtime.ModelAllowlist) > 0 && (runtime.ModelsAsset == "" || runtime.Files[runtime.ModelsAsset] == "") {
 		return false
 	}
@@ -538,14 +590,14 @@ func t3CodeRuntimeReady(runtime t3CodePrivateRuntime, executable, platform strin
 		if name == runtime.ProvidersAsset {
 			expected, err = patchT3CodeProvidersAsset(data)
 			if err == nil && len(runtime.ModelAllowlist) > 0 {
-				expected, err = patchT3CodeModelsCard(expected, runtime.ModelAllowlist, runtime.ModelDefaults)
+				expected, err = patchT3CodeModelsCardWithVariants(expected, runtime.ModelAllowlist, runtime.ModelDefaults, runtime.OpenCodeVariants)
 			}
 			if err != nil {
 				return false
 			}
 		}
 		if name == runtime.ModelsAsset {
-			expected, err = patchT3CodeModelsProjection(data, runtime.ModelAllowlist, runtime.ModelDefaults)
+			expected, err = patchT3CodeModelsProjectionWithVariants(data, runtime.ModelAllowlist, runtime.ModelDefaults, runtime.OpenCodeVariants)
 			if err != nil {
 				return false
 			}

@@ -222,8 +222,8 @@ func (a *app) prepareSynara(library modelLibrary, rt clientLaunchRuntime, binary
 
 func (a *app) synaraProfileAPI(w http.ResponseWriter, r *http.Request) {
 	rt := a.launchRuntime()
-	binary, resolveErr := rt.resolve("synara", "")
 	if r.Method == http.MethodGet {
+		binary, resolveErr := rt.resolve("synara", "")
 		paths := synaraPaths(a.dir)
 		state := a.modelLibrary.snapshot()
 		library := state.Library
@@ -260,15 +260,22 @@ func (a *app) synaraProfileAPI(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &input) {
 		return
 	}
-	if resolveErr != nil {
-		jsonError(w, 409, resolveErr.Error())
-		return
-	}
 	if !a.launchMu.TryLock() {
 		jsonError(w, 409, "Another agent is being prepared. Try again.")
 		return
 	}
 	defer a.launchMu.Unlock()
+	// Resolve the current selection inside the same transaction as preparation.
+	// A saved path or host security policy may have changed since the last GET.
+	binary, resolveErr := rt.resolve("synara", "")
+	if resolveErr != nil {
+		jsonError(w, 409, resolveErr.Error())
+		return
+	}
+	if err := a.synaraAvailability(binary, rt); err != nil {
+		jsonError(w, 409, err.Error())
+		return
+	}
 	state := a.modelLibrary.snapshot()
 	library := state.Library
 	if input.Library != nil {

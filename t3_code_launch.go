@@ -172,6 +172,7 @@ func t3CodeNormalEnvironment(home string, parent []string, platform string) map[
 func t3CodeUnsetEnvironment(parent []string) []string {
 	names := append([]string{}, nativeClaudeResetEnv...)
 	names = append(names, "CODEX_HOME", "CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL", "KILO_LOCAL_API_KEY", "CLAUDE_CONFIG_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR", "CLAUDECODE", "NODE_OPTIONS", "ELECTRON_RUN_AS_NODE", "VITE_DEV_SERVER_URL", "T3CODE_CODEX_LAUNCH_ARGS", "T3CODE_PORT", "T3CODE_DEV_REMOTE_T3_SERVER_ENTRY_PATH", "T3CODE_DEV_AUTH_TOKEN", "T3CODE_DEV_ALLOWED_ORIGINS", "T3CODE_DESKTOP_WS_URL", "T3CODE_DESKTOP_LAN_ACCESS", "T3CODE_DESKTOP_LAN_HOST", "T3CODE_DESKTOP_HTTPS_ENDPOINTS", "T3CODE_BOOTSTRAP_FD", "T3CODE_HOST", "T3CODE_MODE", "T3CODE_TAILSCALE_SERVE", "T3CODE_TAILSCALE_SERVE_PORT", "T3CODE_DESKTOP_MOCK_UPDATES", "T3CODE_DESKTOP_MOCK_UPDATE_SERVER_PORT")
+	names = append(names, "KILO_OPENCODE_API_KEY", "KILO_OPENCODE2_API_KEY", t3CodeOpenCodeKey)
 	for _, entry := range parent {
 		name, _, ok := strings.Cut(entry, "=")
 		if ok && strings.HasPrefix(strings.ToUpper(name), "T3CODE_") {
@@ -259,6 +260,14 @@ func (a *app) applyT3CodeLaunch(plan *clientLaunchPlan, rt clientLaunchRuntime) 
 	plan.Env["HOME"] = paths.UIHome
 	plan.Env["T3CODE_DISABLE_AUTO_UPDATE"] = "true"
 	plan.Unset = append(plan.Unset, t3CodeUnsetEnvironment(os.Environ())...)
+	if t3CodeOpenCodeKiloEnabled(saved.Preferences) {
+		for _, entry := range os.Environ() {
+			name, _, ok := strings.Cut(entry, "=")
+			if ok && strings.HasPrefix(strings.ToUpper(name), "OPENCODE_") {
+				plan.Unset = append(plan.Unset, name)
+			}
+		}
+	}
 	plan.Args = []string{t3CodeMarker + paths.Root}
 	if rt.platform == "windows" {
 		plan.Env["USERPROFILE"] = paths.UIHome

@@ -47,6 +47,7 @@ func synaraInstallationCandidates(platform, home, localAppData string) []string 
 				candidates = append(candidates, filepath.Join(root, name))
 			}
 		}
+		candidates = append(candidates, synaraAppImageCandidates(home)...)
 	}
 	return candidates
 }
@@ -57,11 +58,17 @@ func resolveSynara(platform, home, localAppData string) (string, error) {
 
 func resolveSynaraCandidates(candidates []string) (string, error) {
 	for _, path := range candidates {
+		if !synaraPersistentPath(path) {
+			continue
+		}
+		if canonical, err := filepath.EvalSymlinks(path); err != nil || !synaraPersistentPath(canonical) {
+			continue
+		}
 		if strings.HasSuffix(path, ".app") {
 			if info, err := os.Stat(path); err == nil && info.IsDir() {
 				return path, nil
 			}
-		} else if launchExecutable(path) {
+		} else if synaraAppImage(path) || launchExecutable(path) {
 			return path, nil
 		}
 	}
@@ -69,6 +76,11 @@ func resolveSynaraCandidates(candidates []string) (string, error) {
 }
 
 func (a *app) applySynaraLaunch(plan *clientLaunchPlan, rt clientLaunchRuntime) error {
+	// Host policy can change after preparation. Never start a private Electron
+	// workspace by weakening the sandbox or assuming earlier checks still hold.
+	if err := a.synaraSystemRequirement(rt.platform); err != nil {
+		return err
+	}
 	if rt.platform == "windows" {
 		check := a.synaraCheckEnvironment
 		if check == nil {

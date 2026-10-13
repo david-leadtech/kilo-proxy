@@ -106,7 +106,7 @@ func (u *nativeUI) clientLauncherPanel(key string, s *nativeClientSelection, can
 	)
 	installTone, installStatus := nativeToneInfo, u.tr("Checking installation…", "Comprobando instalación…")
 	if c.LaunchChecked {
-		if launchable || terminalClientSupported(key) && nativeLaunchClientInstalled(info) {
+		if launchable || nativeLaunchClientInstalled(info) {
 			installTone, installStatus = nativeToneSuccess, u.tr("Installed", "Instalado")
 		} else {
 			installTone, installStatus = nativeToneNeutral, u.tr("Not found", "No encontrado")
@@ -343,6 +343,12 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 			return
 		}
 	}
+	if key == "t3-code" {
+		if err := u.t3CodeOpenCodeConnectionError(); err != nil {
+			u.noticeError(err)
+			return
+		}
+	}
 	nativeT3 := key == "t3-code" && u.t3CodeNativeOnly()
 	if err := u.packReadinessError(key); !nativeT3 && err != nil {
 		u.noticeError(err)
@@ -377,7 +383,15 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 		return
 	}
 	if !u.nativeLaunchAvailable(key) {
-		u.setNotice(nativeToneWarning, u.tr("Refresh installed apps or set a valid Codex application path.", "Actualiza las aplicaciones instaladas o indica una ruta válida de Codex."))
+		reason := nativeMessage(c.LaunchInfo.Clients[key].Reason, u.language)
+		if reason == "" {
+			if key == "codex" {
+				reason = u.tr("Refresh installed apps or set a valid Codex application path.", "Actualiza las aplicaciones instaladas o indica una ruta válida de Codex.")
+			} else {
+				reason = u.tr("Refresh installed apps before opening this tool.", "Actualiza las aplicaciones instaladas antes de abrir esta herramienta.")
+			}
+		}
+		u.setNotice(nativeToneWarning, reason)
 		return
 	}
 	s := u.sharedClientSelection(key)

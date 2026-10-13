@@ -142,10 +142,11 @@ func nativeTestWait(t *testing.T, u *nativeUI, predicate func() bool) {
 	t.Fatalf("native UI did not reach expected state: %s", u.notice)
 }
 
-// The CLI and T3 blocks precede Images, Terminal and Updates in Settings and
+// The CLI block precedes Images, Terminal and Updates in Settings and
 // change height when their first responses arrive. Launcher discovery also adds
 // resolved CLI paths. Resolve requests already started and lay out their
 // confirmed state before capturing pointer coordinates in those blocks.
+// T3 preferences belong to its harness detail and no longer load in Settings.
 func nativeSettingsPreferencesReady(h *nativePointerHarness) {
 	h.t.Helper()
 	defer func() {
@@ -157,7 +158,7 @@ func nativeSettingsPreferencesReady(h *nativePointerHarness) {
 	nativeTestWait(h.t, h.u, func() bool {
 		c := h.u.clientState()
 		launchReady := !c.LaunchDetectStarted || c.LaunchChecked && !h.u.busy["GET"+nativeLaunchEndpoint]
-		return launchReady && h.u.cliPreferencesReady() && h.u.agentsState().T3Code.PreferencesState.Loaded && !h.u.busy["GET"+nativeT3CodePreferencesEndpoint] && !h.u.t3CodePreferencesBusy()
+		return launchReady && h.u.cliPreferencesReady()
 	})
 	h.frame()
 	// A jump checked against the old block positions can enqueue a corrected

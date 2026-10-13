@@ -95,7 +95,7 @@ func (u *nativeUI) synaraDetail(s *nativeClientSelection) uxhDetail {
 	}
 	if state.Error != "" {
 		d.status = append(d.status, u.hint(state.Error))
-	} else if state.Info.Message != "" && (!state.Info.Prepared || u.synaraPrepared(s)) {
+	} else if state.Info.Message != "" && nativeMessage(state.Info.Message, u.language) != nativeMessage(u.clientState().LaunchInfo.Clients[key].Reason, u.language) && (!state.Info.Prepared || u.synaraPrepared(s)) {
 		d.status = append(d.status, u.note(nativeMessage(state.Info.Message, u.language)))
 	}
 	d.blocks = append(d.blocks, u.uxhBlock(u.tr("Agents", "Agentes"), u.tr("Choose one of these four options for each new chat.", "Elige una de estas cuatro opciones para cada chat nuevo."), uxhMultiAgentRows(u, u.tr("Kilo Proxy names and green account indicators identify Kilo agents.", "Los nombres Kilo Proxy y los indicadores verdes de cuenta identifican los agentes Kilo."))...))
@@ -116,6 +116,11 @@ func (u *nativeUI) synaraDetail(s *nativeClientSelection) uxhDetail {
 	d.advanced = append(d.advanced,
 		u.uxhAdvancedRow(u.tr("Prepared settings", "Ajustes preparados"), requirements, notes,
 			u.disabled(!u.busy["GET/api/clients/synara"], u.button("client:synara:refresh", u.tr("Refresh", "Actualizar"), u.refreshSynaraProfile))))
+	if u.clientState().LaunchInfo.Platform == "linux" {
+		d.blocks = append(d.blocks, u.uxhBlock(u.tr("Linux installation", "Instalación en Linux"), "",
+			uxhCell(u.note(u.tr("A detected AppImage is a package candidate, not a prepared installation. Install a verified Kilo copy, or select a persistent extracted Synara executable in Settings → Application and CLI installations. Kilo never starts an AppImage during detection.", "Un AppImage detectado es un paquete candidato, no una instalación preparada. Instala una copia Kilo verificada o selecciona un ejecutable de Synara extraído en una ubicación permanente en Ajustes → Instalaciones de aplicaciones y CLI. Kilo nunca inicia un AppImage durante la detección."))),
+			uxhCell(u.note(u.tr("Ubuntu AppArmor and user-namespace restrictions can block a private Electron copy. Kilo keeps the sandbox enabled. Account-aware delegation in the private macOS runtime has not been validated on Linux.", "Las restricciones de AppArmor y los espacios de nombres de usuario de Ubuntu pueden bloquear una copia privada de Electron. Kilo mantiene el sandbox activado. La delegación entre cuentas del runtime privado de macOS no se ha validado en Linux.")))))
+	}
 	return d
 }
 

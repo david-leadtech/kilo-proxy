@@ -21,6 +21,13 @@ import (
 	"time"
 )
 
+type nativeLaunchRequestTiming struct {
+	Method   string    `json:"method"`
+	Path     string    `json:"path"`
+	Started  time.Time `json:"started"`
+	Finished time.Time `json:"finished,omitempty"`
+}
+
 type nativeLaunchRecorder struct {
 	mu             sync.Mutex
 	plans          []clientLaunchPlan
@@ -32,6 +39,28 @@ type nativeLaunchRecorder struct {
 	once           sync.Once
 	failPrepare    bool
 	failLaunch     bool
+	timingMu       sync.Mutex
+	timings        []nativeLaunchRequestTiming
+}
+
+// Use a separate, short-lived lock: diagnostics must remain readable even if
+// a launch is stalled while holding the plan recorder or an application lock.
+func (r *nativeLaunchRecorder) traceRequest(method, path string) func() {
+	r.timingMu.Lock()
+	index := len(r.timings)
+	r.timings = append(r.timings, nativeLaunchRequestTiming{Method: method, Path: path, Started: time.Now().UTC()})
+	r.timingMu.Unlock()
+	return func() {
+		r.timingMu.Lock()
+		r.timings[index].Finished = time.Now().UTC()
+		r.timingMu.Unlock()
+	}
+}
+
+func (r *nativeLaunchRecorder) requestTimings() []nativeLaunchRequestTiming {
+	r.timingMu.Lock()
+	defer r.timingMu.Unlock()
+	return append([]nativeLaunchRequestTiming(nil), r.timings...)
 }
 
 func (r *nativeLaunchRecorder) count() int { r.mu.Lock(); defer r.mu.Unlock(); return len(r.plans) }
@@ -149,6 +178,13 @@ func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nat
 			jsonError(w, 401, "missing auth")
 			return
 		}
+		if key == "open-design" {
+			// Record only fixed local routes, never request bodies, headers or credentials.
+			switch r.URL.Path {
+			case nativeLaunchEndpoint, openDesignProfileEndpoint, nativeCLIPreferencesEndpoint, "/api/state":
+				defer recorder.traceRequest(r.Method, r.URL.Path)()
+			}
+		}
 		if r.URL.Path == nativeLaunchEndpoint && r.Method == "GET" {
 			recorder.gets.Add(1)
 		}
@@ -170,7 +206,13 @@ func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nat
 		handler.ServeHTTP(w, r)
 	}))
 	u.owner.adminHost = strings.TrimPrefix(server.URL, "http://")
-	t.Cleanup(func() { recorder.unblock(); server.Close() })
+	t.Cleanup(func() {
+		recorder.unblock()
+		server.Close()
+		if key == "open-design" && t.Failed() {
+			t.Logf("OpenDesign HTTP timings after fixture cleanup: %+v", recorder.requestTimings())
+		}
+	})
 	u.client = key
 	if strings.HasPrefix(key, "xcode-") {
 		u.client = "xcode"

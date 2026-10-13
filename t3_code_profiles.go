@@ -35,6 +35,9 @@ func validateT3CodeLibrary(library modelLibrary) error {
 type t3CodeProfileOptions struct {
 	RootDir, NormalHome, CodexBinary, ClaudeBinary string
 	Version                                        string
+	Platform                                       string
+	OpenCodeKiloSupported                          bool
+	NormalOpenCodePaths                            []string
 	ClaudeModelDefaults                            bool
 	NormalEnvironment                              map[string]string
 	Library                                        modelLibrary
@@ -61,7 +64,21 @@ type t3CodeProfiles struct {
 func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 	result := t3CodeProfiles{}
 	usesKilo := options.Preferences == nil || t3CodeUsesKilo(*options.Preferences)
-	for _, value := range []string{options.RootDir, options.NormalHome, options.CodexBinary, options.ClaudeBinary} {
+	kiloCodex, kiloClaude := true, true
+	normalCodexEnabled, normalClaudeEnabled := true, true
+	if options.Preferences != nil {
+		prefs := normalizeT3CodePreferences(*options.Preferences)
+		kiloCodex, kiloClaude = prefs.KiloCodex, prefs.KiloClaude
+		normalCodexEnabled, normalClaudeEnabled = prefs.Codex, prefs.Claude
+	}
+	paths := []string{options.RootDir, options.NormalHome}
+	if kiloCodex || normalCodexEnabled {
+		paths = append(paths, options.CodexBinary)
+	}
+	if kiloClaude || normalClaudeEnabled {
+		paths = append(paths, options.ClaudeBinary)
+	}
+	for _, value := range paths {
 		if !filepath.IsAbs(value) || strings.ContainsAny(value, "\x00\r\n") {
 			return result, errors.New("T3 Code requires absolute private-profile, normal-home and CLI paths.")
 		}
@@ -85,6 +102,13 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 	}
 	result.CodexHome = filepath.Join(options.RootDir, "profiles", "codex-kilo")
 	result.ClaudeHome = filepath.Join(options.RootDir, "profiles", "claude-kilo")
+	privateHomes := []string{}
+	if kiloCodex {
+		privateHomes = append(privateHomes, result.CodexHome)
+	}
+	if kiloClaude {
+		privateHomes = append(privateHomes, result.ClaudeHome)
+	}
 	for index, normal := range []string{normalCodex, normalClaude} {
 		if !t3CodeNormalProviderEnabled(options, index) {
 			continue
@@ -93,7 +117,7 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 		if err != nil {
 			return t3CodeProfiles{}, errors.New("Cannot safely resolve the normal T3 Code provider home.")
 		}
-		for _, private := range []string{result.CodexHome, result.ClaudeHome} {
+		for _, private := range privateHomes {
 			private, err = t3CodeCanonicalPath(private)
 			if err != nil {
 				return t3CodeProfiles{}, errors.New("Cannot safely resolve the private T3 Code provider home.")
@@ -117,9 +141,12 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 			}
 			instance["environment"] = env
 		}
+		if err := addT3CodeOpenCodeProfile(options, &result); err != nil {
+			return t3CodeProfiles{}, err
+		}
 		return result, nil
 	}
-	for _, dir := range []string{result.CodexHome, result.ClaudeHome} {
+	for _, dir := range privateHomes {
 		if err := safeEditorDir(options.RootDir, dir); err != nil {
 			return t3CodeProfiles{}, err
 		}
@@ -133,12 +160,6 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 			claudeLibrary = options.Policy.ClaudeLibrary
 		}
 	}
-	choices := terminalLibraryChoices(codexLibrary, options.Catalog)
-	claudeChoices := terminalLibraryChoices(claudeLibrary, options.Catalog)
-	catalog, err := buildCodexCatalog(choices, codexLibrary.DefaultModel, false)
-	if err != nil {
-		return t3CodeProfiles{}, err
-	}
 	read := func(path string) ([]byte, error) {
 		data, err := readCatalogFile(path)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -146,108 +167,128 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 		}
 		return data, nil
 	}
-	configPath := filepath.Join(result.CodexHome, "config.toml")
-	oldCodex, err := read(configPath)
-	if err != nil {
-		return t3CodeProfiles{}, err
-	}
-	codexConfig, err := mergeCodexConfig(oldCodex, catalog, options.Port)
-	if err != nil {
-		return t3CodeProfiles{}, err
-	}
-	codexConfig, err = mergeCodexImages(codexConfig, options.Images, options.Port)
-	if err != nil {
-		return t3CodeProfiles{}, err
-	}
-	// T3 status probes use its server cwd, and tasks use their project cwd.
-	// An absolute catalog path keeps every app-server on this prepared catalog.
-	codexConfig, err = mergeT3CodeCatalogPath(codexConfig, filepath.Join(result.CodexHome, "models.json"))
-	if err != nil {
-		return t3CodeProfiles{}, err
-	}
-	selection := claudeSelection{Initial: claudeLibrary.DefaultModel, Mode: "installed", Aliases: map[string]string{}}
-	claudeSettingsCaps := claudeCapabilities{}
-	if options.ClaudeModelDefaults && options.ClaudeCaps.PerModelEffort {
-		// T3 V2 discards Claude effort options for custom gateway IDs.
-		// Keep the defaults in the private CLI profile without family aliases,
-		// a replacement picker or a global effort shared by unrelated models.
-		claudeSettingsCaps.PerModelEffort = true
-		claudeSettingsCaps.Version = options.ClaudeCaps.Version
-	}
-	for i, model := range claudeLibrary.Models {
-		context, err := contextPolicyForChoice(claudeChoices[i])
+	appendFile := func(path string, data []byte) error {
+		file, err := prepareProfileFile(path, data)
 		if err != nil {
-			return t3CodeProfiles{}, err
-		}
-		effort := ""
-		if options.ClaudeModelDefaults && model.ReasoningEffort != "" && validClaudeEffort(model.ID, model.ReasoningEffort) {
-			if !strings.Contains(model.ID, "/") {
-				return t3CodeProfiles{}, errors.New("T3 Code requires provider-qualified Claude model IDs (for example anthropic/claude-opus-4-6) for saved reasoning defaults. Use the exact gateway ID in Models.")
-			}
-			_, preferred := nativeReasoningFor(claudeChoices[i])
-			if preferred != "" && validClaudeEffort(model.ID, preferred) {
-				if !claudeEffortCompatible(model.ID, options.ClaudeCaps) {
-					return t3CodeProfiles{}, managedClaudeEffortVersionError(model.ID, "T3 Code")
-				}
-				effort = preferred
-			}
-		}
-		selection.Models = append(selection.Models, claudeModel{ID: model.ID, DisplayName: model.DisplayName, Effort: effort, Context: context.ContextWindow, Output: context.MaxOutputTokens})
-	}
-	if claudeSettingsCaps.PerModelEffort {
-		byFamily := map[string]string{}
-		for _, model := range selection.Models {
-			family := claudeEffortKey(model.ID)
-			if family == "" {
-				continue
-			}
-			if effort, exists := byFamily[family]; exists && effort != model.Effort {
-				return t3CodeProfiles{}, errors.New("Choose one gateway ID per Claude family/version for native reasoning")
-			}
-			byFamily[family] = model.Effort
-		}
-	}
-	claudePath := filepath.Join(result.ClaudeHome, "settings.json")
-	oldClaude, err := read(claudePath)
-	if err != nil {
-		return t3CodeProfiles{}, err
-	}
-	// T3 supplies exact model IDs itself. Do not generate native family aliases
-	// or modelOverrides: those would change the identity selected in T3.
-	claudeConfig, err := mergeClaudeSettings(oldClaude, selection, claudeSettingsCaps, options.Port, options.LocalKey)
-	if err != nil {
-		return t3CodeProfiles{}, err
-	}
-	if options.Policy != nil {
-		claudeConfig, err = t3CodeNativeClaudeSettings(claudeConfig, *options.Policy, selection.Initial, options.Port)
-		if err != nil {
-			return t3CodeProfiles{}, err
-		}
-	}
-	claudeConfig, err = removeT3CodeClaudeToken(claudeConfig)
-	if err != nil {
-		return t3CodeProfiles{}, err
-	}
-	selectionJSON, err := json.MarshalIndent(selection, "", "  ")
-	if err != nil {
-		return t3CodeProfiles{}, err
-	}
-	for _, item := range []struct {
-		path string
-		data []byte
-	}{
-		{filepath.Join(result.CodexHome, "models.json"), append(bytes.TrimSpace(catalog), '\n')},
-		{configPath, codexConfig},
-		{filepath.Join(result.ClaudeHome, "kilo-models.json"), append(selectionJSON, '\n')},
-		{claudePath, claudeConfig},
-	} {
-		file, err := prepareProfileFile(item.path, item.data)
-		if err != nil {
-			return t3CodeProfiles{}, err
+			return err
 		}
 		result.Files = append(result.Files, file)
+		return nil
+	}
+	var choices []nativeModelChoice
+	selection := claudeSelection{}
+	if kiloCodex {
+		choices = terminalLibraryChoices(codexLibrary, options.Catalog)
+		catalog, err := buildCodexCatalog(choices, codexLibrary.DefaultModel, false)
+		if err != nil {
+			return t3CodeProfiles{}, err
+		}
+		configPath := filepath.Join(result.CodexHome, "config.toml")
+		oldCodex, err := read(configPath)
+		if err != nil {
+			return t3CodeProfiles{}, err
+		}
+		codexConfig, err := mergeCodexConfig(oldCodex, catalog, options.Port)
+		if err != nil {
+			return t3CodeProfiles{}, err
+		}
+		codexConfig, err = mergeCodexImages(codexConfig, options.Images, options.Port)
+		if err != nil {
+			return t3CodeProfiles{}, err
+		}
+		// T3 status probes use its server cwd, and tasks use their project cwd.
+		// An absolute catalog path keeps every app-server on this prepared catalog.
+		codexConfig, err = mergeT3CodeCatalogPath(codexConfig, filepath.Join(result.CodexHome, "models.json"))
+		if err != nil {
+			return t3CodeProfiles{}, err
+		}
+		if err := appendFile(filepath.Join(result.CodexHome, "models.json"), append(bytes.TrimSpace(catalog), '\n')); err != nil {
+			return t3CodeProfiles{}, err
+		}
+		if err := appendFile(configPath, codexConfig); err != nil {
+			return t3CodeProfiles{}, err
+		}
+	}
+	if kiloClaude {
+		claudeChoices := terminalLibraryChoices(claudeLibrary, options.Catalog)
+		selection = claudeSelection{Initial: claudeLibrary.DefaultModel, Mode: "installed", Aliases: map[string]string{}}
+		claudeSettingsCaps := claudeCapabilities{}
+		if options.ClaudeModelDefaults && options.ClaudeCaps.PerModelEffort {
+			// T3 V2 discards Claude effort options for custom gateway IDs.
+			// Keep the defaults in the private CLI profile without family aliases,
+			// a replacement picker or a global effort shared by unrelated models.
+			claudeSettingsCaps.PerModelEffort = true
+			claudeSettingsCaps.Version = options.ClaudeCaps.Version
+		}
+		for i, model := range claudeLibrary.Models {
+			context, err := contextPolicyForChoice(claudeChoices[i])
+			if err != nil {
+				return t3CodeProfiles{}, err
+			}
+			effort := ""
+			if options.ClaudeModelDefaults && model.ReasoningEffort != "" && validClaudeEffort(model.ID, model.ReasoningEffort) {
+				if !strings.Contains(model.ID, "/") {
+					return t3CodeProfiles{}, errors.New("T3 Code requires provider-qualified Claude model IDs (for example anthropic/claude-opus-4-6) for saved reasoning defaults. Use the exact gateway ID in Models.")
+				}
+				_, preferred := nativeReasoningFor(claudeChoices[i])
+				if preferred != "" && validClaudeEffort(model.ID, preferred) {
+					if !claudeEffortCompatible(model.ID, options.ClaudeCaps) {
+						return t3CodeProfiles{}, managedClaudeEffortVersionError(model.ID, "T3 Code")
+					}
+					effort = preferred
+				}
+			}
+			selection.Models = append(selection.Models, claudeModel{ID: model.ID, DisplayName: model.DisplayName, Effort: effort, Context: context.ContextWindow, Output: context.MaxOutputTokens})
+		}
+		if claudeSettingsCaps.PerModelEffort {
+			byFamily := map[string]string{}
+			for _, model := range selection.Models {
+				family := claudeEffortKey(model.ID)
+				if family == "" {
+					continue
+				}
+				if effort, exists := byFamily[family]; exists && effort != model.Effort {
+					return t3CodeProfiles{}, errors.New("Choose one gateway ID per Claude family/version for native reasoning")
+				}
+				byFamily[family] = model.Effort
+			}
+		}
+		claudePath := filepath.Join(result.ClaudeHome, "settings.json")
+		oldClaude, err := read(claudePath)
+		if err != nil {
+			return t3CodeProfiles{}, err
+		}
+		// T3 supplies exact model IDs itself. Do not generate native family aliases
+		// or modelOverrides: those would change the identity selected in T3.
+		claudeConfig, err := mergeClaudeSettings(oldClaude, selection, claudeSettingsCaps, options.Port, options.LocalKey)
+		if err != nil {
+			return t3CodeProfiles{}, err
+		}
+		if options.Policy != nil {
+			claudeConfig, err = t3CodeNativeClaudeSettings(claudeConfig, *options.Policy, selection.Initial, options.Port)
+			if err != nil {
+				return t3CodeProfiles{}, err
+			}
+		}
+		claudeConfig, err = removeT3CodeClaudeToken(claudeConfig)
+		if err != nil {
+			return t3CodeProfiles{}, err
+		}
+		selectionJSON, err := json.MarshalIndent(selection, "", "  ")
+		if err != nil {
+			return t3CodeProfiles{}, err
+		}
+		if err := appendFile(filepath.Join(result.ClaudeHome, "kilo-models.json"), append(selectionJSON, '\n')); err != nil {
+			return t3CodeProfiles{}, err
+		}
+		if err := appendFile(claudePath, claudeConfig); err != nil {
+			return t3CodeProfiles{}, err
+		}
 	}
 	result.Providers = t3CodeProviderInstances(options, result, choices, selection)
+	if err := addT3CodeOpenCodeProfile(options, &result); err != nil {
+		return t3CodeProfiles{}, err
+	}
 	return result, nil
 }
 
@@ -326,13 +367,16 @@ func t3CodeNormalProviderHomes(options t3CodeProfileOptions) (string, string, er
 }
 
 func t3CodeNormalProviderEnabled(options t3CodeProfileOptions, index int) bool {
-	if options.Preferences == nil || t3CodeUsesKilo(*options.Preferences) {
+	// A disabled T3 direct account can still be used by an external CLI.
+	// Any Kilo writes must stay separate from both normal provider homes.
+	if options.Preferences == nil || options.Preferences.KiloCodex || options.Preferences.KiloClaude {
 		return true
 	}
+	prefs := normalizeT3CodePreferences(*options.Preferences)
 	if index == 0 {
-		return options.Preferences.Codex
+		return prefs.Codex
 	}
-	return options.Preferences.Claude
+	return prefs.Claude
 }
 
 func mergeT3CodeCatalogPath(data []byte, catalogPath string) ([]byte, error) {
@@ -458,7 +502,19 @@ func t3CodeProviderInstances(options t3CodeProfileOptions, profiles t3CodeProfil
 	if options.Preferences != nil {
 		prefs := normalizeT3CodePreferences(*options.Preferences)
 		for id, enabled := range map[string]bool{t3CodeCodexNormalID: prefs.Codex, t3CodeClaudeNormalID: prefs.Claude, t3CodeCodexProxyID: prefs.KiloCodex, t3CodeClaudeProxyID: prefs.KiloClaude} {
-			instances[id].(map[string]any)["enabled"] = enabled
+			instance := instances[id].(map[string]any)
+			instance["enabled"] = enabled
+			if !enabled && (id == t3CodeCodexProxyID || id == t3CodeClaudeProxyID) {
+				// Keep the account identity for existing conversations, without
+				// planning or inspecting the disabled account's previous secret.
+				env := []map[string]any{}
+				for _, value := range instance["environment"].([]map[string]any) {
+					if value["sensitive"] != true && value["name"] != "ANTHROPIC_BASE_URL" {
+						env = append(env, value)
+					}
+				}
+				instance["environment"] = env
+			}
 		}
 		instances[t3CodeCodexNormalID].(map[string]any)["displayName"] = "Codex"
 		instances[t3CodeClaudeNormalID].(map[string]any)["displayName"] = "Claude"

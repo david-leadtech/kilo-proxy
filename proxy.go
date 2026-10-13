@@ -66,12 +66,14 @@ type app struct {
 	cliPathsMu                sync.RWMutex
 	cliExecutables            [2]string
 	museExecutable            string
+	synaraExecutable          string
 	t3CodeProbeClaude         func(string, clientLaunchRuntime) claudeCapabilities // Synthetic test fixtures only.
 	t3CodeCheckRunning        func(string) (bool, error)
 	t3CodeLaunchUntil         time.Time
 	t3CodeAssets              *t3CodeRuntimeAssets
 	synaraCheckRunning        func(string) (bool, error)
 	synaraCheckEnvironment    func() error
+	synaraCheckSystem         func(string) string    // Synthetic policy injection; never accepted from clients or settings.
 	synaraAdapterSource       func() (string, error) // Test override; never accepted from clients or settings.
 	synaraRuntimeDisabled     bool                   // Synthetic test fixtures only; never accepted from clients or settings.
 	synaraLaunchUntil         time.Time
@@ -148,6 +150,7 @@ func newApp(dir string, vault credentialVault) (*app, error) {
 	a.openCodeExecutables = [2]string{cfg.OpenCode1Executable, cfg.OpenCode2Executable}
 	a.cliExecutables = [2]string{cfg.CodexCLIExecutable, cfg.ClaudeCodeExecutable}
 	a.museExecutable = cfg.MuseCodeExecutable
+	a.synaraExecutable = cfg.SynaraExecutable
 	a.updates = newReleaseUpdateChecker(version)
 	a.chatgpt = newChatGPTConnection(vault, cfg.VaultID, tr, dir)
 	a.modelLibrary = newModelLibraryStore(dir)

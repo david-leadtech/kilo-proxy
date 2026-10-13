@@ -20,6 +20,20 @@ You can disable accounts you do not use in Synara's provider settings. Disabling
 - **Codex · Normal** requires file-based Codex authentication: Synara does not support Codex's `keyring` or `auto` credential-store modes. Kilo Proxy does not convert or copy your credentials.
 - Connect Kilo Proxy and save 1–32 shared models in **Models**. Choose the initial model and any compatible reasoning defaults there.
 
+## Installation selection on Linux
+
+Kilo distinguishes a detected installation from one that is ready to open. An AppImage candidate can appear as **Installed** while **Open** remains disabled. Detection never executes the AppImage. Its filename and AppImage header do not verify its publisher, version or release channel.
+
+Automatic detection checks the usual persistent extracted installations and bounded lists of Synara AppImage filenames in `~/Applications`, `~/.local/bin`, `~/Downloads` and `~/Descargas`. It does not inspect running processes or their environments. An open regular Synara window is separate from the private Kilo workspace.
+
+To select another installation, use **Settings → Application and CLI installations → Synara** and save its absolute path. On Linux, select the native executable in a persistent extracted installation with its unchanged `resources/app.asar` tree. A raw AppImage may also be selected, but remains unavailable for opening until you install a verified Kilo copy or select an extracted executable. Temporary `/tmp/.mount_*` and `/proc` paths are not installations you can save.
+
+The saved path takes priority over automatic detection. A missing or invalid selected installation reports an error rather than silently switching to another copy. Installing a Kilo copy keeps that explicit choice. Select **Use Kilo copy** in Synara's installation settings, or **Automatic detection** in the path settings, to clear it; Kilo confirms the saved change before switching. An empty path chooses the verified current Kilo copy first and then a system installation. Close **Synara · Kilo** and prepare again after changing the installation; chats are kept.
+
+Use **Installation and updates** to download a separate official stable or Beta copy. Kilo verifies the official package's size and SHA256 before extraction, then checks the extracted tree, CPU, version and channel before activating it. Your original AppImage and regular Synara profiles stay unchanged. Choosing an external extracted installation does not give it the managed download's cryptographic verification.
+
+Ubuntu AppArmor and user-namespace policies may block a private Electron copy even when the original AppImage opens normally. Kilo preserves the sandbox and does not change AppArmor, sysctl, setuid helpers or privileged dependencies. Follow a vendor-supported packaging path if the private copy is blocked. File detection or extraction does not establish that the Linux GUI, account-aware delegation or audio works; the corrected private runtime for account-aware delegation remains validated on macOS only.
+
 ## Open the workspace
 
 1. Open **Agents → Synara · Kilo** in Kilo Proxy.
@@ -57,6 +71,7 @@ The private Codex Normal adapter makes the CLI's ChatGPT login status readable b
 ## Troubleshooting
 
 - **Synara or a CLI was not found:** install Synara stable or Beta, native Codex CLI and Claude Code, then use **Check again** on the Harnesses list.
+- **Synara is installed but Open is disabled:** read the reason shown below its row. A detected AppImage needs a verified Kilo installation or a persistent extracted executable. Missing native CLIs, incompatible package metadata and Linux sandbox restrictions are separate readiness failures.
 - **A Claude model is unavailable:** check that the composer selected the exact prepared gateway ID rather than a built-in Claude entry.
 - **Close Synara · Kilo first:** quit its private window and prepare again. Your normal Synara window can remain open.
 - **Models or credentials changed:** close and reopen the private workspace so the prepared profiles receive the current settings.

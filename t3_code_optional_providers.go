@@ -53,6 +53,9 @@ func planT3CodeOptionalProviders(prefs t3CodePreferences, installation t3CodeIns
 			config["binaryPath"] = binary
 		}
 		if selected[provider.ID] && provider.ID == "opencode" {
+			if t3CodeOpenCodeKiloEnabled(prefs) && !installation.OpenCodeKiloSupported {
+				return nil, errors.New("This T3 Code installation cannot isolate the OpenCode Kilo account. Update T3 Code or choose its native account.")
+			}
 			client, major, minimum := "opencode", "1.", "1.14.19"
 			if prefs.OpenCode2 {
 				if !installation.OpenCode2Supported {
@@ -86,7 +89,8 @@ func planT3CodeOptionalProviders(prefs t3CodePreferences, installation t3CodeIns
 		}
 		// Writing disabled slots is deliberate: absent slots are synthesized by
 		// upstream, so omission alone would not enforce the user's opt-in choice.
-		result[provider.ID] = map[string]any{"driver": provider.ID, "displayName": provider.Label, "enabled": selected[provider.ID], "config": config, "environment": environment}
+		enabled := selected[provider.ID] && !(provider.ID == "opencode" && t3CodeOpenCodeKiloEnabled(prefs))
+		result[provider.ID] = map[string]any{"driver": provider.ID, "displayName": provider.Label, "enabled": enabled, "config": config, "environment": environment}
 	}
 	return result, nil
 }

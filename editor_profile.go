@@ -116,7 +116,10 @@ func mergeEditorSettings(old []byte, client string, s editorSelection, baseURL, 
 	if client == "opencode" {
 		models := map[string]any{}
 		for _, m := range s.Models {
-			entry := map[string]any{"name": m.Name}
+			entry := map[string]any{"id": m.ID, "name": m.Name}
+			entry["provider"] = map[string]any{"npm": "@ai-sdk/openai-compatible", "api": baseURL}
+			entry["options"] = map[string]any{"baseURL": baseURL, "apiKey": key, "headers": map[string]string{"Authorization": "Bearer " + key}}
+			entry["headers"] = map[string]string{"Authorization": "Bearer " + key}
 			limits := map[string]int{"context": m.Context}
 			if m.Output > 0 {
 				limits["output"] = m.Output

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -168,4 +170,86 @@ func TestNativeSynaraRejectsMoreThan32SharedModels(t *testing.T) {
 	if _, err := nativeClientPayload("synara", s); err == nil {
 		t.Fatal("oversized library can lose its initial Synara model")
 	}
+}
+
+func nativeSynaraAppImageFixture(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "Synara-9.4.2-x86_64.AppImage")
+	header := make([]byte, 64)
+	copy(header, []byte{0x7f, 'E', 'L', 'F', 2, 1})
+	copy(header[8:], []byte{'A', 'I', 2})
+	if err := os.WriteFile(path, header, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestNativeSynaraAppImageDetectedButNeverOpened(t *testing.T) {
+	for _, lang := range []string{"en", "es"} {
+		t.Run(lang, func(t *testing.T) {
+			u, recorder := nativeLaunchTestUI(t, "synara", false, false)
+			u.owner.launcher.platform = "linux"
+			raw := nativeSynaraAppImageFixture(t)
+			postCLISelection(t, u.owner, map[string]any{"version": 1, "synaraExecutable": raw}, 200)
+			u.setLanguage(lang)
+			nativeTestWait(t, u, func() bool { return u.languageTarget == "" && !u.busy["POST/api/language"] && !u.busy["GET/api/state"] })
+			u.refreshCLIPreferencesAfter(nil)
+			nativeTestWait(t, u, func() bool { return u.cliPreferencesReady() })
+			u.detectLaunchers()
+			nativeTestWait(t, u, func() bool { return !u.busy["GET"+nativeLaunchEndpoint] })
+			info := u.clientState().LaunchInfo.Clients["synara"]
+			if !info.Installed || info.Available || info.Path != raw || u.uxhInstallState("synara") != uxhInstalled {
+				t.Fatal("raw AppImage was lost or became launchable", info)
+			}
+			launch := u.uxhLaunchState("synara")
+			if launch.canOpen || !launch.local || launch.reason != nativeMessage(synaraAppImagePending, lang) {
+				t.Fatal("detected package did not explain blocked opening", launch)
+			}
+			u.launchAgent("synara")
+			nativeTestWait(t, u, func() bool { return u.clientState().Launching == "" })
+			if recorder.launchRequests.Load() != 0 || recorder.prepares.Load() != 0 || recorder.count() != 0 {
+				t.Fatal("raw AppImage reached prepare or process boundary")
+			}
+			if u.notice != nativeMessage(synaraAppImagePending, lang) {
+				t.Fatal("blocked Synara reported another application's remedy", u.notice)
+			}
+			u.notice = ""
+			u.refreshSynaraProfile()
+			nativeTestWait(t, u, func() bool { return u.agentsState().Synara.Loaded && !u.busy["GET/api/clients/synara"] })
+			u.agentSetup("synara")
+			for _, width := range []int{1180, 780} {
+				h := &nativePointerHarness{t: t, u: u, size: image.Pt(width, 1600), now: time.Now()}
+				h.frame()
+				if !nativeSynaraHasText(h, u.tr("package candidate, not a prepared installation", "paquete candidato, no una instalación preparada")) || !nativeSynaraHasText(h, u.tr("Kilo keeps the sandbox enabled", "Kilo mantiene el sandbox activado")) {
+					t.Fatal("missing Linux installation and sandbox guidance")
+				}
+				count := 0
+				for _, node := range h.nodes() {
+					if node.Desc.Label == nativeMessage(synaraAppImagePending, lang) {
+						count++
+					}
+				}
+				if count != 1 {
+					t.Fatal("duplicate or missing installation remedy", count)
+				}
+				u.agentsState().Synara.Info.Message = "Different synthetic installation advice."
+				h.frame()
+				if !nativeUpdateHasText(h, "Different synthetic installation advice.") {
+					t.Fatal("deduplication hid different installation advice")
+				}
+				u.agentsState().Synara.Info.Message = synaraAppImagePending
+				h.frame()
+				nativeGridCapture(t, h, fmt.Sprintf("synara-appimage-detected-%dx1600-%s", width, lang))
+			}
+		})
+	}
+}
+
+func nativeSynaraHasText(h *nativePointerHarness, text string) bool {
+	for _, node := range h.nodes() {
+		if strings.Contains(node.Desc.Label, text) {
+			return true
+		}
+	}
+	return false
 }

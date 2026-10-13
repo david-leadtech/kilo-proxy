@@ -22,6 +22,9 @@ func synaraPackageMetadata(executable, platform string) (synaraPackageInfo, erro
 	if resolved, err := filepath.EvalSymlinks(executable); err == nil {
 		executable = resolved
 	}
+	if platform == "linux" && synaraAppImage(executable) {
+		return synaraPackageInfo{}, errors.New(synaraAppImagePending)
+	}
 	root := filepath.Dir(executable)
 	if (platform == "macos" || platform == "darwin") && strings.HasSuffix(executable, ".app") {
 		root = filepath.Join(executable, "Contents")
@@ -68,6 +71,9 @@ func synaraVersion(executable, platform string) (string, error) {
 func (a *app) synaraAvailability(binary string, rt clientLaunchRuntime) error {
 	_, err := synaraPackageMetadata(binary, rt.platform)
 	if err != nil {
+		return err
+	}
+	if err := a.synaraSystemRequirement(rt.platform); err != nil {
 		return err
 	}
 	if _, err := resolveOpenDesignCLI("codex-cli", rt); err != nil {

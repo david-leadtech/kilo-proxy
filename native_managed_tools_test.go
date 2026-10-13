@@ -3,8 +3,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"image"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -483,5 +485,109 @@ func TestNativeManagedToolClaudeUnknownTrackIsExplicit(t *testing.T) {
 	f.mu.Unlock()
 	if requested != "stable" {
 		t.Fatalf("unknown Claude track sent %q instead of the visible stable choice", requested)
+	}
+}
+
+func TestNativeManagedSynaraCopyPersistsBeforeChangingSelection(t *testing.T) {
+	for _, lang := range []string{"en", "es"} {
+		t.Run(lang, func(t *testing.T) {
+			f := newNativeManagedToolsFixture(t, "synara", lang, image.Pt(1180, 1600))
+			u := f.h.u
+			custom := syntheticSynaraExecutable(t, t.TempDir(), u.owner.launcher.platform)
+			codex := cliPreferencesTestExecutable(t, "preserved Codex")
+			postCLISelection(t, u.owner, map[string]any{"version": 1, "synaraExecutable": custom, "codexExecutable": codex}, 200)
+			u.refreshCLIPreferencesAfter(nil)
+			nativeTestWait(t, u, func() bool { return u.cliPreferencesReady() && !u.busy["GET"+nativeLaunchEndpoint] })
+			before, err := readAgentPreferences(u.owner.dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			u.managedToolsState().snapshot.Clients = map[string]managedToolStatus{"synara": {Client: "synara", Installed: true, Managed: true}}
+			upstream, _ := url.Parse("http://" + u.owner.adminHost)
+			proxy := httputil.NewSingleHostReverseProxy(upstream)
+			gate, entered := make(chan struct{}), make(chan struct{}, 1)
+			var mu sync.Mutex
+			fail := true
+			posts := []cliPreferences{}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == nativeCLIPreferencesEndpoint && r.Method == http.MethodPost {
+					var next cliPreferences
+					if json.NewDecoder(r.Body).Decode(&next) != nil {
+						jsonError(w, 400, "bad preferences")
+						return
+					}
+					mu.Lock()
+					posts = append(posts, next)
+					failing := fail
+					mu.Unlock()
+					if failing {
+						select {
+						case entered <- struct{}{}:
+						default:
+						}
+						select {
+						case <-gate:
+						case <-r.Context().Done():
+							return
+						}
+						jsonError(w, 503, "Synthetic Synara selection persistence unavailable")
+						return
+					}
+					data, _ := json.Marshal(next)
+					r.Body = io.NopCloser(bytes.NewReader(data))
+					r.ContentLength = int64(len(data))
+				}
+				proxy.ServeHTTP(w, r)
+			}))
+			t.Cleanup(func() {
+				select {
+				case <-gate:
+				default:
+					close(gate)
+				}
+				server.Close()
+			})
+			nativeTestWait(t, u, func() bool { return len(u.busy) == 0 })
+			u.owner.adminHost = strings.TrimPrefix(server.URL, "http://")
+			u.useManagedToolCopy("synara")
+			nativeTestWait(t, u, func() bool {
+				select {
+				case <-entered:
+					return true
+				default:
+					return false
+				}
+			})
+			stored, err := readSettings(u.owner.dir)
+			if err != nil || stored.SynaraExecutable != custom || u.value(nativeCLIPathField("synara")) != custom || u.clientState().CLIPreferences.Preferences.SynaraExecutable != custom || u.cliPreferencesReady() {
+				t.Fatal("pending write changed the selected Synara", stored, err)
+			}
+			close(gate)
+			nativeTestWait(t, u, func() bool { return !u.cliPreferencesBusy() })
+			if u.clientState().CLIPreferences.Pending == nil || u.managedToolsState().requestError == "" || u.value(nativeCLIPathField("synara")) != custom {
+				t.Fatal("failed write lost selection or retry state")
+			}
+			mu.Lock()
+			fail = false
+			mu.Unlock()
+			u.saveCLIPreferences(*u.clientState().CLIPreferences.Pending)
+			nativeTestWait(t, u, func() bool { return u.cliPreferencesReady() && !u.busy["GET"+nativeLaunchEndpoint] })
+			stored, err = readSettings(u.owner.dir)
+			if err != nil || stored.SynaraExecutable != "" || stored.CodexCLIExecutable != codex || u.value(nativeCLIPathField("synara")) != "" {
+				t.Fatal("confirmed choice failed to switch only Synara", stored, err)
+			}
+			after, err := readAgentPreferences(u.owner.dir)
+			if err != nil || !reflect.DeepEqual(before, after) {
+				t.Fatal("Synara selection changed projects or other agent preferences", err)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if len(posts) != 2 || posts[0] != posts[1] || posts[1].SynaraExecutable != "" || posts[1].CodexExecutable != codex {
+				t.Fatal("retry changed the confirmed choice", posts)
+			}
+			if f.recorder.launchRequests.Load() != 0 || f.recorder.prepares.Load() != 0 || f.recorder.count() != 0 {
+				t.Fatal("selection started a workspace")
+			}
+		})
 	}
 }

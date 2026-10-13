@@ -386,7 +386,7 @@ func TestOpenCode2PreservesUserConfigurationAndRejectsOwnedChanges(t *testing.T)
 func TestOpenCode2DoesNotInventToolCapabilities(t *testing.T) {
 	a := openCode2TestApp(t)
 	no := false
-	cache, _ := json.Marshal(nativeCachedCatalog{SchemaVersion: 1, OrgID: a.catalogScopeLocked(), Models: []modelInfo{{ID: "vendor/one", Tools: &no}}})
+	cache, _ := json.Marshal(nativeCachedCatalog{SchemaVersion: 1, OrgID: a.catalogScopeLocked(), Models: []modelInfo{{ID: "vendor/one", Tools: &no, InputModalities: []string{"text"}, OutputModalities: []string{"text"}}}})
 	if err := atomicCatalogFile(filepath.Join(a.dir, "model-catalog.json"), cache); err != nil {
 		t.Fatal(err)
 	}
@@ -402,6 +402,14 @@ func TestOpenCode2DoesNotInventToolCapabilities(t *testing.T) {
 	models := provider["models"].(map[string]any)
 	if models["vendor/one"].(map[string]any)["capabilities"].(map[string]any)["tools"] != false {
 		t.Fatal("advertised tools against explicit catalog metadata")
+	}
+	cache, _ = json.Marshal(nativeCachedCatalog{SchemaVersion: 1, OrgID: a.catalogScopeLocked(), Models: []modelInfo{{ID: "vendor/one", Tools: &no}}})
+	if err := atomicCatalogFile(filepath.Join(a.dir, "model-catalog.json"), cache); err != nil {
+		t.Fatal(err)
+	}
+	data, err = a.openCode2Config(testModelLibrary())
+	if err != nil || bytes.Contains(data, []byte(`"capabilities"`)) {
+		t.Fatal("partial catalog metadata produced invalid OpenCode 2 capabilities", err)
 	}
 	if err := os.Remove(filepath.Join(a.dir, "model-catalog.json")); err != nil {
 		t.Fatal(err)

@@ -302,3 +302,210 @@ func TestCLIExecutablePreferencesConcurrentResolverUsesSavedSnapshot(t *testing.
 	default:
 	}
 }
+
+func TestCLIExecutablePreferencesSynaraPersistOmittedResetAndNoFallback(t *testing.T) {
+	a := launchTestApp(t)
+	a.config.Port = 8877
+	a.launcher.platform = synaraTestPlatform("macos")
+	selected := syntheticSynaraExecutable(t, t.TempDir(), a.launcher.platform)
+	automatic := syntheticSynaraExecutable(t, t.TempDir(), a.launcher.platform)
+	codex := cliPreferencesTestExecutable(t, "selected Codex")
+	fallbackCalls := 0
+	previousResolve := a.launcher.resolve
+	a.launcher.resolve = func(client, custom string) (string, error) {
+		if client == "synara" {
+			fallbackCalls++
+			return automatic, nil
+		}
+		return previousResolve(client, custom)
+	}
+	postCLISelection(t, a, map[string]any{"version": 1, "codexExecutable": codex, "synaraExecutable": selected}, 200)
+	if got, err := a.launchRuntime().resolve("synara", ""); err != nil || got != selected || fallbackCalls != 0 {
+		t.Fatal("explicit Synara did not retain priority over automatic discovery", got, err, fallbackCalls)
+	}
+	response := postCLISelection(t, a, map[string]any{"version": 1}, 200)
+	var preferences cliPreferences
+	if err := json.Unmarshal(response.Body.Bytes(), &preferences); err != nil || preferences.SynaraExecutable != selected || preferences.CodexExecutable != codex {
+		t.Fatal("omitted executable preferences were not preserved", preferences, err)
+	}
+	stored, err := readSettings(a.dir)
+	if err != nil || stored.SynaraExecutable != selected || stored.CodexCLIExecutable != codex {
+		t.Fatal("Synara selection was not persisted", stored, err)
+	}
+	reloaded, err := newApp(a.dir, a.vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(reloaded.stop)
+	reloaded.launcher = &clientLaunchRuntime{platform: a.launcher.platform, resolve: a.launcher.resolve}
+	if got, err := reloaded.launchRuntime().resolve("synara", ""); err != nil || got != selected || fallbackCalls != 0 {
+		t.Fatal("restart lost Synara's explicit selection", got, err, fallbackCalls)
+	}
+	postCLISelection(t, a, map[string]any{"version": 1, "synaraExecutable": ""}, 200)
+	if got, err := a.launchRuntime().resolve("synara", ""); err != nil || got != automatic || fallbackCalls != 1 {
+		t.Fatal("empty Synara selection did not restore automatic discovery", got, err, fallbackCalls)
+	}
+	if a.cliExecutable("codex-cli") != codex {
+		t.Fatal("resetting Synara changed another executable selection")
+	}
+	postCLISelection(t, a, map[string]any{"version": 1, "synaraExecutable": selected}, 200)
+	if err := os.RemoveAll(selected); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := a.launchRuntime().resolve("synara", ""); err == nil || got != "" || fallbackCalls != 1 {
+		t.Fatal("missing selected Synara silently fell back", got, err, fallbackCalls)
+	}
+	if stored, err := readSettings(a.dir); err != nil || stored.SynaraExecutable != selected {
+		t.Fatal("missing Synara prevented settings recovery", stored, err)
+	}
+}
+
+func TestCLIExecutablePreferencesSynaraStrictInputBusyAndFailedSave(t *testing.T) {
+	a := launchTestApp(t)
+	a.config.Port = 8877
+	a.launcher.platform = synaraTestPlatform("macos")
+	for _, body := range []string{`{"version":1,"synaraExecutable":42}`, `{"version":1,"synaraExecutable":"relative/synara"}`, `{"version":1,"synaraExecutable":"~/Synara.app"}`, `{"version":1,"synaraExecutable":"/tmp/Synara\n.app"}`} {
+		if w := adminRequest(a, "clients/cli/preferences", body); w.Code != 400 {
+			t.Fatal("invalid Synara selection accepted", body, w.Code)
+		}
+	}
+	for _, path := range []string{"/tmp/bad\x00path", "/" + strings.Repeat("x", 8192), filepath.Join(t.TempDir(), "missing"), t.TempDir(), cliPreferencesTestExecutable(t, "unrelated executable")} {
+		postCLISelection(t, a, map[string]any{"version": 1, "synaraExecutable": path}, 400)
+	}
+	selected := syntheticSynaraExecutable(t, t.TempDir(), a.launcher.platform)
+	previous := a.config
+	a.launchMu.Lock()
+	postCLISelection(t, a, map[string]any{"version": 1, "synaraExecutable": selected}, 409)
+	a.launchMu.Unlock()
+	if !reflect.DeepEqual(a.config, previous) || a.cliExecutable("synara") != "" {
+		t.Fatal("busy preparation changed Synara's selection")
+	}
+	if err := os.Mkdir(filepath.Join(a.dir, "settings.json"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	postCLISelection(t, a, map[string]any{"version": 1, "synaraExecutable": selected}, 500)
+	if !reflect.DeepEqual(a.config, previous) || a.cliExecutable("synara") != "" {
+		t.Fatal("failed persistence activated a Synara selection")
+	}
+}
+
+func TestCLIExecutablePreferencesSynaraResolverUsesSeparateSavedSnapshot(t *testing.T) {
+	a := launchTestApp(t)
+	a.config.Port = 8877
+	a.launcher.platform = synaraTestPlatform("macos")
+	paths := [2]string{syntheticSynaraExecutable(t, t.TempDir(), a.launcher.platform), syntheticSynaraExecutable(t, t.TempDir(), a.launcher.platform)}
+	postCLISelection(t, a, map[string]any{"version": 1, "synaraExecutable": paths[0]}, 200)
+	// Preparation holds app.mu while consulting executable paths. The resolver
+	// must read the separate persisted snapshot without reacquiring that lock.
+	a.mu.Lock()
+	got, err := a.launchRuntime().resolve("synara", "")
+	a.mu.Unlock()
+	if err != nil || got != paths[0] {
+		t.Fatal("Synara's saved-path snapshot was unavailable during preparation", got, err)
+	}
+	var workers sync.WaitGroup
+	workers.Add(1)
+	errors := make(chan string, 1)
+	go func() {
+		defer workers.Done()
+		for range 100 {
+			got, err := a.launchRuntime().resolve("synara", "")
+			if err != nil || got != paths[0] && got != paths[1] {
+				errors <- "Synara resolver lost the atomic saved-path snapshot"
+				return
+			}
+		}
+	}()
+	for i := range 10 {
+		postCLISelection(t, a, map[string]any{"version": 1, "synaraExecutable": paths[i%2]}, 200)
+	}
+	workers.Wait()
+	select {
+	case err := <-errors:
+		t.Fatal(err)
+	default:
+	}
+}
+
+func TestCLIExecutablePreferencesSynaraManagedCurrentIntegrityAndNoFallback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("managed Unix installations")
+	}
+	a := launchTestApp(t)
+	a.config.Port = 8877
+	a.launcher.platform = "macos"
+	makeRecord := func(token string) managedToolRecord {
+		root := filepath.Join(a.dir, "tools", "synara", "releases", token)
+		if err := os.MkdirAll(root, 0700); err != nil {
+			t.Fatal(err)
+		}
+		executable := syntheticSynaraExecutable(t, root, a.launcher.platform)
+		digest, err := managedToolFingerprint(executable, runtime.GOOS)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return managedToolRecord{Schema: 1, Client: "synara", Version: synaraTestVersion, Channel: "beta", Root: root, Executable: executable, Digest: digest}
+	}
+	current := makeRecord("current")
+	if err := writeManagedTool(a.dir, current); err != nil {
+		t.Fatal(err)
+	}
+	postCLISelection(t, a, map[string]any{"version": 1, "synaraExecutable": current.Executable}, 200)
+	retained := makeRecord("retained")
+	postCLISelection(t, a, map[string]any{"version": 1, "synaraExecutable": retained.Executable}, 400)
+	alias := filepath.Join(t.TempDir(), "external-managed-alias.app")
+	if err := os.Symlink(current.Executable, alias); err != nil {
+		t.Fatal(err)
+	}
+	postCLISelection(t, a, map[string]any{"version": 1, "synaraExecutable": alias}, 400)
+	fallbackCalls := 0
+	a.launcher.resolve = func(string, string) (string, error) {
+		fallbackCalls++
+		return retained.Executable, nil
+	}
+	if got, err := a.launchRuntime().resolve("synara", ""); err != nil || got != current.Executable || fallbackCalls != 0 {
+		t.Fatal("verified current Synara selection was rejected", got, err, fallbackCalls)
+	}
+	native := managedToolBundleExecutable(current.Executable)
+	if err := os.WriteFile(native, []byte("changed native executable"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := a.launchRuntime().resolve("synara", ""); err == nil || got != "" || fallbackCalls != 0 {
+		t.Fatal("corrupt managed Synara selection bypassed its digest or fell back", got, err, fallbackCalls)
+	}
+	postCLISelection(t, a, map[string]any{"version": 1, "synaraExecutable": current.Executable}, 400)
+	if a.cliExecutable("synara") != current.Executable {
+		t.Fatal("invalid replacement changed the previous selection")
+	}
+}
+
+func TestCLIExecutablePreferencesSynaraAppImageIsSavedWithoutExecuting(t *testing.T) {
+	a := launchTestApp(t)
+	a.config.Port = 8877
+	a.launcher.platform = "linux"
+	path := filepath.Join(t.TempDir(), "Synara-1.0.3-x86_64.AppImage")
+	header := make([]byte, 64)
+	copy(header, "\x7fELF")
+	header[4], header[5] = 2, 1
+	copy(header[8:], []byte{'A', 'I', 2})
+	// A raw package does not need execution permission to be detected. No
+	// application or extraction process may be started to save this choice.
+	if err := os.WriteFile(path, header, 0600); err != nil {
+		t.Fatal(err)
+	}
+	starts := 0
+	a.launcher.start = func(clientLaunchPlan) error { starts++; return nil }
+	postCLISelection(t, a, map[string]any{"version": 1, "synaraExecutable": path}, 200)
+	if got, err := a.launchRuntime().resolve("synara", ""); err != nil || got != path {
+		t.Fatal("saved raw AppImage was not detected as a package", got, err)
+	}
+	if _, err := synaraPackageMetadata(path, a.launcher.platform); err == nil || err.Error() != synaraAppImagePending {
+		t.Fatal("raw AppImage was treated as a runnable prepared installation", err)
+	}
+	if starts != 0 {
+		t.Fatal("saving or detecting an AppImage started an application")
+	}
+	if data, err := os.ReadFile(path); err != nil || !reflect.DeepEqual(data, header) {
+		t.Fatal("AppImage source was changed", err)
+	}
+}

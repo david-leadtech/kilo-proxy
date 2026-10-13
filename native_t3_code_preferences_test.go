@@ -20,17 +20,18 @@ import (
 )
 
 type nativeT3PreferencesFixture struct {
-	u                 *nativeUI
-	h                 *nativePointerHarness
-	mu                sync.Mutex
-	response          nativeT3CodePreferencesResponse
-	posts             []nativeT3CodePreferences
-	failGet, failPost bool
-	postGate          chan struct{}
-	profileGate       chan struct{}
-	profileEntered    chan struct{}
-	profile           nativeT3CodeInfo
-	profilePosts      int
+	u                      *nativeUI
+	h                      *nativePointerHarness
+	mu                     sync.Mutex
+	response               nativeT3CodePreferencesResponse
+	posts                  []nativeT3CodePreferences
+	failGet, failPost      bool
+	omitOpenCodeConnection bool
+	postGate               chan struct{}
+	profileGate            chan struct{}
+	profileEntered         chan struct{}
+	profile                nativeT3CodeInfo
+	profilePosts           int
 }
 
 func newNativeT3PreferencesFixture(t *testing.T, language string) *nativeT3PreferencesFixture {
@@ -41,13 +42,13 @@ func newNativeT3PreferencesFixture(t *testing.T, language string) *nativeT3Prefe
 	nativeTestWait(t, u, func() bool {
 		return u.language == language && u.languageTarget == "" && !u.busy["POST/api/language"] && !u.busy["GET/api/state"]
 	})
-	u.page, u.settingsTab = "settings", "t3-code"
+	u.agentSetup("t3-code")
 	var prefs nativeT3CodePreferences
 	data, _ := json.Marshal(normalizeT3CodePreferences(t3CodePreferences{}))
 	if err := json.Unmarshal(data, &prefs); err != nil {
 		t.Fatal(err)
 	}
-	f := &nativeT3PreferencesFixture{u: u, response: nativeT3CodePreferencesResponse{Preferences: prefs, SupportedProviders: []nativeT3CodeProvider{{"cursor", "Cursor"}, {"opencode", "OpenCode"}}, OpenCode2Supported: true, RequiresPreparation: true}}
+	f := &nativeT3PreferencesFixture{u: u, response: nativeT3CodePreferencesResponse{Preferences: prefs, SupportedProviders: []nativeT3CodeProvider{{"cursor", "Cursor"}, {"opencode", "OpenCode"}, {"muse", "Muse Code"}}, OpenCode2Supported: true, OpenCodeKiloSupported: true, RequiresPreparation: true}}
 	upstream, err := url.Parse("http://" + u.owner.adminHost)
 	if err != nil {
 		t.Fatal(err)
@@ -102,6 +103,7 @@ func newNativeT3PreferencesFixture(t *testing.T, language string) *nativeT3Prefe
 			}
 		}
 		response := f.response
+		omitConnection := f.omitOpenCodeConnection
 		f.mu.Unlock()
 		if gate != nil {
 			select {
@@ -114,13 +116,26 @@ func newNativeT3PreferencesFixture(t *testing.T, language string) *nativeT3Prefe
 			jsonError(w, 503, "Synthetic preferences unavailable")
 			return
 		}
+		if omitConnection {
+			data, _ := json.Marshal(response)
+			var legacy map[string]any
+			_ = json.Unmarshal(data, &legacy)
+			delete(legacy["preferences"].(map[string]any), "openCodeConnection")
+			jsonResponse(w, 200, legacy)
+			return
+		}
 		jsonResponse(w, 200, response)
 	}))
 	u.owner.adminHost = strings.TrimPrefix(server.URL, "http://")
 	t.Cleanup(server.Close)
 	f.h = &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 1000), now: time.Now()}
 	f.h.frame()
-	nativeTestWait(t, u, func() bool { return u.agentsState().T3Code.PreferencesState.Loaded })
+	// Opening the harness starts profile and preference reads together. Finish
+	// both before a test installs its own held profile response.
+	nativeTestWait(t, u, func() bool {
+		state := &u.agentsState().T3Code
+		return state.PreferencesState.Loaded && state.Loaded && !u.busy["GET/api/clients/t3-code"]
+	})
 	f.h.frame()
 	return f
 }
@@ -395,5 +410,212 @@ func TestNativeT3CodePreferencesIgnorePreparedProfileReadBeforeSettingsSave(t *t
 	nativeTestWait(t, u, func() bool { return !u.busy["GET/api/clients/t3-code"] })
 	if state.Info.Prepared || state.PreferencesState.Preferences.Codex || u.t3CodePrepared(u.sharedClientSelection("t3-code")) {
 		t.Fatal("old prepared response erased the need to reprepare")
+	}
+}
+
+func TestNativeT3ControlsLiveInHarnessGearAndLegacySettingsRedirect(t *testing.T) {
+	for _, lang := range []string{"en", "es"} {
+		t.Run(lang, func(t *testing.T) {
+			f := newNativeT3PreferencesFixture(t, lang)
+			u, h := f.u, f.h
+			for _, width := range []int{1120, 780} {
+				h.size = image.Pt(width, 1600)
+				u.page, u.settingsTab = "settings", ""
+				h.frame()
+				for _, section := range uxsSections {
+					if section.id == "t3-code" {
+						t.Fatal("T3 remains in global settings index")
+					}
+				}
+				for _, node := range h.nodes() {
+					if node.Desc.Class == semantic.Switch && (node.Desc.Label == "Codex" || node.Desc.Label == "Claude" || node.Desc.Label == "OpenCode" || node.Desc.Label == "Muse Code") {
+						t.Fatal("T3 controls duplicated in global settings", node.Desc.Label)
+					}
+				}
+				u.page = "agents"
+				h.frame()
+				gear := u.tr("T3 Code settings", "Ajustes de T3 Code")
+				h.reveal(gear, semantic.Button)
+				h.click(gear, semantic.Button)
+				if u.page != "clients" || u.client != "t3-code" {
+					t.Fatal("T3 gear did not open its harness detail", u.page, u.client)
+				}
+				h.frame()
+				h.reveal("Codex", semantic.Switch)
+				h.target("Codex", semantic.Switch)
+				h.target("Claude", semantic.Switch)
+				for _, label := range []string{"OpenCode", "Muse Code"} {
+					h.reveal(label, semantic.Switch)
+					h.target(label, semantic.Switch)
+				}
+				h.reveal("Codex", semantic.Switch)
+				nativeGridCapture(t, h, "native-t3-gear-accounts-"+strconv.Itoa(width)+"-"+lang)
+				h.reveal("Muse Code", semantic.Switch)
+				nativeGridCapture(t, h, "native-t3-gear-providers-"+strconv.Itoa(width)+"-"+lang)
+				u.page, u.settingsTab = "settings", "t3-code"
+				h.frame()
+				h.frame()
+				if u.page != "clients" || u.client != "t3-code" || u.settingsTab != "" {
+					t.Fatal("legacy T3 settings link did not redirect", u.page, u.client, u.settingsTab)
+				}
+				u.page = "settings"
+				u.uxs().jump = "t3-code"
+				h.frame()
+				h.frame()
+				if u.page != "clients" || u.client != "t3-code" || u.uxs().jump != "" {
+					t.Fatal("pending legacy T3 jump did not redirect")
+				}
+			}
+			if f.postCount() != 0 {
+				t.Fatal("navigation changed saved provider preferences")
+			}
+		})
+	}
+}
+
+func TestNativeT3OpenCodeConnectionCompatibilityAndGatewayGate(t *testing.T) {
+	p := nativeT3CodePreferences{Version: 1, CodexModels: "official", ClaudeModels: "official", Providers: []string{"opencode"}}
+	explicit := p
+	explicit.OpenCodeConnection = "native"
+	if !validNativeT3CodePreferences(p) || !nativeT3CodePreferencesEqual(p, explicit) || nativeT3OpenCodeUsesKilo(p) {
+		t.Fatal("old preferences lost native compatibility")
+	}
+	p.OpenCodeConnection = "other"
+	if validNativeT3CodePreferences(p) {
+		t.Fatal("invalid OpenCode connection accepted")
+	}
+	for _, lang := range []string{"en", "es"} {
+		t.Run(lang, func(t *testing.T) {
+			f := newNativeT3PreferencesFixture(t, lang)
+			u := f.u
+			state := &u.agentsState().T3Code.PreferencesState
+			state.Preferences = explicit
+			if !u.t3CodeNativeOnly() {
+				t.Fatal("own OpenCode connection requires Kilo")
+			}
+			state.Preferences.OpenCodeConnection = "kilo"
+			if u.t3CodeNativeOnly() {
+				t.Fatal("Kilo OpenCode bypassed the gateway")
+			}
+			nativeSeedSharedForTest(t, u)
+			if u.uxhLaunchState("t3-code").canOpen {
+				t.Fatal("Kilo OpenCode opened without shared models")
+			}
+			u.owner.mu.Lock()
+			u.owner.apiKey = ""
+			u.owner.mu.Unlock()
+			nativeSeedSharedForTest(t, u, u.models[0])
+			if launch := u.uxhLaunchState("t3-code"); launch.canOpen || !strings.Contains(launch.reason, u.tr("Connect Kilo or ChatGPT", "Conecta Kilo o ChatGPT")) {
+				t.Fatalf("Kilo OpenCode ignored its connection: %+v", launch)
+			}
+		})
+	}
+}
+
+func TestNativeT3OpenCodeConnectionSavesSummaryAndResponsiveLayout(t *testing.T) {
+	for _, lang := range []string{"en", "es"} {
+		t.Run(lang, func(t *testing.T) {
+			f := newNativeT3PreferencesFixture(t, lang)
+			u, h := f.u, f.h
+			state := &u.agentsState().T3Code.PreferencesState
+			h.reveal("OpenCode", semantic.Switch)
+			h.click("OpenCode", semantic.Switch)
+			nativeTestWait(t, u, func() bool { return f.postCount() == 1 && !u.t3CodePreferencesBusy() && state.Pending == nil })
+			h.frame()
+			kilo := u.tr("Kilo Proxy · shared models", "Kilo Proxy · modelos compartidos")
+			h.reveal(kilo, semantic.RadioButton)
+			h.click(kilo, semantic.RadioButton)
+			nativeTestWait(t, u, func() bool { return f.postCount() == 2 && !u.t3CodePreferencesBusy() && state.Pending == nil })
+			if state.Preferences.OpenCodeConnection != "kilo" || f.lastPost().OpenCodeConnection != "kilo" || state.Preferences.OpenCode2 {
+				t.Fatal("connection did not save independently of major")
+			}
+			h.frame()
+			h.reveal("OpenCode 2", semantic.RadioButton)
+			h.click("OpenCode 2", semantic.RadioButton)
+			nativeTestWait(t, u, func() bool {
+				return f.postCount() == 3 && !u.t3CodePreferencesBusy() && state.Pending == nil && !u.busy["GET/api/clients/t3-code"]
+			})
+			if state.Preferences.OpenCodeConnection != "kilo" || !state.Preferences.OpenCode2 {
+				t.Fatal("major change lost the connection")
+			}
+			gate := make(chan struct{})
+			close(gate)
+			f.mu.Lock()
+			f.profileGate = gate
+			f.profile = nativeT3CodeInfo{Preferences: state.Preferences, EffectiveOpenCodeModels: []nativeT3CodeModelSummary{{ID: "vendor/one", Name: "Shared coding model"}}}
+			f.mu.Unlock()
+			u.refreshT3CodeProfile()
+			nativeTestWait(t, u, func() bool { return !u.busy["GET/api/clients/t3-code"] })
+			for _, width := range []int{1120, 780} {
+				h.size = image.Pt(width, 1400)
+				h.frame()
+				h.reveal(kilo, semantic.RadioButton)
+				h.target(kilo, semantic.RadioButton)
+				h.reveal(u.tr("Own OpenCode account", "Cuenta propia de OpenCode"), semantic.RadioButton)
+				if !nativeUpdateHasText(h, "Shared coding model · vendor/one") {
+					t.Fatal("confirmed OpenCode Kilo summary absent")
+				}
+				nativeGridCapture(t, h, "native-t3-opencode-connection-"+strconv.Itoa(width)+"-"+lang)
+			}
+			own := u.tr("Own OpenCode account", "Cuenta propia de OpenCode")
+			h.reveal(own, semantic.RadioButton)
+			h.click(own, semantic.RadioButton)
+			nativeTestWait(t, u, func() bool { return f.postCount() == 4 && !u.t3CodePreferencesBusy() && state.Pending == nil })
+			if state.Preferences.OpenCodeConnection != "native" || !state.Preferences.OpenCode2 {
+				t.Fatal("own connection reset the selected major")
+			}
+			h.frame()
+			if nativeUpdateHasText(h, "Shared coding model · vendor/one") {
+				t.Fatal("own connection shows a stale Kilo model summary")
+			}
+			for _, width := range []int{1120, 780} {
+				h.size = image.Pt(width, 1400)
+				h.frame()
+				h.reveal(own, semantic.RadioButton)
+				loginNote := u.tr("OpenCode 2 has a separate profile that may need its own login.", "OpenCode 2 tiene un perfil separado que puede requerir su propio inicio de sesión.")
+				explained := false
+				for _, node := range h.nodes() {
+					explained = explained || strings.Contains(node.Desc.Label, loginNote)
+				}
+				if !explained {
+					t.Fatal("native OpenCode 2 login isolation was not explained")
+				}
+				nativeGridCapture(t, h, "native-t3-opencode-native-v2-"+strconv.Itoa(width)+"-"+lang)
+			}
+		})
+	}
+}
+
+func TestNativeT3OpenCodeConnectionRequiresExactConfirmationAndSupportedDriver(t *testing.T) {
+	f := newNativeT3PreferencesFixture(t, "en")
+	u := f.u
+	state := &u.agentsState().T3Code.PreferencesState
+	f.mu.Lock()
+	f.omitOpenCodeConnection = true
+	f.mu.Unlock()
+	u.refreshT3CodePreferences()
+	nativeTestWait(t, u, func() bool { return !u.busy["GET"+nativeT3CodePreferencesEndpoint] })
+	next := state.Preferences
+	next.Providers, next.OpenCodeConnection = []string{"opencode"}, "kilo"
+	u.saveT3CodePreferences(next)
+	nativeTestWait(t, u, func() bool { return !u.t3CodePreferencesBusy() })
+	if state.Pending == nil || state.Error == "" || nativeT3OpenCodeUsesKilo(state.Preferences) {
+		t.Fatal("unconfirmed Kilo connection replaced the saved choice")
+	}
+	f.mu.Lock()
+	f.omitOpenCodeConnection = false
+	f.response.OpenCodeKiloSupported = false
+	f.mu.Unlock()
+	u.saveT3CodePreferences(*state.Pending)
+	nativeTestWait(t, u, func() bool { return !u.t3CodePreferencesBusy() && state.Pending == nil })
+	if state.Preferences.OpenCodeConnection != "kilo" || u.t3CodeOpenCodeConnectionError() == nil || u.uxhLaunchState("t3-code").canOpen {
+		t.Fatal("unsupported saved Kilo choice was silently changed or launchable")
+	}
+	f.h.frame()
+	f.h.reveal("Own OpenCode account", semantic.RadioButton)
+	f.h.click("Own OpenCode account", semantic.RadioButton)
+	nativeTestWait(t, u, func() bool { return f.postCount() == 3 && !u.t3CodePreferencesBusy() && state.Pending == nil })
+	if state.Preferences.OpenCodeConnection != "native" || u.t3CodeOpenCodeConnectionError() != nil {
+		t.Fatal("own account still depends on Kilo driver capability")
 	}
 }

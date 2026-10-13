@@ -15,15 +15,16 @@ import (
 const nativeT3CodePreferencesEndpoint = "/api/clients/t3-code/preferences"
 
 type nativeT3CodePreferences struct {
-	Version      int      `json:"version"`
-	Codex        bool     `json:"codex"`
-	Claude       bool     `json:"claude"`
-	KiloCodex    bool     `json:"kiloCodex"`
-	KiloClaude   bool     `json:"kiloClaude"`
-	CodexModels  string   `json:"codexModels"`
-	ClaudeModels string   `json:"claudeModels"`
-	Providers    []string `json:"providers"`
-	OpenCode2    bool     `json:"openCode2"`
+	Version            int      `json:"version"`
+	Codex              bool     `json:"codex"`
+	Claude             bool     `json:"claude"`
+	KiloCodex          bool     `json:"kiloCodex"`
+	KiloClaude         bool     `json:"kiloClaude"`
+	CodexModels        string   `json:"codexModels"`
+	ClaudeModels       string   `json:"claudeModels"`
+	Providers          []string `json:"providers"`
+	OpenCode2          bool     `json:"openCode2"`
+	OpenCodeConnection string   `json:"openCodeConnection"`
 }
 
 type nativeT3CodeProvider struct {
@@ -62,10 +63,11 @@ type nativeT3CodeModelSummary struct {
 	Name string `json:"name"`
 }
 type nativeT3CodePreferencesResponse struct {
-	Preferences         nativeT3CodePreferences `json:"preferences"`
-	RequiresPreparation bool                    `json:"requiresPreparation"`
-	SupportedProviders  []nativeT3CodeProvider  `json:"supportedProviders"`
-	OpenCode2Supported  bool                    `json:"openCode2Supported"`
+	Preferences           nativeT3CodePreferences `json:"preferences"`
+	RequiresPreparation   bool                    `json:"requiresPreparation"`
+	SupportedProviders    []nativeT3CodeProvider  `json:"supportedProviders"`
+	OpenCode2Supported    bool                    `json:"openCode2Supported"`
+	OpenCodeKiloSupported bool                    `json:"openCodeKiloSupported"`
 }
 type nativeT3CodePreferencesState struct {
 	nativeT3CodePreferencesResponse
@@ -75,7 +77,19 @@ type nativeT3CodePreferencesState struct {
 	Pending           *nativeT3CodePreferences
 }
 
+func nativeT3OpenCodeConnection(p nativeT3CodePreferences) string {
+	if p.OpenCodeConnection == "" {
+		return "native"
+	}
+	return p.OpenCodeConnection
+}
+
+func nativeT3OpenCodeUsesKilo(p nativeT3CodePreferences) bool {
+	return helperContains(p.Providers, "opencode") && nativeT3OpenCodeConnection(p) == "kilo"
+}
+
 func nativeT3CodePreferencesEqual(a, b nativeT3CodePreferences) bool {
+	a.OpenCodeConnection, b.OpenCodeConnection = nativeT3OpenCodeConnection(a), nativeT3OpenCodeConnection(b)
 	a.Providers = append([]string(nil), a.Providers...)
 	b.Providers = append([]string(nil), b.Providers...)
 	sort.Strings(a.Providers)
@@ -90,12 +104,20 @@ func nativeT3CodePreferencesEqual(a, b nativeT3CodePreferences) bool {
 }
 
 func validNativeT3CodePreferences(p nativeT3CodePreferences) bool {
-	return p.Version == 1 && (p.CodexModels == "official" || p.CodexModels == "shared") && (p.ClaudeModels == "official" || p.ClaudeModels == "shared") && (!p.OpenCode2 || helperContains(p.Providers, "opencode"))
+	return p.Version == 1 && (p.CodexModels == "official" || p.CodexModels == "shared") && (p.ClaudeModels == "official" || p.ClaudeModels == "shared") && (!p.OpenCode2 || helperContains(p.Providers, "opencode")) && (nativeT3OpenCodeConnection(p) == "native" || nativeT3OpenCodeConnection(p) == "kilo")
 }
 
 func nativeT3CodePreferenceLibraryError(p nativeT3CodePreferences, library modelLibrary) error {
 	if len(library.Models) > 32 && (p.KiloCodex && p.CodexModels == "shared" || p.KiloClaude && p.ClaudeModels == "shared") {
 		return errors.New("T3 Code supports up to 32 shared models per account. Reduce your selection in Models or choose official models.")
+	}
+	return nil
+}
+
+func (u *nativeUI) t3CodeOpenCodeConnectionError() error {
+	s := &u.agentsState().T3Code.PreferencesState
+	if s.Loaded && nativeT3OpenCodeUsesKilo(s.Preferences) && !s.OpenCodeKiloSupported {
+		return errors.New(u.tr("This T3 build cannot use the Kilo OpenCode connection. Choose your own OpenCode account, disable OpenCode or install a compatible T3 build.", "Esta compilación de T3 no admite la conexión Kilo de OpenCode. Elige tu cuenta propia de OpenCode, desactiva OpenCode o instala una compilación T3 compatible."))
 	}
 	return nil
 }
@@ -150,6 +172,7 @@ func (u *nativeUI) saveT3CodePreferences(next nativeT3CodePreferences) {
 		return
 	}
 	next.Providers = append([]string{}, next.Providers...)
+	next.OpenCodeConnection = nativeT3OpenCodeConnection(next)
 	s.Pending, s.Error = &next, ""
 	s.Generation++
 	generation := s.Generation
@@ -209,7 +232,7 @@ func (u *nativeUI) t3CodePreferencesPanel() layout.Widget {
 	if saving {
 		status = u.tr("Saving T3 Code preferences…", "Guardando preferencias de T3 Code…")
 	}
-	statusWidgets := []layout.Widget{u.note(status)}
+	statusWidgets := []layout.Widget{u.note(status), u.note(u.tr("Kilo accounts have a green KP badge in T3.", "Las cuentas Kilo llevan una insignia verde KP en T3."))}
 	if s.Error != "" {
 		statusWidgets = append(statusWidgets, u.message(nativeToneError, s.Error))
 		if s.Pending != nil {
@@ -246,6 +269,9 @@ func (u *nativeUI) t3CodePreferencesPanel() layout.Widget {
 			continue
 		}
 		help := u.tr("Uses this provider's own installation and login", "Usa la instalación y sesión propias de este proveedor")
+		if id == "opencode" && nativeT3OpenCodeUsesKilo(p) {
+			help = u.tr("Uses your saved shared models through Kilo Proxy", "Usa tus modelos compartidos guardados a través de Kilo Proxy")
+		}
 		if !provider.Supported {
 			label += u.tr(" · unavailable in this build", " · no disponible en esta compilación")
 			help = u.tr("Turn off this saved choice or install a compatible T3 build before preparing.", "Desactiva esta selección guardada o instala una compilación T3 compatible antes de preparar.")
@@ -255,6 +281,41 @@ func (u *nativeUI) t3CodePreferencesPanel() layout.Widget {
 				*p = nativeT3CodeToggleProvider(*p, id, enabled)
 			}
 		}))
+		if id == "opencode" {
+			connection := nativeT3OpenCodeConnection(p)
+			choices := []nativeChoice{{Value: "native", Label: u.tr("Own OpenCode account", "Cuenta propia de OpenCode")}, {Value: "kilo", Label: u.tr("Kilo Proxy · shared models", "Kilo Proxy · modelos compartidos")}}
+			choose := func(value string) {
+				if value == "kilo" && !s.OpenCodeKiloSupported {
+					return
+				}
+				next := p
+				next.OpenCodeConnection = value
+				u.saveT3CodePreferences(next)
+			}
+			editable := ready && helperContains(p.Providers, id) && provider.Supported
+			connectionChoices := u.uxsRadioList("t3-preferences:opencode-connection:", choices, connection, editable, choose)
+			if !s.OpenCodeKiloSupported {
+				connectionChoices = u.column(u.uxsRadio("t3-preferences:opencode-connection:native", choices[0], connection == "native", editable, choose), u.uxsRadio("t3-preferences:opencode-connection:kilo", choices[1], connection == "kilo", false, nil))
+			}
+			help := u.tr("Your own account uses OpenCode's login and catalog. Kilo uses the models saved in Models through the proxy, with a separate profile. Close T3 Code · Kilo and prepare again after changing this connection.", "Tu cuenta propia usa la sesión y el catálogo de OpenCode. Kilo usa los modelos guardados en Modelos a través del proxy, con un perfil separado. Cierra T3 Code · Kilo y prepara de nuevo tras cambiar esta conexión.")
+			if !s.OpenCodeKiloSupported {
+				help = u.tr("This T3 build cannot use the Kilo OpenCode connection. Choose your own OpenCode account, disable OpenCode or install a compatible T3 build.", "Esta compilación de T3 no admite la conexión Kilo de OpenCode. Elige tu cuenta propia de OpenCode, desactiva OpenCode o instala una compilación T3 compatible.")
+			}
+			rows = append(rows, u.uxsRow(u.tr("OpenCode connection", "Conexión de OpenCode"), "", connectionChoices, nil, u.note(help)))
+			if nativeT3OpenCodeUsesKilo(p) && nativeT3CodePreferencesEqual(p, u.agentsState().T3Code.Info.Preferences) {
+				models := []string{}
+				for _, model := range u.agentsState().T3Code.Info.EffectiveOpenCodeModels {
+					label := model.ID
+					if model.Name != "" {
+						label = model.Name + " · " + model.ID
+					}
+					models = append(models, label)
+				}
+				if len(models) > 0 {
+					rows = append(rows, u.uxsRow(u.tr("OpenCode Kilo models", "Modelos de OpenCode Kilo"), "", u.note(strings.Join(models, "\n")), nil, nil))
+				}
+			}
+		}
 		if id == "opencode" && (s.OpenCode2Supported || p.OpenCode2) {
 			choose := func(value string) {
 				if value == "2" && !s.OpenCode2Supported {
@@ -266,6 +327,9 @@ func (u *nativeUI) t3CodePreferencesPanel() layout.Widget {
 			}
 			version := u.uxsRadioList("t3-preferences:opencode-version:", []nativeChoice{{Value: "1", Label: "OpenCode 1"}, {Value: "2", Label: "OpenCode 2"}}, map[bool]string{false: "1", true: "2"}[p.OpenCode2], ready && helperContains(p.Providers, id), choose)
 			versionHelp := u.tr("Choose one version for this account. OpenCode 2 requires 2.0.18 or newer; both versions are never started together with the same profile.", "Elige una versión para esta cuenta. OpenCode 2 requiere 2.0.18 o posterior; nunca se abren ambas versiones a la vez con el mismo perfil.")
+			if nativeT3OpenCodeConnection(p) == "native" {
+				versionHelp += u.tr(" OpenCode 2 has a separate profile that may need its own login.", " OpenCode 2 tiene un perfil separado que puede requerir su propio inicio de sesión.")
+			}
 			if !s.OpenCode2Supported {
 				version = u.column(u.uxsRadio("t3-preferences:opencode-version:1", nativeChoice{Value: "1", Label: "OpenCode 1"}, false, ready, choose), u.uxsRadio("t3-preferences:opencode-version:2", nativeChoice{Value: "2", Label: "OpenCode 2"}, true, false, nil))
 				versionHelp = u.tr("This T3 build cannot use the saved OpenCode 2 choice. Choose OpenCode 1, disable OpenCode or install a compatible T3 build.", "Esta compilación de T3 no admite la selección guardada de OpenCode 2. Elige OpenCode 1, desactiva OpenCode o instala una compilación T3 compatible.")
@@ -276,5 +340,5 @@ func (u *nativeUI) t3CodePreferencesPanel() layout.Widget {
 	if s.Loaded && len(s.SupportedProviders) == 0 {
 		rows = append(rows, u.uxsRow(u.tr("Other providers", "Otros proveedores"), "", u.note(u.tr("This T3 build does not expose additional compatible providers.", "Esta compilación de T3 no ofrece proveedores compatibles adicionales.")), nil, nil))
 	}
-	return u.uxsBlock("T3 Code", u.tr("Accounts and models", "Cuentas y modelos"), rows...)
+	return u.uxsBlock(u.tr("Accounts and models", "Cuentas y modelos"), "", rows...)
 }

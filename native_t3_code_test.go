@@ -87,7 +87,7 @@ func TestNativeT3CodeWideCardAndIntegrationSettings(t *testing.T) {
 			for _, node := range h.nodes() {
 				labels += node.Desc.Label + "\n"
 			}
-			for _, expected := range []string{u.tr("Accounts and models", "Cuentas y modelos"), u.tr("T3 Code settings", "Ajustes de T3 Code"), u.tr("Choose which accounts and models T3 offers in Kilo Settings.", "Elige qué cuentas y modelos ofrece T3 en Ajustes de Kilo."), u.tr("green KP badge", "insignia verde KP"), u.tr("Opus 5.5, Sonnet 5.5 and Fable 5.1", "Opus 5.5, Sonnet 5.5 y Fable 5.1"), u.tr("native reasoning selector", "selector nativo de razonamiento"), u.tr("check the selected account and model", "revisa la cuenta y el modelo elegidos")} {
+			for _, expected := range []string{u.tr("Accounts and models", "Cuentas y modelos"), u.tr("Choose the accounts T3 offers. Changes save automatically.", "Elige las cuentas que ofrece T3. Los cambios se guardan solos."), u.tr("green KP badge", "insignia verde KP"), u.tr("Opus 5.5, Sonnet 5.5 and Fable 5.1", "Opus 5.5, Sonnet 5.5 y Fable 5.1"), u.tr("native reasoning selector", "selector nativo de razonamiento"), u.tr("check the selected account and model", "revisa la cuenta y el modelo elegidos")} {
 				if !strings.Contains(labels, expected) {
 					t.Fatalf("missing agent guidance: %q", expected)
 				}
