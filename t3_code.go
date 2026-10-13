@@ -14,7 +14,7 @@ import (
 )
 
 const t3CodeProfileEndpoint = "/api/clients/t3-code"
-const t3CodeProfileRevision = 5
+const t3CodeProfileRevision = 6
 
 type t3CodeManagedPaths struct{ Root, Data, UIHome, Settings, ClientSettings, Secrets, Selection string }
 
@@ -124,8 +124,31 @@ func (a *app) readT3CodePrepared() (t3CodePrepared, error) {
 		return t3CodePrepared{}, errors.New("Prepare the private T3 Code profiles again for these provider settings.")
 	}
 	if t3CodeUsesKilo(saved.Preferences) {
-		if len(saved.Library.Models) == 0 || len(saved.Files) < 4 {
+		if len(saved.Library.Models) == 0 {
 			return t3CodePrepared{}, errors.New("Prepare the private T3 Code profiles first.")
+		}
+		// Each enabled Kilo account owns exactly two profile files and its
+		// local secret. Disabled accounts retain their old files on disk, but
+		// must not appear in this preparation's integrity manifest.
+		for _, provider := range []struct {
+			enabled bool
+			profile string
+			files   []string
+			id, key string
+		}{
+			{saved.Preferences.KiloCodex, "codex-kilo", []string{"config.toml", "models.json"}, t3CodeCodexProxyID, "KILO_LOCAL_API_KEY"},
+			{saved.Preferences.KiloClaude, "claude-kilo", []string{"settings.json", "kilo-models.json"}, t3CodeClaudeProxyID, "ANTHROPIC_AUTH_TOKEN"},
+		} {
+			paths := []string{filepath.Join("data", "userdata", "secrets", t3CodeSecretName(provider.id, provider.key))}
+			for _, name := range provider.files {
+				paths = append(paths, filepath.Join("profiles", provider.profile, name))
+			}
+			for _, path := range paths {
+				digest, exists := saved.Files[path]
+				if provider.enabled && (!exists || len(digest) != 64 || strings.Trim(digest, "0123456789abcdef") != "") || !provider.enabled && exists {
+					return t3CodePrepared{}, errors.New("Prepare the private T3 Code profiles again for these provider settings.")
+				}
+			}
 		}
 	} else if len(saved.Library.Models) != 0 || len(saved.CodexLibrary.Models) != 0 || len(saved.ClaudeLibrary.Models) != 0 || len(saved.ClaudeRoutes) != 0 || len(saved.Files) != 0 {
 		return t3CodePrepared{}, errors.New("Prepare the native T3 Code accounts again.")

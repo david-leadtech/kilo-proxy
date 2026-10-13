@@ -41,13 +41,13 @@ func newNativeT3PreferencesFixture(t *testing.T, language string) *nativeT3Prefe
 	nativeTestWait(t, u, func() bool {
 		return u.language == language && u.languageTarget == "" && !u.busy["POST/api/language"] && !u.busy["GET/api/state"]
 	})
-	u.page, u.settingsTab = "settings", "t3-code"
+	u.agentSetup("t3-code")
 	var prefs nativeT3CodePreferences
 	data, _ := json.Marshal(normalizeT3CodePreferences(t3CodePreferences{}))
 	if err := json.Unmarshal(data, &prefs); err != nil {
 		t.Fatal(err)
 	}
-	f := &nativeT3PreferencesFixture{u: u, response: nativeT3CodePreferencesResponse{Preferences: prefs, SupportedProviders: []nativeT3CodeProvider{{"cursor", "Cursor"}, {"opencode", "OpenCode"}}, OpenCode2Supported: true, RequiresPreparation: true}}
+	f := &nativeT3PreferencesFixture{u: u, response: nativeT3CodePreferencesResponse{Preferences: prefs, SupportedProviders: []nativeT3CodeProvider{{"cursor", "Cursor"}, {"opencode", "OpenCode"}, {"muse", "Muse Code"}}, OpenCode2Supported: true, RequiresPreparation: true}}
 	upstream, err := url.Parse("http://" + u.owner.adminHost)
 	if err != nil {
 		t.Fatal(err)
@@ -395,5 +395,65 @@ func TestNativeT3CodePreferencesIgnorePreparedProfileReadBeforeSettingsSave(t *t
 	nativeTestWait(t, u, func() bool { return !u.busy["GET/api/clients/t3-code"] })
 	if state.Info.Prepared || state.PreferencesState.Preferences.Codex || u.t3CodePrepared(u.sharedClientSelection("t3-code")) {
 		t.Fatal("old prepared response erased the need to reprepare")
+	}
+}
+
+func TestNativeT3ControlsLiveInHarnessGearAndLegacySettingsRedirect(t *testing.T) {
+	for _, lang := range []string{"en", "es"} {
+		t.Run(lang, func(t *testing.T) {
+			f := newNativeT3PreferencesFixture(t, lang)
+			u, h := f.u, f.h
+			for _, width := range []int{1120, 780} {
+				h.size = image.Pt(width, 1600)
+				u.page, u.settingsTab = "settings", ""
+				h.frame()
+				for _, section := range uxsSections {
+					if section.id == "t3-code" {
+						t.Fatal("T3 remains in global settings index")
+					}
+				}
+				for _, node := range h.nodes() {
+					if node.Desc.Class == semantic.Switch && (node.Desc.Label == "Codex" || node.Desc.Label == "Claude" || node.Desc.Label == "OpenCode" || node.Desc.Label == "Muse Code") {
+						t.Fatal("T3 controls duplicated in global settings", node.Desc.Label)
+					}
+				}
+				u.page = "agents"
+				h.frame()
+				gear := u.tr("T3 Code settings", "Ajustes de T3 Code")
+				h.reveal(gear, semantic.Button)
+				h.click(gear, semantic.Button)
+				if u.page != "clients" || u.client != "t3-code" {
+					t.Fatal("T3 gear did not open its harness detail", u.page, u.client)
+				}
+				h.frame()
+				h.reveal("Codex", semantic.Switch)
+				h.target("Codex", semantic.Switch)
+				h.target("Claude", semantic.Switch)
+				for _, label := range []string{"OpenCode", "Muse Code"} {
+					h.reveal(label, semantic.Switch)
+					h.target(label, semantic.Switch)
+				}
+				h.reveal("Codex", semantic.Switch)
+				nativeGridCapture(t, h, "native-t3-gear-accounts-"+strconv.Itoa(width)+"-"+lang)
+				h.reveal("Muse Code", semantic.Switch)
+				nativeGridCapture(t, h, "native-t3-gear-providers-"+strconv.Itoa(width)+"-"+lang)
+				u.page, u.settingsTab = "settings", "t3-code"
+				h.frame()
+				h.frame()
+				if u.page != "clients" || u.client != "t3-code" || u.settingsTab != "" {
+					t.Fatal("legacy T3 settings link did not redirect", u.page, u.client, u.settingsTab)
+				}
+				u.page = "settings"
+				u.uxs().jump = "t3-code"
+				h.frame()
+				h.frame()
+				if u.page != "clients" || u.client != "t3-code" || u.uxs().jump != "" {
+					t.Fatal("pending legacy T3 jump did not redirect")
+				}
+			}
+			if f.postCount() != 0 {
+				t.Fatal("navigation changed saved provider preferences")
+			}
+		})
 	}
 }

@@ -1,6 +1,6 @@
 const endpoint='clients/cli/preferences';
-const valid=value=>value?.version===1&&typeof value.codexExecutable==='string'&&typeof value.claudeExecutable==='string'&&(value.museExecutable===undefined||typeof value.museExecutable==='string');
-const signature=value=>JSON.stringify([value?.version,value?.codexExecutable,value?.claudeExecutable,value?.museExecutable??'']);
+const valid=value=>value?.version===1&&typeof value.codexExecutable==='string'&&typeof value.claudeExecutable==='string'&&(value.museExecutable===undefined||typeof value.museExecutable==='string')&&(value.synaraExecutable===undefined||typeof value.synaraExecutable==='string');
+const signature=value=>JSON.stringify([value?.version,value?.codexExecutable,value?.claudeExecutable,value?.museExecutable??'',value?.synaraExecutable??'']);
 const openCodePaths=value=>JSON.stringify([value?.executable1,value?.executable2]);
 export const cliPathClient=client=>['codex-cli','claude','muse','t3-code','synara','open-design','xcode-codex','xcode-claude'].includes(client);
 export function cliPreferenceOperation(path,body,method) {
@@ -12,20 +12,21 @@ export function cliPreferenceOperation(path,body,method) {
 export function createCLIPreferencesHelper({api,notify,onChange=()=>{},onPreferencesSaved=()=>{},openCodeSnapshot=()=>null,openCodePathsBlocked=()=>false,onOpenCodePathsChanged=()=>{}}) {
  const $=id=>document.getElementById(id);
  const preparedPaths=new Map();
- let ctx={language:'en'},preferences=null,pending=null,error='',loaded=false,loading=false,saving=false,revision=0,changed=false,drafts={codexExecutable:'',claudeExecutable:'',museExecutable:''};
+ let ctx={language:'en'},preferences=null,pending=null,error='',loaded=false,loading=false,saving=false,revision=0,changed=false,drafts={codexExecutable:'',claudeExecutable:'',museExecutable:'',synaraExecutable:''};
  const L=(en,es)=>ctx.language==='en'?en:es;
  const dirty=()=>!!preferences&&Object.keys(drafts).some(key=>drafts[key].trim()!==preferences[key]);
  const blocked=client=>!loaded||loading||saving||!!pending||dirty()||client==='t3-code'&&openCodePathsBlocked();
  const changedError=()=>new Error(L('CLI executable settings changed. Review the paths and prepare again.','Las rutas de las CLI cambiaron. Revísalas y prepara de nuevo.'));
- function accept(next,discard=false){next={...next,museExecutable:next.museExecutable??''};const wasChanged=!!preferences&&signature(preferences)!==signature(next);for(const key of Object.keys(drafts))if(discard||!preferences||drafts[key].trim()===preferences[key])drafts[key]=next[key];preferences={...next};loaded=true;if(wasChanged){preparedPaths.clear();onPreferencesSaved();}}
+ function accept(next,discard=false){next={...next,museExecutable:next.museExecutable??'',synaraExecutable:next.synaraExecutable??''};const wasChanged=!!preferences&&signature(preferences)!==signature(next);for(const key of Object.keys(drafts))if(discard||!preferences||drafts[key].trim()===preferences[key])drafts[key]=next[key];preferences={...next};loaded=true;if(wasChanged){preparedPaths.clear();onPreferencesSaved();}}
  function render(context=ctx) {
   ctx=context;if(!loaded&&!loading&&!error)void reload();
-  $('cli-preferences-title').textContent=L('CLI installations','Instalaciones de las CLI');
-  $('cli-preferences-help').textContent=L('Choose an installed CLI, including a custom version. Empty paths use the current verified Kilo copy first, then the system installation. T3 Code, Synara and Open Design use these same paths. Accounts and chats are kept.','Elige una CLI instalada, incluida una versión personalizada. Las rutas vacías usan primero la copia Kilo actual verificada y después la instalación del sistema. T3 Code, Synara y Open Design usan las mismas rutas. Se conservan las cuentas y los chats.');
+  $('cli-preferences-title').textContent=L('Application and CLI installations','Instalaciones de aplicaciones y CLI');
+  $('cli-preferences-help').textContent=L('Choose an installed application or CLI, including a custom version. Empty paths use the current verified Kilo copy first, then the system installation. T3 Code, Synara and Open Design use these same CLI paths. Accounts and chats are kept.','Elige una aplicación o CLI instalada, incluida una versión personalizada. Las rutas vacías usan primero la copia Kilo actual verificada y después la instalación del sistema. T3 Code, Synara y Open Design usan las mismas rutas de las CLI. Se conservan las cuentas y los chats.');
   $('cli-preferences-muse-help').textContent=L('Muse Code uses its own Meta login and official models in the terminal and T3 Code. It does not use your Kilo gateway or shared model selection.','Muse Code usa su propio inicio de sesión de Meta y sus modelos oficiales en la terminal y T3 Code. No usa tu gateway de Kilo ni la selección compartida de modelos.');
-  for(const [client,key,label]of [['codex-cli','codexExecutable','Codex CLI'],['claude','claudeExecutable','Claude Code'],['muse','museExecutable','Muse Code']]) {
+  $('cli-preferences-synara-help').textContent=L('On Linux, select a persistent extracted Synara executable. A raw AppImage can be detected but is not ready to open: install a verified Kilo copy or select the extracted executable. Detection does not verify its source, version or channel. Ubuntu sandbox restrictions still apply.','En Linux, selecciona un ejecutable de Synara extraído en una ubicación permanente. Un AppImage sin extraer puede detectarse, pero no está listo para abrir: instala una copia Kilo verificada o selecciona el ejecutable extraído. La detección no verifica su origen, versión ni canal. Se mantienen las restricciones del sandbox de Ubuntu.');
+  for(const [client,key,label]of [['codex-cli','codexExecutable','Codex CLI'],['claude','claudeExecutable','Claude Code'],['muse','museExecutable','Muse Code'],['synara','synaraExecutable','Synara']]) {
    const field=$('cli-path-'+client),editable=loaded&&!loading&&!saving&&!pending;
-   $('cli-path-label-'+client).textContent=label+L(' executable path (optional)',' · ruta del ejecutable (opcional)');
+   $('cli-path-label-'+client).textContent=label+(client==='synara'?L(' application path (optional)',' · ruta de la aplicación (opcional)'):L(' executable path (optional)',' · ruta del ejecutable (opcional)'));
    if(field.value!==drafts[key])field.value=drafts[key];field.disabled=!editable;field.placeholder=L('Absolute path; empty = automatic detection','Ruta absoluta; vacía = detección automática');
    $('cli-path-save-'+client).textContent=L('Save path','Guardar ruta')+' · '+label;$('cli-path-save-'+client).disabled=!editable||drafts[key].trim()===preferences?.[key];
    $('cli-path-auto-'+client).textContent=L('Automatic detection','Detección automática')+' · '+label;$('cli-path-auto-'+client).disabled=!editable||(!drafts[key].trim()&&!preferences?.[key]);
@@ -40,7 +41,7 @@ export function createCLIPreferencesHelper({api,notify,onChange=()=>{},onPrefere
  async function reload(){if(loading||saving)return;loading=true;error='';const generation=++revision;render();try{const next=await api(endpoint);if(generation!==revision)return;if(!valid(next))throw new Error(L('Could not read CLI executable settings.','No se pudieron leer las rutas de las CLI.'));accept(next,true);pending=null;}catch(failure){if(generation===revision)error=failure.message;}finally{if(generation===revision){loading=false;render();}}}
  async function save(next){if(!loaded||loading||saving||!valid(next))return;pending={...next};saving=true;error='';const generation=++revision;render();try{const result=await api(endpoint,next);if(generation!==revision)return;if(!valid(result)||signature(result)!==signature(next))throw new Error(L('CLI settings did not confirm the saved paths.','No se confirmaron las rutas guardadas de las CLI.'));accept(result);pending=null;changed=true;}catch(failure){if(generation===revision){error=failure.message;notify(failure.message,true);}}finally{if(generation===revision){saving=false;render();}}}
  function savePath(key,automatic){if(!loaded||loading||saving||pending)return;const path=automatic?'':drafts[key].trim();if(path&&!path.startsWith('/')&&!/^[a-zA-Z]:[\\/]/.test(path)&&!/^\\\\[^\\]+\\[^\\]+/.test(path)){error=L('Enter an absolute path to the CLI executable, or leave it empty for automatic detection.','Introduce una ruta absoluta al ejecutable CLI, o déjala vacía para la detección automática.');render();return;}drafts[key]=path;void save({...preferences,[key]:path});}
- for(const [client,key]of [['codex-cli','codexExecutable'],['claude','claudeExecutable'],['muse','museExecutable']]) {
+ for(const [client,key]of [['codex-cli','codexExecutable'],['claude','claudeExecutable'],['muse','museExecutable'],['synara','synaraExecutable']]) {
   $('cli-path-'+client).addEventListener('input',()=>{if(!loaded||loading||saving||pending)return;drafts[key]=$('cli-path-'+client).value;error='';render();});
   $('cli-path-save-'+client).addEventListener('click',()=>savePath(key,false));$('cli-path-auto-'+client).addEventListener('click',()=>savePath(key,true));
  }

@@ -31,7 +31,7 @@ func (u *nativeUI) uxhInstallState(key string) uxhInstall {
 	if !c.LaunchChecked {
 		return uxhChecking
 	}
-	if u.nativeLaunchAvailable(key) || terminalClientSupported(key) && nativeLaunchClientInstalled(c.LaunchInfo.Clients[key]) {
+	if u.nativeLaunchAvailable(key) || nativeLaunchClientInstalled(c.LaunchInfo.Clients[key]) {
 		return uxhInstalled
 	}
 	return uxhMissing

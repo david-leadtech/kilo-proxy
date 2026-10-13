@@ -209,7 +209,7 @@ func (u *nativeUI) t3CodePreferencesPanel() layout.Widget {
 	if saving {
 		status = u.tr("Saving T3 Code preferences…", "Guardando preferencias de T3 Code…")
 	}
-	statusWidgets := []layout.Widget{u.note(status)}
+	statusWidgets := []layout.Widget{u.note(status), u.note(u.tr("Kilo accounts have a green KP badge in T3.", "Las cuentas Kilo llevan una insignia verde KP en T3."))}
 	if s.Error != "" {
 		statusWidgets = append(statusWidgets, u.message(nativeToneError, s.Error))
 		if s.Pending != nil {
@@ -276,5 +276,5 @@ func (u *nativeUI) t3CodePreferencesPanel() layout.Widget {
 	if s.Loaded && len(s.SupportedProviders) == 0 {
 		rows = append(rows, u.uxsRow(u.tr("Other providers", "Otros proveedores"), "", u.note(u.tr("This T3 build does not expose additional compatible providers.", "Esta compilación de T3 no ofrece proveedores compatibles adicionales.")), nil, nil))
 	}
-	return u.uxsBlock("T3 Code", u.tr("Accounts and models", "Cuentas y modelos"), rows...)
+	return u.uxsBlock(u.tr("Accounts and models", "Cuentas y modelos"), "", rows...)
 }

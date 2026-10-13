@@ -15,6 +15,7 @@ type cliPreferences struct {
 	CodexExecutable  string `json:"codexExecutable"`
 	ClaudeExecutable string `json:"claudeExecutable"`
 	MuseExecutable   string `json:"museExecutable"`
+	SynaraExecutable string `json:"synaraExecutable"`
 }
 
 func validateCLIExecutable(path string) error {
@@ -36,6 +37,8 @@ func (a *app) cliExecutable(client string) string {
 		return a.cliExecutables[1]
 	case "muse":
 		return a.museExecutable
+	case "synara":
+		return a.synaraExecutable
 	}
 	return ""
 }
@@ -87,6 +90,7 @@ func (a *app) cliPreferencesAPI(w http.ResponseWriter, r *http.Request) {
 		CodexExecutable  *string `json:"codexExecutable,omitempty"`
 		ClaudeExecutable *string `json:"claudeExecutable,omitempty"`
 		MuseExecutable   *string `json:"museExecutable,omitempty"`
+		SynaraExecutable *string `json:"synaraExecutable,omitempty"`
 	}
 	if r.Method == http.MethodPost {
 		if !decodeBody(w, r, &input) {
@@ -117,6 +121,16 @@ func (a *app) cliPreferencesAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		if input.SynaraExecutable != nil && *input.SynaraExecutable != "" {
+			if err := validateSynaraExecutablePath(*input.SynaraExecutable); err != nil {
+				jsonError(w, 400, err.Error())
+				return
+			}
+			if err := a.validateSelectedSynaraExecutable(*input.SynaraExecutable, a.launchRuntime().platform); err != nil {
+				jsonError(w, 400, err.Error())
+				return
+			}
+		}
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -131,6 +145,9 @@ func (a *app) cliPreferencesAPI(w http.ResponseWriter, r *http.Request) {
 		if input.MuseExecutable != nil {
 			next.MuseCodeExecutable = *input.MuseExecutable
 		}
+		if input.SynaraExecutable != nil {
+			next.SynaraExecutable = *input.SynaraExecutable
+		}
 		if err := writeSettings(a.dir, next); err != nil {
 			jsonError(w, 500, "Cannot save CLI executable preferences. Your previous settings are unchanged.")
 			return
@@ -139,7 +156,8 @@ func (a *app) cliPreferencesAPI(w http.ResponseWriter, r *http.Request) {
 		a.cliPathsMu.Lock()
 		a.cliExecutables = [2]string{next.CodexCLIExecutable, next.ClaudeCodeExecutable}
 		a.museExecutable = next.MuseCodeExecutable
+		a.synaraExecutable = next.SynaraExecutable
 		a.cliPathsMu.Unlock()
 	}
-	jsonResponse(w, 200, cliPreferences{Version: 1, CodexExecutable: a.config.CodexCLIExecutable, ClaudeExecutable: a.config.ClaudeCodeExecutable, MuseExecutable: a.config.MuseCodeExecutable})
+	jsonResponse(w, 200, cliPreferences{Version: 1, CodexExecutable: a.config.CodexCLIExecutable, ClaudeExecutable: a.config.ClaudeCodeExecutable, MuseExecutable: a.config.MuseCodeExecutable, SynaraExecutable: a.config.SynaraExecutable})
 }

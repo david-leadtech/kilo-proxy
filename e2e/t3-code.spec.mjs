@@ -292,3 +292,16 @@ test('T3 keeps saved unavailable choices visible so they can be disabled after c
  await page.locator('#t3-code-provider-opencode').click();await expect(page.locator('#t3-code-provider-options label')).toHaveCount(0);
  const cleared=await getAPI(request,gateway,'clients/t3-code/preferences');expect(cleared.preferences.providers).toEqual([]);expect(cleared.preferences.openCode2).toBe(false);expect(await records(gateway)).toEqual([]);
 });
+
+test('T3 provider controls belong only to the T3 harness panel',async({page,gateway,request})=>{
+ await setControl(gateway,{t3Capabilities:true});
+ await page.reload();await page.locator('#tab-t3-code').click();await page.locator('#t3-code-settings-title').click();
+ await expect(page.locator('#t3-code-helper #t3-code-settings')).toBeVisible();
+ await expect(page.locator('#t3-code-helper #t3-code-account-codex')).toBeVisible();
+ await expect(page.locator('#t3-code-helper #t3-code-provider-opencode')).toBeVisible();
+ await expect(page.locator('#t3-code-helper #t3-code-provider-muse')).toBeVisible();
+ expect(await page.locator('#t3-code-settings').count()).toBe(1);expect(await page.locator('#cli-preferences #t3-code-settings').count()).toBe(0);
+ await expect(page.locator('#client-launch-help')).toContainText('chosen in this T3 Code panel');
+ await page.locator('#language').selectOption('es');await expect(page.locator('#client-launch-help')).toContainText('elegidos en este panel de T3 Code');
+ expect(await records(gateway)).toEqual([]);
+});

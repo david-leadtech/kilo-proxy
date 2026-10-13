@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCLIPreferencesHelper,cliPreferenceOperation} from '../ui/cli-preferences-helper.mjs';
-const initial=()=>({version:1,codexExecutable:'',claudeExecutable:'',museExecutable:''});
+const initial=()=>({version:1,codexExecutable:'',claudeExecutable:'',museExecutable:'',synaraExecutable:''});
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function fixture(t,api,extra={}) {
  const old=globalThis.document,nodes=new Map(),messages=[];
@@ -17,7 +17,7 @@ test('CLI operation guards target executable consumers and leave Codex Desktop a
  assert.equal(cliPreferenceOperation('clients/launch',{client:'muse'},'POST'),'muse');
  for(const [path,body,method]of [['codex/catalog',{},'POST'],['clients/launch',{client:'codex'},'POST'],['clients/cli/preferences',{},'POST'],['clients/t3-code',undefined,'GET']])assert.equal(cliPreferenceOperation(path,body,method),'');
 });
-test('Muse path settings accept older version 1 responses and preserve all three selections',async t=>{
+test('Muse path settings accept older version 1 responses and preserve existing selections',async t=>{
  let prefs={version:1,codexExecutable:'/custom/codex',claudeExecutable:'/custom/claude'},refreshes=0;const writes=[];
  const {helper,nodes,input}=fixture(t,async(path,body)=>{if(body){writes.push({...body});prefs={...body}}return {...prefs}},{onPreferencesSaved:()=>refreshes++});
  await tick();assert.equal(helper.blocked('muse'),false);assert.equal(nodes.get('cli-path-muse').value,'');
@@ -132,4 +132,27 @@ test('an OpenCode draft during the final path verification prevents a prepared c
  let pathBlocked=false,reads=0,release;const gate=new Promise(resolve=>release=resolve),oc={version:1,major:1,executable1:'',executable2:''};
  const {helper}=fixture(t,async path=>{if(path==='clients/opencode/preferences'){if(++reads===2)await gate;return {...oc}}return initial()},{openCodePathsBlocked:()=>pathBlocked});await tick();
  const pending=helper.guardOperation('t3-code',async()=>({prepared:true}));await tick();assert.equal(reads,2);pathBlocked=true;release();await assert.rejects(pending,/settings changed/);assert.equal(helper.prepared('t3-code'),false);
+});
+
+test('Synara optional v1 path preserves CLI choices and confirms both save and automatic reset',async t=>{
+ let prefs={version:1,codexExecutable:'/cli/codex',claudeExecutable:'/cli/claude',museExecutable:'/cli/muse'};const writes=[];
+ const {helper,nodes,input}=fixture(t,async(path,body)=>{if(body){writes.push({...body});prefs={...body}}return {...prefs}});await tick();
+ assert.equal(nodes.get('cli-path-synara').value,'');assert.equal(helper.blocked('synara'),false);
+ input('synara','/home/test/Applications/Synara-1.0.3-x86_64.AppImage');assert.equal(helper.blocked('synara'),true);nodes.get('cli-path-save-synara').dispatch('click');await tick();
+ assert.deepEqual(writes[0],{...initial(),...prefs});assert.equal(prefs.synaraExecutable,'/home/test/Applications/Synara-1.0.3-x86_64.AppImage');
+ helper.render({language:'es',launchInfo:{clients:{synara:{path:prefs.synaraExecutable,installed:true,available:false}}}});
+ assert.equal(nodes.get('cli-preferences-title').textContent,'Instalaciones de aplicaciones y CLI');assert.match(nodes.get('cli-path-resolved-synara').textContent,/Ejecutable detectado:/);assert.match(nodes.get('cli-preferences-synara-help').textContent,/no está listo para abrir/);assert.match(nodes.get('cli-preferences-synara-help').textContent,/no verifica su origen, versión ni canal/);
+ nodes.get('cli-path-auto-synara').dispatch('click');await tick();assert.equal(prefs.synaraExecutable,'');assert.equal(prefs.codexExecutable,'/cli/codex');assert.equal(prefs.claudeExecutable,'/cli/claude');assert.equal(prefs.museExecutable,'/cli/muse');
+});
+test('Synara draft, unconfirmed save and external selection cannot prepare or open a stale binary',async t=>{
+ let prefs=initial(),omit=false;const {helper,nodes,input}=fixture(t,async(path,body)=>{if(body){prefs={...body};if(omit){const reply={...prefs};delete reply.synaraExecutable;return reply}}return {...prefs}});await tick();
+ await helper.guardOperation('synara',async()=>({prepared:true}));assert.equal(helper.prepared('synara'),true);
+ input('synara','/persistent/synara');await assert.rejects(helper.guardOperation('synara',async()=>assert.fail('draft was prepared')),/settings changed/);
+ omit=true;nodes.get('cli-path-save-synara').dispatch('click');await tick();assert.equal(helper.blocked('synara'),true);assert.equal(nodes.get('cli-preferences-retry').hidden,false);
+ omit=false;nodes.get('cli-preferences-retry').dispatch('click');await tick();assert.equal(helper.prepared('synara'),false);
+ await helper.guardOperation('synara',async()=>({prepared:true}));prefs.synaraExecutable='/different/synara';
+ await assert.rejects(helper.guardOperation('synara',async()=>assert.fail('changed Synara opened'),{preparation:false}),/settings changed/);assert.equal(helper.prepared('synara'),false);assert.equal(nodes.get('cli-path-synara').value,'/different/synara');
+});
+test('a malformed Synara path response cannot make executable preferences ready',async t=>{
+ const {helper,nodes}=fixture(t,async()=>({...initial(),synaraExecutable:42}));await tick();assert.equal(helper.blocked('synara'),true);assert.match(nodes.get('cli-preferences-status').textContent,/Could not read/);
 });

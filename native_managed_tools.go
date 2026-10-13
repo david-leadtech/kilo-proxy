@@ -351,6 +351,10 @@ func (u *nativeUI) managedToolAction(status managedToolStatus) string {
 }
 
 func (u *nativeUI) managedToolCustomApplication(key string) bool {
+	if key == "synara" {
+		prefs := &u.clientState().CLIPreferences
+		return prefs.Loaded && prefs.Preferences.SynaraExecutable != ""
+	}
 	if key != "codex" {
 		return false
 	}
@@ -364,6 +368,21 @@ func (u *nativeUI) useManagedToolCopy(key string) {
 	status := u.managedToolsState().snapshot.Clients[key]
 	a := u.agentsState()
 	if !status.Managed || !status.Installed || !u.managedToolCustomApplication(key) || u.managedToolsWorking() || u.uxhProfileWorking(key) || a.FolderBusy != "" {
+		return
+	}
+	if key == "synara" {
+		if !u.cliPreferencesReady() {
+			return
+		}
+		next := u.clientState().CLIPreferences.Preferences
+		next.SynaraExecutable = ""
+		u.saveCLIPreferencesAfter(next, func(err error) {
+			if err != nil {
+				u.managedToolsState().requestError = u.tr("Could not change the selected app. Your custom application path is kept. Retry saving or reload paths in Settings.", "No se pudo cambiar la app seleccionada. Se conserva tu ruta de aplicación personalizada. Reintenta el guardado o carga las rutas en Ajustes.")
+				return
+			}
+			u.managedToolsState().requestError = ""
+		})
 		return
 	}
 	prefs := a.Preferences
@@ -445,7 +464,7 @@ func (u *nativeUI) managedToolInstallationPanel(key string) layout.Widget {
 				if u.managedToolCustomApplication(key) {
 					message = u.tr("Kilo copy ready. Your custom application path is still selected.", "Copia Kilo lista. Tu ruta de aplicación personalizada sigue seleccionada.")
 				}
-				if key == "synara" || key == "t3-code" {
+				if (key == "synara" || key == "t3-code") && !u.managedToolCustomApplication(key) {
 					message = u.tr("Kilo copy ready. Close the Kilo workspace, prepare it again, then reopen it. Your chats are kept.", "Copia Kilo lista. Cierra el espacio Kilo, prepáralo de nuevo y vuelve a abrirlo. Tus chats se conservan.")
 				}
 			}
@@ -456,7 +475,7 @@ func (u *nativeUI) managedToolInstallationPanel(key string) layout.Widget {
 		if status.Managed && u.managedToolCustomApplication(key) {
 			rows = append(rows, u.uxhAdvancedRow(u.tr("Selected application", "Aplicación seleccionada"),
 				u.tr("Your custom application path takes priority. Use the Kilo copy to clear that path; your accounts, chats and project folders are kept.", "Tu ruta de aplicación personalizada tiene prioridad. Usa la copia Kilo para quitar esa ruta; tus cuentas, chats y carpetas de proyecto se conservan."), nil,
-				u.disabled(status.Installed && !u.managedToolsWorking() && !u.uxhProfileWorking(key) && u.agentsState().FolderBusy == "", u.button("tool:"+key+":use-copy", u.tr("Use Kilo copy", "Usar copia Kilo"), func() { u.useManagedToolCopy(key) }))))
+				u.disabled(status.Installed && !u.managedToolsWorking() && !u.uxhProfileWorking(key) && u.agentsState().FolderBusy == "" && (key != "synara" || u.cliPreferencesReady()), u.button("tool:"+key+":use-copy", u.tr("Use Kilo copy", "Usar copia Kilo"), func() { u.useManagedToolCopy(key) }))))
 		}
 		if status.CanInstall || status.CanUpdate {
 			description := u.tr("Installs a separate copy for Kilo Proxy. Your existing installation, accounts and chats are kept.", "Instala una copia separada para Kilo Proxy. Tu instalación actual, cuentas y chats se conservan.")

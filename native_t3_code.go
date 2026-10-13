@@ -139,10 +139,7 @@ func (u *nativeUI) t3CodeDetail(s *nativeClientSelection) uxhDetail {
 	if state.Info.ProtocolV2 {
 		chatHelp = u.tr("This T3 build can change agents between turns in the same chat. T3 transfers a summary when switching providers; previous reasoning, tool results and attachments are not transferred. Each agent keeps its own CLI profile.", "Esta compilación de T3 permite cambiar de agente entre turnos en el mismo chat. T3 transfiere un resumen al cambiar de proveedor; no transfiere el razonamiento anterior, los resultados de herramientas ni los adjuntos. Cada agente conserva su propio perfil CLI.")
 	}
-	d.blocks = append(d.blocks, u.uxhBlock(u.tr("Accounts and models", "Cuentas y modelos"), "",
-		u.note(u.tr("Choose which accounts and models T3 offers in Kilo Settings. Kilo accounts have a green KP badge in T3.", "Elige qué cuentas y modelos ofrece T3 en Ajustes de Kilo. Las cuentas Kilo llevan una insignia verde KP en T3.")),
-		u.button("client:t3-code:settings", u.tr("T3 Code settings", "Ajustes de T3 Code"), func() { u.page, u.settingsTab = "settings", "t3-code" }),
-	))
+	d.blocks = append(d.blocks, u.t3CodePreferencesPanel())
 	requirements := u.tr("Detects installed T3 Code release channels, including alpha, beta and nightly. Preparation checks the installed integration contract and the CLIs required by your enabled accounts.", "Detecta canales instalados de T3 Code, incluidos alpha, beta y nightly. La preparación comprueba el contrato instalado y los CLI que requieren las cuentas activadas.")
 	if state.Info.Version != "" {
 		requirements += u.tr(" Detected: ", " Detectado: ") + state.Info.Version + "."
@@ -152,7 +149,7 @@ func (u *nativeUI) t3CodeDetail(s *nativeClientSelection) uxhDetail {
 	if u.expanded[notesID] {
 		notes = append(notes,
 			u.note(chatHelp),
-			u.note(u.tr("Claude Kilo offers Opus 5.5, Sonnet 5.5 and Fable 5.1 by default, with T3's native reasoning selector. Choose shared models instead in Settings. Available levels depend on the installed T3 and Claude Code versions.", "Claude Kilo ofrece Opus 5.5, Sonnet 5.5 y Fable 5.1 por defecto, con el selector nativo de razonamiento de T3. Puedes elegir los modelos compartidos en Ajustes. Los niveles disponibles dependen de las versiones instaladas de T3 y Claude Code.")),
+			u.note(u.tr("Claude Kilo offers Opus 5.5, Sonnet 5.5 and Fable 5.1 by default, with T3's native reasoning selector. Choose shared models instead in Accounts and models on this page. Available levels depend on the installed T3 and Claude Code versions.", "Claude Kilo ofrece Opus 5.5, Sonnet 5.5 y Fable 5.1 por defecto, con el selector nativo de razonamiento de T3. Puedes elegir los modelos compartidos en Cuentas y modelos de esta página. Los niveles disponibles dependen de las versiones instaladas de T3 y Claude Code.")),
 			u.note(u.tr("Your regular T3 Code workspace and its chats stay separate and can remain open. Codex and Claude use their existing CLI sessions, not Desktop app logins. Close only T3 Code · Kilo, then prepare again after changing accounts or models. Your chats are kept; check the selected account and model before continuing an older chat.", "Tu espacio T3 Code habitual y sus chats siguen separados y pueden permanecer abiertos. Codex y Claude usan sus sesiones CLI existentes, no los inicios de sesión de las apps Desktop. Cierra solo T3 Code · Kilo y prepara de nuevo tras cambiar cuentas o modelos. Tus chats se conservan; revisa la cuenta y el modelo elegidos antes de continuar un chat antiguo.")),
 		)
 	}

@@ -63,12 +63,12 @@ test('four agents use an immutable common-library snapshot without exposing cred
  assert.match(nodes.get('synara-compatibility').textContent,/reasoning defaults come from Kilo Models/);
  assert.doesNotMatch(nodes.get('synara-compatibility').textContent,/hides|hidden|summary handoff/);
  assert.match(nodes.get('synara-requirements').textContent,/file-based CLI authentication/);
- assert.match(nodes.get('synara-requirements').textContent,/^Supports Synara Beta\. Requires native Codex CLI and Claude Code\./);
+ assert.match(nodes.get('synara-requirements').textContent,/^Supports official Synara stable and Beta releases\. Requires native Codex CLI and Claude Code\./);
  assert.match(nodes.get('synara-requirements').textContent,/Detected: 9\.4\.2-beta\.8/);
  assert.match(nodes.get('synara-requirements').textContent,/not Desktop app logins/);
  assert.match(nodes.get('synara-prepared').textContent,/Four agents prepared/);
  helper.render({state:{connectionReady:true,baseURL:'http://127.0.0.1:8877/v1',localKey:'private-local-secret'},language:'es'});
- assert.match(nodes.get('synara-requirements').textContent,/^Admite Synara Beta\. Requiere Codex CLI nativo y Claude Code\./);
+ assert.match(nodes.get('synara-requirements').textContent,/^Admite versiones oficiales estables y Beta de Synara\. Requiere Codex CLI nativo y Claude Code\./);
  assert.match(nodes.get('synara-requirements').textContent,/Detectado: 9\.4\.2-beta\.8/);
  assert.doesNotMatch([...nodes.values()].map(node=>node.textContent).join(' '),/private-local-secret|\/private\/profile\/secret/);
 });
@@ -117,4 +117,13 @@ test('preparation and installation guidance translates to Spanish',async t=>{
  fail=true;
  await assert.rejects(helper.launchState().prepare(),/Quit the Synara/);
  assert.match(nodes.get('synara-status').textContent,/Cierra la ventana Kilo de Synara/);
+});
+
+test('Linux AppImage guidance separates discovery from readiness and preserves sandbox and runtime limits',async t=>{
+ const {helper,nodes}=fixture(t,async path=>path==='model-library'?saved():{});await tick();
+ assert.match(nodes.get('synara-linux').textContent,/package candidate, not a prepared installation/);
+ assert.match(nodes.get('synara-linux').textContent,/verified Kilo copy/);assert.match(nodes.get('synara-linux').textContent,/never starts an AppImage during detection/);
+ assert.match(nodes.get('synara-linux').textContent,/keeps the sandbox enabled/);assert.match(nodes.get('synara-linux').textContent,/has not been validated on Linux/);
+ helper.render({state:{connectionReady:true},language:'es'});
+ assert.match(nodes.get('synara-linux').textContent,/paquete candidato, no una instalación preparada/);assert.match(nodes.get('synara-linux').textContent,/mantiene el sandbox activado/);assert.match(nodes.get('synara-linux').textContent,/no se ha validado en Linux/);
 });

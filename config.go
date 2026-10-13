@@ -34,6 +34,7 @@ type settings struct {
 	CodexCLIExecutable              string                  `json:"codexCLIExecutable,omitempty"`
 	ClaudeCodeExecutable            string                  `json:"claudeCodeExecutable,omitempty"`
 	MuseCodeExecutable              string                  `json:"museCodeExecutable,omitempty"`
+	SynaraExecutable                string                  `json:"synaraExecutable,omitempty"`
 	OpenCodeMajor                   int                     `json:"openCodeMajor,omitempty"`
 	OpenCode1Executable             string                  `json:"openCode1Executable,omitempty"`
 	OpenCode2Executable             string                  `json:"openCode2Executable,omitempty"`
@@ -72,6 +73,9 @@ func readSettings(dir string) (settings, error) {
 	}
 	if validateCLIExecutable(s.CodexCLIExecutable) != nil || validateCLIExecutable(s.ClaudeCodeExecutable) != nil || validateCLIExecutable(s.MuseCodeExecutable) != nil {
 		return s, errors.New("Invalid CLI executable preferences.")
+	}
+	if validateSynaraExecutablePath(s.SynaraExecutable) != nil {
+		return s, errors.New("Invalid Synara executable preference.")
 	}
 	s.TrayDisplay = normalizeTrayDisplay(s.TrayDisplay)
 	s.ImageTransport = normalizeImageTransportSettings(s.ImageTransport)

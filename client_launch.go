@@ -124,6 +124,14 @@ func (a *app) launchRuntime() clientLaunchRuntime {
 	}
 	resolve := rt.resolve
 	rt.resolve = func(client, custom string) (string, error) {
+		if custom == "" && client == "synara" {
+			if path := a.cliExecutable(client); path != "" {
+				if err := a.validateSelectedSynaraExecutable(path, rt.platform); err != nil {
+					return "", err
+				}
+				return path, nil
+			}
+		}
 		if custom == "" && (client == "codex-cli" || client == "claude" || client == "muse") {
 			if path := a.cliExecutable(client); path != "" {
 				if err := a.validateSelectedClientExecutable(client, path); err != nil {

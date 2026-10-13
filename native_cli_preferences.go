@@ -31,6 +31,9 @@ func nativeCLIPathClient(key string) bool {
 }
 
 func nativeCLIPathValue(p cliPreferences, client string) string {
+	if client == "synara" {
+		return p.SynaraExecutable
+	}
 	if client == "muse" {
 		return p.MuseExecutable
 	}
@@ -48,7 +51,7 @@ func (u *nativeUI) cliPreferencesBusy() bool {
 
 func (u *nativeUI) cliPathDirty() bool {
 	s := &u.clientState().CLIPreferences
-	return s.Loaded && (strings.TrimSpace(u.value(nativeCLIPathField("codex-cli"))) != s.Preferences.CodexExecutable || strings.TrimSpace(u.value(nativeCLIPathField("claude"))) != s.Preferences.ClaudeExecutable || strings.TrimSpace(u.value(nativeCLIPathField("muse"))) != s.Preferences.MuseExecutable)
+	return s.Loaded && (strings.TrimSpace(u.value(nativeCLIPathField("codex-cli"))) != s.Preferences.CodexExecutable || strings.TrimSpace(u.value(nativeCLIPathField("claude"))) != s.Preferences.ClaudeExecutable || strings.TrimSpace(u.value(nativeCLIPathField("muse"))) != s.Preferences.MuseExecutable || strings.TrimSpace(u.value(nativeCLIPathField("synara"))) != s.Preferences.SynaraExecutable)
 }
 
 func (u *nativeUI) cliPreferencesReady() bool {
@@ -60,13 +63,17 @@ func (u *nativeUI) acceptCLIPreferences(next cliPreferences, discardDraft bool) 
 	s := &u.clientState().CLIPreferences
 	changed := s.Loaded && s.Preferences != next
 	claudeChanged := s.Loaded && s.Preferences.ClaudeExecutable != next.ClaudeExecutable
-	for _, client := range []string{"codex-cli", "claude", "muse"} {
+	synaraChanged := s.Loaded && s.Preferences.SynaraExecutable != next.SynaraExecutable
+	for _, client := range []string{"codex-cli", "claude", "muse", "synara"} {
 		id := nativeCLIPathField(client)
 		if discardDraft || !s.Loaded || strings.TrimSpace(u.value(id)) == nativeCLIPathValue(s.Preferences, client) {
 			u.setValue(id, nativeCLIPathValue(next, client))
 		}
 	}
 	s.Preferences, s.Loaded = next, true
+	if synaraChanged && u.clientState().ManagedTools != nil {
+		u.clientState().ManagedTools.requestError = ""
+	}
 	if claudeChanged {
 		c := u.clientState()
 		c.Claude, c.ClaudeChecked, c.ClaudeDetectStarted = claudeCapabilities{}, false, false
@@ -159,8 +166,18 @@ func (u *nativeUI) verifyCLIPreferencesAfter(expected cliPreferences, done func(
 }
 
 func (u *nativeUI) saveCLIPreferences(next cliPreferences) {
+	u.saveCLIPreferencesAfter(next, nil)
+}
+
+func (u *nativeUI) saveCLIPreferencesAfter(next cliPreferences, done func(error)) {
+	finish := func(err error) {
+		if done != nil {
+			done(err)
+		}
+	}
 	s := &u.clientState().CLIPreferences
 	if !s.Loaded || u.cliPreferencesBusy() || u.clientState().Launching != "" || next.Version != 1 {
+		finish(errors.New(u.tr("Wait for executable settings to finish loading or saving.", "Espera a que terminen de cargarse o guardarse las rutas de los ejecutables.")))
 		return
 	}
 	s.Pending, s.Error = &next, ""
@@ -168,20 +185,24 @@ func (u *nativeUI) saveCLIPreferences(next cliPreferences) {
 	generation := s.Generation
 	u.clientRequest("POST", nativeCLIPreferencesEndpoint, next, func(raw json.RawMessage, err error) {
 		if generation != s.Generation {
+			finish(errors.New(u.launchSettingsChangedMessage()))
 			return
 		}
 		if err != nil {
 			s.Error = nativeMessage(err.Error(), u.language)
+			finish(err)
 			return
 		}
 		var confirmed cliPreferences
 		if json.Unmarshal(raw, &confirmed) != nil || confirmed != next {
 			s.Error = u.tr("CLI settings did not confirm the saved paths. Reload before opening.", "No se confirmaron las rutas guardadas de las CLI. Carga los ajustes antes de abrir.")
+			finish(errors.New(s.Error))
 			return
 		}
 		u.acceptCLIPreferences(confirmed, false)
 		s.Pending, s.Changed = nil, true
 		u.detectLaunchers()
+		finish(nil)
 	})
 }
 
@@ -197,7 +218,9 @@ func (u *nativeUI) saveCLIExecutable(client string, automatic bool) {
 		return
 	}
 	next := s.Preferences
-	if client == "muse" {
+	if client == "synara" {
+		next.SynaraExecutable = path
+	} else if client == "muse" {
 		next.MuseExecutable = path
 	} else if client == "claude" {
 		next.ClaudeExecutable = path
@@ -213,13 +236,17 @@ func (u *nativeUI) cliPreferencesPanel() layout.Widget {
 		u.refreshCLIPreferencesAfter(nil)
 	}
 	editable := s.Loaded && s.Pending == nil && !u.cliPreferencesBusy() && u.clientState().Launching == ""
-	rows := []layout.Widget{uxhCell(u.note(u.tr("Choose an installed CLI, including a custom version. Empty paths use the current verified Kilo copy first, then the system installation. These paths also apply to T3 Code, Synara and Open Design. Accounts and chats are kept.", "Elige una CLI instalada, incluida una versión personalizada. Las rutas vacías usan primero la copia Kilo actual verificada y después la instalación del sistema. Estas rutas también se aplican a T3 Code, Synara y Open Design. Se conservan las cuentas y los chats.")))}
-	for _, choice := range []nativeChoice{{Value: "codex-cli", Label: "Codex CLI"}, {Value: "claude", Label: "Claude Code"}, {Value: "muse", Label: "Muse Code"}} {
+	rows := []layout.Widget{uxhCell(u.note(u.tr("Choose an installed application or CLI, including a custom version. Empty paths use the current verified Kilo copy first, then the system installation. T3 Code, Synara and Open Design use these same CLI paths. Accounts and chats are kept.", "Elige una aplicación o CLI instalada, incluida una versión personalizada. Las rutas vacías usan primero la copia Kilo actual verificada y después la instalación del sistema. T3 Code, Synara y Open Design usan las mismas rutas de las CLI. Se conservan las cuentas y los chats.")))}
+	for _, choice := range []nativeChoice{{Value: "codex-cli", Label: "Codex CLI"}, {Value: "claude", Label: "Claude Code"}, {Value: "muse", Label: "Muse Code"}, {Value: "synara", Label: "Synara"}} {
 		client, label := choice.Value, choice.Label
 		id := nativeCLIPathField(client)
 		dirty := s.Loaded && strings.TrimSpace(u.value(id)) != nativeCLIPathValue(s.Preferences, client)
+		pathLabel := label + u.tr(" executable path (optional)", " · ruta del ejecutable (opcional)")
+		if client == "synara" {
+			pathLabel = label + u.tr(" application path (optional)", " · ruta de la aplicación (opcional)")
+		}
 		rows = append(rows, uxhCell(u.column(
-			u.disabled(editable, u.field(id, label+u.tr(" executable path (optional)", " · ruta del ejecutable (opcional)"), u.tr("Absolute path; empty = automatic detection", "Ruta absoluta; vacía = detección automática"), false)),
+			u.disabled(editable, u.field(id, pathLabel, u.tr("Absolute path; empty = automatic detection", "Ruta absoluta; vacía = detección automática"), false)),
 			u.pills(u.disabled(editable && dirty, u.button("cli-executable-save:"+client, u.tr("Save path", "Guardar ruta")+" · "+label, func() { u.saveCLIExecutable(client, false) })), u.disabled(editable && (dirty || nativeCLIPathValue(s.Preferences, client) != ""), u.button("cli-executable-auto:"+client, u.tr("Automatic detection", "Detección automática")+" · "+label, func() { u.saveCLIExecutable(client, true) }))),
 		)))
 		info := u.clientState().LaunchInfo.Clients[client]
@@ -228,6 +255,9 @@ func (u *nativeUI) cliPreferencesPanel() layout.Widget {
 		}
 		if client == "muse" {
 			rows = append(rows, uxhCell(u.note(u.tr("Muse Code uses its own Meta login and official models in the terminal and T3 Code. It does not use your Kilo gateway or shared model selection.", "Muse Code usa su propio inicio de sesión de Meta y sus modelos oficiales en la terminal y T3 Code. No usa tu gateway de Kilo ni la selección compartida de modelos."))))
+		}
+		if client == "synara" {
+			rows = append(rows, uxhCell(u.note(u.tr("On Linux, select a persistent extracted Synara executable. A raw AppImage can be detected but is not ready to open: install a verified Kilo copy or select the extracted executable. Detection does not verify its source, version or channel. Ubuntu sandbox restrictions still apply.", "En Linux, selecciona un ejecutable de Synara extraído en una ubicación permanente. Un AppImage sin extraer puede detectarse, pero no está listo para abrir: instala una copia Kilo verificada o selecciona el ejecutable extraído. La detección no verifica su origen, versión ni canal. Se mantienen las restricciones del sandbox de Ubuntu."))))
 		}
 	}
 	status := ""
@@ -252,5 +282,5 @@ func (u *nativeUI) cliPreferencesPanel() layout.Widget {
 		}
 	}
 	rows = append(rows, uxhCell(u.disabled(!u.cliPreferencesBusy(), u.button("cli-preferences-reload", u.tr("Reload paths", "Cargar rutas"), func() { u.refreshCLIPreferencesAfter(nil) }))))
-	return u.uxhBlock(u.tr("CLI installations", "Instalaciones de las CLI"), "", rows...)
+	return u.uxhBlock(u.tr("Application and CLI installations", "Instalaciones de aplicaciones y CLI"), "", rows...)
 }

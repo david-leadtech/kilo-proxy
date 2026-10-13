@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"image"
 	"io"
 	"net/http"
@@ -232,5 +233,44 @@ func TestNativeCLICapabilityProbeCannotRestoreOldExecutableCapabilities(t *testi
 	nativeTestWait(t, u, func() bool { return probes.Load() == 2 && u.clientState().ClaudeChecked })
 	if u.clientState().Claude.Version != "2.1.288" {
 		t.Fatal("in-flight old probe overwrote new executable capabilities")
+	}
+}
+
+func TestNativeSynaraPathSettingsSaveAndRetainLinuxGuidance(t *testing.T) {
+	for _, lang := range []string{"en", "es"} {
+		t.Run(lang, func(t *testing.T) {
+			u, recorder := nativeLaunchTestUI(t, "synara", false, false)
+			u.owner.launcher.platform = "linux"
+			u.setLanguage(lang)
+			nativeTestWait(t, u, func() bool { return u.languageTarget == "" && !u.busy["POST/api/language"] && !u.busy["GET/api/state"] })
+			u.refreshCLIPreferencesAfter(nil)
+			nativeTestWait(t, u, func() bool { return u.cliPreferencesReady() })
+			raw := nativeSynaraAppImageFixture(t)
+			u.setValue(nativeCLIPathField("synara"), raw)
+			if !u.cliPathDirty() {
+				t.Fatal("Synara draft was not guarded")
+			}
+			u.saveCLIExecutable("synara", false)
+			nativeTestWait(t, u, func() bool { return u.cliPreferencesReady() && !u.busy["GET"+nativeLaunchEndpoint] })
+			if u.clientState().CLIPreferences.Preferences.SynaraExecutable != raw || u.clientState().LaunchInfo.Clients["synara"].Available {
+				t.Fatal("saved AppImage path was lost or enabled")
+			}
+			u.page, u.settingsTab = "settings", "cli-tools"
+			for _, width := range []int{1180, 780} {
+				h := &nativePointerHarness{t: t, u: u, size: image.Pt(width, 1600), now: time.Now()}
+				h.frame()
+				h.reveal(u.tr("Automatic detection", "Detección automática")+" · Synara", semantic.Button)
+				h.frame()
+				if !nativeSynaraHasText(h, u.tr("Detection does not verify its source, version or channel", "La detección no verifica su origen, versión ni canal")) {
+					t.Fatal("raw AppImage source was presented as verified")
+				}
+				nativeGridCapture(t, h, fmt.Sprintf("synara-installation-paths-%dx1600-%s", width, lang))
+			}
+			u.saveCLIExecutable("synara", true)
+			nativeTestWait(t, u, func() bool { return u.cliPreferencesReady() && !u.busy["GET"+nativeLaunchEndpoint] })
+			if u.clientState().CLIPreferences.Preferences.SynaraExecutable != "" || recorder.count() != 0 || recorder.prepares.Load() != 0 {
+				t.Fatal("automatic selection opened a tool or kept custom path")
+			}
+		})
 	}
 }

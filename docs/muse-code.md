@@ -42,7 +42,7 @@ Use `kilo-muse --help` and command-specific `--help` for the options supported b
 
 ## T3 Code
 
-In **Settings → T3 Code** in Kilo Proxy, enable the optional **Muse Code** provider, close **T3 Code · Kilo**, and prepare or open it again. The installed T3 package must include a compatible native Muse driver and SDK. A missing or incompatible driver produces a preparation error.
+In **Harnesses → T3 Code → gear → Accounts and models** in Kilo Proxy, enable the optional **Muse Code** provider, close **T3 Code · Kilo**, and prepare or open it again. The installed T3 package must include a compatible native Muse driver and SDK. A missing or incompatible driver produces a preparation error.
 
 To use only native accounts, disable both **Kilo Proxy · Codex** and **Kilo Proxy · Claude**. This mode does not require a Kilo gateway connection or shared models and does not create Kilo CLI profiles or proxy secrets. Enabling either Kilo connection restores its connection and shared-model requirements.
 
