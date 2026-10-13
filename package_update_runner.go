@@ -164,6 +164,7 @@ func (m *packageUpdateManager) startWithContext(ctx context.Context, target stri
 	m.mu.Unlock()
 	rt := m.rt
 	rt.context = ctx
+	rt.manager = old.Manager
 	current, err := detectPackageInstallation(rt)
 	if ctx.Err() != nil {
 		m.fail("update_start_failed")
@@ -439,7 +440,7 @@ func runPackageUpdateMode(args []string) int {
 		fmt.Fprintln(os.Stderr, "Update stopped:", err, "\nKilo Proxy was not restarted. Your profile and chats are preserved.")
 		return 1
 	}
-	rt := packageUpdateRuntime{platform: plan.Platform, home: plan.Home, binary: plan.Installation.Binary, current: plan.Installation.Version, uid: os.Geteuid(), capture: packageUpdateCapture(plan.Home)}
+	rt := packageUpdateRuntime{platform: plan.Platform, home: plan.Home, binary: plan.Installation.Binary, current: plan.Installation.Version, manager: plan.Installation.Manager, uid: os.Geteuid(), capture: packageUpdateCapture(plan.Home)}
 	current, err := detectPackageInstallation(rt)
 	if err != nil || current != plan.Installation {
 		return fail(errors.New("The installed program or package ownership changed. Nothing was installed."))

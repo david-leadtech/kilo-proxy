@@ -29,6 +29,7 @@ type packageInstallation struct {
 
 type packageUpdateRuntime struct {
 	platform, home, binary, current string
+	manager                         string // Revalidate only the already approved manager when set.
 	uid                             int
 	capture                         func(context.Context, string, ...string) ([]byte, error)
 	fingerprint                     func(string) (string, error) // Synthetic package-database tests only.
@@ -175,7 +176,10 @@ func packageUpdateProbe(rt packageUpdateRuntime, name string, args ...string) (s
 	return strings.TrimSpace(string(output)), nil
 }
 
-func packageUpdateBrewCandidates(home string) []string {
+func packageUpdateBrewCandidates(home, selected string) []string {
+	if selected != "" {
+		return []string{selected}
+	}
 	paths := []string{"/opt/homebrew/bin/brew", "/usr/local/bin/brew", "/home/linuxbrew/.linuxbrew/bin/brew", filepath.Join(home, ".linuxbrew/bin/brew")}
 	if path, err := exec.LookPath("brew"); err == nil && filepath.IsAbs(path) {
 		paths = append(paths, path)
@@ -224,7 +228,7 @@ func detectPackageInstallation(rt packageUpdateRuntime) (packageInstallation, er
 		digest, err := rt.digest(rt.binary)
 		return packageInstallation{Method: "apt", Manager: "/usr/bin/apt-get", Package: edition, Binary: rt.binary, Relaunch: rt.binary, Version: rt.current, Digest: digest}, err
 	}
-	for _, brew := range packageUpdateBrewCandidates(rt.home) {
+	for _, brew := range packageUpdateBrewCandidates(rt.home, rt.manager) {
 		if _, err := os.Stat(brew); err != nil {
 			continue
 		}
