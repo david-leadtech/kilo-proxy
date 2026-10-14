@@ -151,6 +151,18 @@ func (f *nativeSynaraPreferencesFixture) lastPost() nativeSynaraPreferences {
 	return f.posts[len(f.posts)-1]
 }
 
+func (f *nativeSynaraPreferencesFixture) waitForSaveResponses(t *testing.T, posts int) {
+	t.Helper()
+	// A confirmed save also refreshes the profile and launcher status. Finish
+	// both reads before the next frame captures coordinates that they can move.
+	u := f.u
+	nativeTestWait(t, u, func() bool {
+		return f.postCount() == posts && !u.synaraPreferencesBusy() && u.agentsState().Synara.PreferencesState.Pending == nil &&
+			!u.busy["GET/api/clients/synara"] && !u.busy["GET"+nativeLaunchEndpoint] &&
+			u.clientState().LaunchChecked && !u.clientState().LaunchRefreshPending
+	})
+}
+
 func TestNativeSynaraPreferencesSavePendingFailureAndRetry(t *testing.T) {
 	f := newNativeSynaraPreferencesFixture(t, "en")
 	u, h := f.u, f.h
@@ -246,11 +258,11 @@ func TestNativeSynaraPreferencesCapabilitiesAndOpenCodeVersion(t *testing.T) {
 			nativeGridCapture(t, h, "native-synara-preferences-accounts-"+lang)
 			h.reveal("OpenCode", semantic.Switch)
 			h.click("OpenCode", semantic.Switch)
-			nativeTestWait(t, u, func() bool { return f.postCount() == 1 && !u.synaraPreferencesBusy() && state.Pending == nil })
+			f.waitForSaveResponses(t, 1)
 			h.frame()
 			h.reveal("OpenCode 2", semantic.RadioButton)
 			h.click("OpenCode 2", semantic.RadioButton)
-			nativeTestWait(t, u, func() bool { return f.postCount() == 2 && !u.synaraPreferencesBusy() && state.Pending == nil })
+			f.waitForSaveResponses(t, 2)
 			if !state.Preferences.OpenCode2 || !reflect.DeepEqual(state.Preferences.Providers, []string{"opencode"}) {
 				t.Fatal("OpenCode 2 was not selected exclusively")
 			}
@@ -258,7 +270,7 @@ func TestNativeSynaraPreferencesCapabilitiesAndOpenCodeVersion(t *testing.T) {
 			nativeGridCapture(t, h, "native-synara-preferences-opencode-"+lang)
 			h.reveal("OpenCode", semantic.Switch)
 			h.click("OpenCode", semantic.Switch)
-			nativeTestWait(t, u, func() bool { return f.postCount() == 3 && !u.synaraPreferencesBusy() && state.Pending == nil })
+			f.waitForSaveResponses(t, 3)
 			if state.Preferences.OpenCode2 || len(state.Preferences.Providers) != 0 {
 				t.Fatal("disabling OpenCode retained second runtime")
 			}
@@ -464,21 +476,19 @@ func TestNativeSynaraOpenCodeConnectionSavesSummaryAndResponsiveLayout(t *testin
 			state := &u.agentsState().Synara.PreferencesState
 			h.reveal("OpenCode", semantic.Switch)
 			h.click("OpenCode", semantic.Switch)
-			nativeTestWait(t, u, func() bool { return f.postCount() == 1 && !u.synaraPreferencesBusy() && state.Pending == nil })
+			f.waitForSaveResponses(t, 1)
 			h.frame()
 			kilo := u.tr("Kilo Proxy · shared models", "Kilo Proxy · modelos compartidos")
 			h.reveal(kilo, semantic.RadioButton)
 			h.click(kilo, semantic.RadioButton)
-			nativeTestWait(t, u, func() bool { return f.postCount() == 2 && !u.synaraPreferencesBusy() && state.Pending == nil })
+			f.waitForSaveResponses(t, 2)
 			if state.Preferences.OpenCodeConnection != "kilo" || f.lastPost().OpenCodeConnection != "kilo" || state.Preferences.OpenCode2 {
 				t.Fatal("connection did not save independently of major")
 			}
 			h.frame()
 			h.reveal("OpenCode 2", semantic.RadioButton)
 			h.click("OpenCode 2", semantic.RadioButton)
-			nativeTestWait(t, u, func() bool {
-				return f.postCount() == 3 && !u.synaraPreferencesBusy() && state.Pending == nil && !u.busy["GET/api/clients/synara"]
-			})
+			f.waitForSaveResponses(t, 3)
 			if state.Preferences.OpenCodeConnection != "kilo" || !state.Preferences.OpenCode2 {
 				t.Fatal("major change lost the connection")
 			}
