@@ -103,7 +103,8 @@ func (q usageQuery) input(start, end time.Time) map[string]any {
 func usageQueryCSV(result *usageQueryResult) ([]byte, error) {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
-	w.UseCRLF = true
+	// Use LF record separators: UseCRLF also rewrites newlines inside quoted
+	// fields and discards bare carriage returns from the original labels.
 	if err := w.Write(result.Columns); err != nil {
 		return nil, err
 	}

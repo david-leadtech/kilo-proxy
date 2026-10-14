@@ -69,6 +69,25 @@ func TestUsageQueryHistoricalCrossesFiltersAndRawCSV(t *testing.T) {
 	}
 }
 
+func TestUsageQueryCSVPreservesRawDimensionLineEndings(t *testing.T) {
+	result := &usageQueryResult{
+		Columns: []string{"datetime", "project", "costMicrodollars", "inputTokens"},
+		Rows: [][]string{
+			{"2026-09-01", "bare\rcarriage", "123.000125", "9007199254740993"},
+			{"2026-09-01", "line\nfeed", "0", "2"},
+			{"2026-09-01", "both\r\nends,\"quoted\"", "1e-6", "3"},
+		},
+	}
+	want := "datetime,project,costMicrodollars,inputTokens\n" +
+		"2026-09-01,\"bare\rcarriage\",123.000125,9007199254740993\n" +
+		"2026-09-01,\"line\nfeed\",0,2\n" +
+		"2026-09-01,\"both\r\nends,\"\"quoted\"\"\",1e-6,3\n"
+	got, err := usageQueryCSV(result)
+	if err != nil || string(got) != want {
+		t.Fatalf("CSV changed raw label bytes or metrics: got %q, want %q, err %v", got, want, err)
+	}
+}
+
 func TestUsageQueryDoesNotInventMissingDaysOrZeroCosts(t *testing.T) {
 	q := usageQuery{StartDate: "2026-09-01", EndDate: "2026-09-02", GroupBy: []string{}, CostSource: "cost"}
 	transport := usageMemoryTransport(func(r *http.Request) (*http.Response, error) {
