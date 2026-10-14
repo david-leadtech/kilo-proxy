@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	synaraPrivateRuntimeRevision = 2
+	synaraPrivateRuntimeRevision = 3
 	synaraRuntimeSourceLimit     = 16 << 20
+	synaraRuntimeManifestLimit   = 2 << 20
 	synaraRuntimeManifestName    = "runtime.json"
 	synaraRuntimeServerName      = "server.mjs"
 	synaraRuntimeHookName        = "backend-hook.mjs"
@@ -39,19 +40,24 @@ type synaraPrivateRuntime struct {
 	SourceServerSHA256  string            `json:"sourceServerSHA256"`
 	ArchiveHeaderSHA256 string            `json:"archiveHeaderSHA256"`
 	Files               map[string]string `json:"files"`
+	Web                 *synaraPrivateWeb `json:"web,omitempty"`
 }
 
 func synaraRuntimeFileNames(exeName string) []string {
 	return []string{synaraRuntimeHookName, synaraRuntimeServerName, filepath.Join(synaraRuntimeBundleName, "Contents", "Info.plist"), filepath.Join(synaraRuntimeBundleName, "Contents", "Resources", "app.asar"), filepath.Join(synaraRuntimeBundleName, "Contents", "MacOS", exeName), filepath.Join(synaraRuntimeBundleName, "Contents", "_CodeSignature", "CodeResources")}
 }
 
-func synaraRuntimeIdentity(binary, header, privateRoot, mainEntry, mainDigest, sourceServerDigest, serverDigest string) []byte {
+func synaraRuntimeIdentity(binary, header, privateRoot, mainEntry, mainDigest, sourceServerDigest, serverDigest string, webs ...synaraPrivateWeb) []byte {
 	archive := filepath.Join(binary, "Contents", "Resources", "app.asar")
 	// Use fixed path placeholders to bind the generator without a circular
 	// dependency on the cache directory that the generated code will contain.
-	bootstrap := synaraRuntimeBootstrap(archive, mainEntry, "__KILO_SYNARA_RUNTIME_HOOK__", mainDigest)
+	webRoot := ""
+	if len(webs) > 0 {
+		webRoot = webs[0].Root
+	}
+	bootstrap := synaraRuntimeBootstrap(archive, mainEntry, "__KILO_SYNARA_RUNTIME_HOOK__", mainDigest, webRoot)
 	hook := synaraRuntimeBackendHook(archive, "__KILO_SYNARA_RUNTIME_SERVER__", sourceServerDigest, serverDigest)
-	identity, _ := json.Marshal([]any{synaraPrivateRuntimeRevision, binary, header, privateRoot, mainEntry, mainDigest, sourceServerDigest, serverDigest, openDesignHash(bootstrap), openDesignHash(hook)})
+	identity, _ := json.Marshal([]any{synaraPrivateRuntimeRevision, binary, header, privateRoot, mainEntry, mainDigest, sourceServerDigest, serverDigest, openDesignHash(bootstrap), openDesignHash(hook), synaraRuntimeWebIdentity(webs)})
 	return identity
 }
 
@@ -135,14 +141,19 @@ func synaraRuntimeASAR(files map[string][]byte) ([]byte, string, error) {
 	return data, openDesignHash(header), nil
 }
 
-func synaraRuntimeBootstrap(sourceArchive, mainEntry, hook, mainDigest string) []byte {
+func synaraRuntimeBootstrap(sourceArchive, mainEntry, hook, mainDigest string, webRoots ...string) []byte {
 	encode := func(value string) string { b, _ := json.Marshal(value); return string(b) }
 	main := filepath.Join(sourceArchive, filepath.FromSlash(mainEntry))
 	replacement := "const child = node_child_process.spawn(process.execPath, [...backendNodeArgs(), \"--import\", " + encode(hook) + ", backendEntry], {"
+	webRoot := ""
+	if len(webRoots) > 0 {
+		webRoot = webRoots[0]
+	}
 	return []byte("'use strict';\nconst fs=require('node:fs'),crypto=require('node:crypto'),Module=require('node:module'),path=require('node:path'),{app}=require('electron');\n" +
 		"const originalMain=" + encode(main) + ", originalRoot=" + encode(sourceArchive) + ";\n" +
 		"let source=fs.readFileSync(originalMain,'utf8');\n" +
 		"if(Buffer.byteLength(source)>16777216||crypto.createHash('sha256').update(source).digest('hex')!==" + encode(mainDigest) + ")throw Error('Synara desktop source changed; prepare again.');\n" +
+		synaraRuntimeStaticRootOverride(webRoot) +
 		"const anchor=" + encode(synaraDesktopSpawnAnchor) + ";if(source.split(anchor).length!==2)throw Error('Synara backend startup changed; prepare again.');\n" +
 		"source=source.replace(anchor," + encode(replacement) + ");app.getAppPath=()=>originalRoot;\n" +
 		"const originalModule=new Module(originalMain,module);originalModule.filename=originalMain;originalModule.paths=Module._nodeModulePaths(path.dirname(originalMain));originalModule._compile(source,originalMain);\n")
@@ -293,6 +304,12 @@ func prepareSynaraPrivateRuntime(options synaraProfileOptions, binary, platform 
 	// Preserve the existing integration on other platforms until their private
 	// native bootstrap is validated; never disable Electron integrity fuses.
 	if platform != "macos" && platform != "darwin" {
+		if synaraRuntimePickerOptions(options).Policy.InstanceID != "" {
+			return synaraPrivateRuntime{}, errors.New("This Synara Claude model picker is currently verified only in the private macOS runtime. Choose its native Claude account on this platform.")
+		}
+		if len(synaraRuntimePickerOptions(options).Policy.OpenCodeModels) > 0 {
+			return synaraPrivateRuntime{}, errors.New("This Synara installation cannot restrict the Kilo OpenCode picker to its prepared models. Choose its native connection or a compatible macOS build.")
+		}
 		return synaraPrivateRuntime{}, nil
 	}
 	var empty synaraPrivateRuntime
@@ -320,15 +337,23 @@ func prepareSynaraPrivateRuntime(options synaraProfileOptions, binary, platform 
 	if err != nil {
 		return empty, err
 	}
+	pickerOptions := synaraRuntimePickerOptions(options)
+	if synaraPrivateWebPolicyEnabled(pickerOptions.Policy) && !synaraLiveSourceAnchor(string(main), synaraDesktopStaticRootAnchor) {
+		return empty, errors.New("This Synara desktop does not expose the private client startup contract; no private changes saved.")
+	}
+	web, err := prepareSynaraPrivateWeb(pickerOptions, binary, platform)
+	if err != nil {
+		return empty, err
+	}
 	mainDigest, serverDigest := openDesignHash(main), openDesignHash(server)
-	identity := synaraRuntimeIdentity(binary, header, options.RootDir, mainEntry, mainDigest, serverDigest, openDesignHash(patched))
+	identity := synaraRuntimeIdentity(binary, header, options.RootDir, mainEntry, mainDigest, serverDigest, openDesignHash(patched), web)
 	cache := filepath.Join(options.RootDir, "runtime")
 	if err = safeEditorDir(options.RootDir, cache); err != nil {
 		return empty, err
 	}
 	root := filepath.Join(cache, openDesignHash(identity))
 	if _, err = os.Lstat(root); err == nil {
-		data, readErr := readOpenDesignShimFile(filepath.Join(root, synaraRuntimeManifestName), 64<<10)
+		data, readErr := readOpenDesignShimFile(filepath.Join(root, synaraRuntimeManifestName), synaraRuntimeManifestLimit)
 		var saved synaraPrivateRuntime
 		if readErr == nil && json.Unmarshal(data, &saved) == nil && saved.Root == root && synaraPrivateRuntimeReady(options, binary, platform, saved) {
 			return saved, nil
@@ -372,7 +397,7 @@ func prepareSynaraPrivateRuntime(options synaraProfileOptions, binary, platform 
 			return empty, err
 		}
 	}
-	bootstrap := synaraRuntimeBootstrap(archive, mainEntry, filepath.Join(root, synaraRuntimeHookName), mainDigest)
+	bootstrap := synaraRuntimeBootstrap(archive, mainEntry, filepath.Join(root, synaraRuntimeHookName), mainDigest, web.Root)
 	bootstrapASAR, bootstrapHeader, err := synaraRuntimeASAR(map[string][]byte{"package.json": packageData, "bootstrap.cjs": bootstrap})
 	if err != nil {
 		return empty, err
@@ -404,6 +429,9 @@ func prepareSynaraPrivateRuntime(options synaraProfileOptions, binary, platform 
 		return empty, errors.New("Could not sign and verify the owned private Synara runtime.")
 	}
 	result := synaraPrivateRuntime{Revision: synaraPrivateRuntimeRevision, Root: root, Executable: filepath.Join(root, synaraRuntimeBundleName, "Contents", "MacOS", exeName), SourceApp: binary, SourceArchive: archive, SourceMainEntry: mainEntry, SourceMainSHA256: mainDigest, SourceServerSHA256: serverDigest, ArchiveHeaderSHA256: header, Files: map[string]string{}}
+	if web.Root != "" {
+		result.Web = &web
+	}
 	for _, relative := range synaraRuntimeFileNames(exeName) {
 		digest, err := openDesignFileHash(filepath.Join(stage, relative), synaraRuntimeSourceLimit)
 		if err != nil {
@@ -412,7 +440,10 @@ func prepareSynaraPrivateRuntime(options synaraProfileOptions, binary, platform 
 		result.Files[relative] = digest
 	}
 	manifest, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
+	if err != nil || len(manifest)+1 > synaraRuntimeManifestLimit {
+		if err == nil {
+			err = errors.New("The private Synara runtime manifest exceeds its size limit.")
+		}
 		return empty, err
 	}
 	if err = os.WriteFile(filepath.Join(stage, synaraRuntimeManifestName), append(manifest, '\n'), 0600); err != nil {
@@ -426,7 +457,10 @@ func prepareSynaraPrivateRuntime(options synaraProfileOptions, binary, platform 
 
 func synaraPrivateRuntimeReady(options synaraProfileOptions, binary, platform string, saved synaraPrivateRuntime) bool {
 	if platform != "macos" && platform != "darwin" {
-		return saved.Revision == 0 && saved.Root == "" && saved.Executable == "" && saved.SourceApp == "" && saved.SourceArchive == "" && saved.SourceMainEntry == "" && saved.SourceMainSHA256 == "" && saved.SourceServerSHA256 == "" && saved.ArchiveHeaderSHA256 == "" && len(saved.Files) == 0
+		if synaraPrivateWebPolicyEnabled(synaraRuntimePickerOptions(options).Policy) {
+			return false
+		}
+		return saved.Revision == 0 && saved.Root == "" && saved.Executable == "" && saved.SourceApp == "" && saved.SourceArchive == "" && saved.SourceMainEntry == "" && saved.SourceMainSHA256 == "" && saved.SourceServerSHA256 == "" && saved.ArchiveHeaderSHA256 == "" && len(saved.Files) == 0 && saved.Web == nil
 	}
 	if saved.Revision != synaraPrivateRuntimeRevision || saved.SourceApp != binary || saved.SourceArchive != filepath.Join(binary, "Contents", "Resources", "app.asar") || !synaraSourceDigestValid(saved.SourceMainSHA256) || !synaraSourceDigestValid(saved.SourceServerSHA256) || !safeLaunchDir(saved.Root, options.RootDir) || !withinT3CodePath(filepath.Join(options.RootDir, "runtime"), saved.Root) || len(saved.Files) != 6 {
 		return false
@@ -437,7 +471,15 @@ func synaraPrivateRuntimeReady(options synaraProfileOptions, binary, platform st
 			return false
 		}
 	}
-	expectedRoot := filepath.Join(options.RootDir, "runtime", openDesignHash(synaraRuntimeIdentity(binary, saved.ArchiveHeaderSHA256, options.RootDir, saved.SourceMainEntry, saved.SourceMainSHA256, saved.SourceServerSHA256, saved.Files[synaraRuntimeServerName])))
+	web := synaraPrivateWeb{}
+	if saved.Web != nil {
+		web = *saved.Web
+	}
+	pickerOptions := synaraRuntimePickerOptions(options)
+	if !synaraPrivateWebPolicyEnabled(pickerOptions.Policy) && saved.Web != nil || synaraPrivateWebPolicyEnabled(pickerOptions.Policy) && (saved.Web == nil || !synaraPrivateWebReady(pickerOptions, binary, platform, web)) {
+		return false
+	}
+	expectedRoot := filepath.Join(options.RootDir, "runtime", openDesignHash(synaraRuntimeIdentity(binary, saved.ArchiveHeaderSHA256, options.RootDir, saved.SourceMainEntry, saved.SourceMainSHA256, saved.SourceServerSHA256, saved.Files[synaraRuntimeServerName], web)))
 	if saved.Root != expectedRoot || saved.Executable != filepath.Join(saved.Root, synaraRuntimeBundleName, "Contents", "MacOS", exeName) {
 		return false
 	}
@@ -464,7 +506,7 @@ func synaraPrivateRuntimeReady(options synaraProfileOptions, binary, platform st
 			return false
 		}
 	}
-	data, err := readOpenDesignShimFile(filepath.Join(saved.Root, synaraRuntimeManifestName), 64<<10)
+	data, err := readOpenDesignShimFile(filepath.Join(saved.Root, synaraRuntimeManifestName), synaraRuntimeManifestLimit)
 	if err != nil {
 		return false
 	}

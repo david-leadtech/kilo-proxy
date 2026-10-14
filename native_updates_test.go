@@ -109,6 +109,14 @@ func newNativeUpdateFixture(t *testing.T, language string, size image.Point) *na
 				return
 			}
 			jsonResponse(w, 200, map[string]any{"preferences": normalizeT3CodePreferences(t3CodePreferences{}), "supportedProviders": []t3CodeProviderSupport{}, "openCode2Supported": false})
+		case nativeSynaraPreferencesEndpoint:
+			f.mu.Unlock()
+			if r.Method != http.MethodGet {
+				t.Errorf("update fixture attempted to change Synara preferences: %s", r.Method)
+				jsonError(w, 405, "read-only fixture")
+				return
+			}
+			jsonResponse(w, 200, map[string]any{"preferences": defaultSynaraPreferences(), "supportedProviders": []nativeSynaraProvider{}, "openCode2Supported": false})
 		case nativeOpenCodePreferencesEndpoint:
 			f.mu.Unlock()
 			if r.Method != http.MethodGet {

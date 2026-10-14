@@ -29,6 +29,16 @@ var synaraEnvironmentName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
 
 type synaraProfileOptions struct {
 	RootDir, DataDir, UserDataDir, NormalHome, CodexBinary, ClaudeBinary string
+	Platform                                                             string
+	Preferences                                                          *synaraPreferences
+	Policy                                                               *t3CodeModelPolicy
+	SupportedProviders                                                   []t3CodeProviderSupport
+	AdditionalSourceDigest                                               string
+	AdditionalProviders                                                  map[string]any
+	OpenCode2Supported                                                   bool
+	OpenCodeKiloSupported                                                bool
+	NormalOpenCodePaths                                                  []string
+	NativeDefaults                                                       map[string]string
 	NormalCodexBinary                                                    string
 	NormalEnvironment                                                    map[string]string
 	Library                                                              modelLibrary
@@ -79,16 +89,22 @@ func synaraProfilePaths(options synaraProfileOptions) (string, string, error) {
 // are not read or copied here. Synara itself manages their continuation overlays.
 func planSynaraProfiles(options synaraProfileOptions) (synaraProfiles, error) {
 	result := synaraProfiles{}
-	if err := validateSynaraLibrary(options.Library); err != nil {
+	if options.Preferences == nil {
+		if err := validateSynaraLibrary(options.Library); err != nil {
+			return result, err
+		}
+	} else if err := validateModelLibrary(options.Library); err != nil {
 		return result, err
 	}
 	dataDir, userDataDir, err := synaraProfilePaths(options)
 	if err != nil {
 		return result, err
 	}
-	baseOptions := t3CodeProfileOptions{RootDir: options.RootDir, NormalHome: options.NormalHome, CodexBinary: options.CodexBinary, ClaudeBinary: options.ClaudeBinary, NormalEnvironment: options.NormalEnvironment, Library: options.Library, Catalog: options.Catalog, ClaudeCaps: options.ClaudeCaps, ClaudeModelDefaults: true, Port: options.Port, LocalKey: options.LocalKey, Images: options.Images}
-	if _, err := synaraNormalSecureStorage(baseOptions); err != nil {
-		return result, err
+	baseOptions := synaraBaseOptions(options)
+	if options.Preferences == nil || options.Preferences.KiloCodex || options.Preferences.KiloClaude || options.Preferences.Claude {
+		if _, err := synaraNormalSecureStorage(baseOptions); err != nil {
+			return result, err
+		}
 	}
 	base, err := planT3CodeProfiles(baseOptions)
 	if err != nil {
@@ -116,6 +132,15 @@ func planSynaraProfiles(options synaraProfileOptions) (synaraProfiles, error) {
 	if err != nil {
 		return result, err
 	}
+	additional, additionalFiles, err := synaraPlanAdditionalProviders(options)
+	if err != nil {
+		return result, err
+	}
+	for id, provider := range additional {
+		result.Providers[id] = provider
+	}
+	result.Files = append(result.Files, additionalFiles...)
+	result.Providers = normalizeT3CodeProviders(result.Providers)
 	settingsFiles, err := planSynaraSettings(options, dataDir, result.Providers)
 	if err != nil {
 		return result, err
@@ -164,20 +189,16 @@ func synaraProviderInstances(options synaraProfileOptions, profiles synaraProfil
 	if err != nil {
 		return nil, err
 	}
-	normalSecureStorage, err := synaraNormalSecureStorage(baseOptions)
-	if err != nil {
-		return nil, err
+	normalSecureStorage := ""
+	if options.Preferences == nil || options.Preferences.KiloCodex || options.Preferences.KiloClaude || options.Preferences.Claude {
+		normalSecureStorage, err = synaraNormalSecureStorage(baseOptions)
+		if err != nil {
+			return nil, err
+		}
 	}
 	// Reuse the vetted normal-home/XDG allowlist; the Synara-specific config
 	// below replaces T3 descriptors with the string list this beta accepts.
 	base := normalizeT3CodeProviders(t3CodeProviderInstances(baseOptions, t3CodeProfiles{CodexHome: profiles.CodexHome, ClaudeHome: profiles.ClaudeHome}, terminalLibraryChoices(options.Library, options.Catalog), claudeSelection{}))
-	models := make([]string, 0, len(options.Library.Models))
-	models = append(models, options.Library.DefaultModel)
-	for _, model := range options.Library.Models {
-		if model.ID != options.Library.DefaultModel {
-			models = append(models, model.ID)
-		}
-	}
 	for _, id := range []string{synaraCodexNormalID, synaraCodexProxyID, synaraClaudeNormalID, synaraClaudeProxyID} {
 		instance := base[id].(map[string]any)
 		config := instance["config"].(map[string]any)
@@ -186,6 +207,23 @@ func synaraProviderInstances(options synaraProfileOptions, profiles synaraProfil
 		delete(config, "autoCompactWindow")
 		config["customModels"] = []string{}
 		if id == synaraCodexProxyID || id == synaraClaudeProxyID {
+			library := options.Library
+			if options.Policy != nil {
+				if id == synaraCodexProxyID {
+					library = options.Policy.CodexLibrary
+				} else {
+					library = t3CodeClaudePickerLibrary(options.Policy.ClaudeLibrary, options.Policy.ClaudeRoutes)
+				}
+			}
+			models := []string{}
+			if library.DefaultModel != "" {
+				models = append(models, library.DefaultModel)
+			}
+			for _, model := range library.Models {
+				if model.ID != library.DefaultModel {
+					models = append(models, model.ID)
+				}
+			}
 			config["customModels"] = models
 		}
 		if id == synaraCodexNormalID {
@@ -464,7 +502,7 @@ func validateSynaraSettings(settings map[string]json.RawMessage) error {
 			return invalid()
 		}
 		var provider, model string
-		if json.Unmarshal(selection["provider"], &provider) != nil || !helperContains(synaraDrivers(), provider) || json.Unmarshal(selection["model"], &model) != nil || len(model) > 256 {
+		if json.Unmarshal(selection["provider"], &provider) != nil || !helperContains(synaraDrivers(), provider) || json.Unmarshal(selection["model"], &model) != nil || strings.TrimSpace(model) == "" || len(model) > 256 {
 			return invalid()
 		}
 		if raw, exists := selection["instanceId"]; exists {
@@ -544,7 +582,7 @@ func planSynaraSettings(options synaraProfileOptions, dataDir string, providers 
 			}
 			name, _ := variable["name"].(string)
 			value, _ := variable["value"].(string)
-			if (id != synaraCodexProxyID || name != "KILO_LOCAL_API_KEY") && (id != synaraClaudeProxyID || name != "ANTHROPIC_AUTH_TOKEN") {
+			if (id != synaraCodexProxyID || name != "KILO_LOCAL_API_KEY") && (id != synaraClaudeProxyID || name != "ANTHROPIC_AUTH_TOKEN") && (id != synaraOpenCodeProxyID || name != synaraOpenCodeKey) {
 				return nil, errors.New("Unexpected private Synara secret.")
 			}
 			if value == "" || strings.ContainsAny(value, "\x00\r\n") {
@@ -563,7 +601,7 @@ func planSynaraSettings(options synaraProfileOptions, dataDir string, providers 
 		}
 		// Repreparation updates owned connection fields, while the user's
 		// account availability choice remains independent of those fields.
-		if previous, exists := all[id]; exists {
+		if previous, exists := all[id]; exists && options.Preferences == nil {
 			if object, err := decodeClaudeDesktopObject(previous); err == nil && synaraBoolean(object["enabled"]) {
 				var enabled bool
 				_ = json.Unmarshal(object["enabled"], &enabled)
@@ -603,7 +641,11 @@ func planSynaraSettings(options synaraProfileOptions, dataDir string, providers 
 		if raw, exists := legacy[driver]; exists {
 			provider, _ = decodeClaudeDesktopObject(raw)
 		}
-		claudeDesktopSet(provider, "enabled", driver == "codex" || driver == "claudeAgent")
+		enabled := driver == "codex" || driver == "claudeAgent"
+		if options.Preferences != nil {
+			enabled = synaraDriverEnabled(providers, driver)
+		}
+		claudeDesktopSet(provider, "enabled", enabled)
 		if driver == "codex" {
 			// Native legacy Codex accounts would otherwise become additional
 			// active accounts when its driver is enabled for our custom instances.
@@ -614,7 +656,11 @@ func planSynaraSettings(options synaraProfileOptions, dataDir string, providers 
 	claudeDesktopSet(settings, "providers", legacy)
 	// Text generation has its own server setting; keep title/git requests on a
 	// prepared Kilo agent rather than an unavailable implicit normal instance.
-	claudeDesktopSet(settings, "textGenerationModelSelection", map[string]any{"provider": "codex", "instanceId": synaraCodexProxyID, "model": options.Library.DefaultModel})
+	selection, err := synaraSettingsSelectionChecked(options, providers, settings)
+	if err != nil {
+		return nil, err
+	}
+	claudeDesktopSet(settings, "textGenerationModelSelection", selection)
 	claudeDesktopSet(envelope, "settings", settings)
 	claudeDesktopSet(envelope, "migrationVersion", 3)
 	if _, exists := envelope["revision"]; !exists {
@@ -648,19 +694,75 @@ func planSynaraComposerSeed(options synaraProfileOptions, userDataDir string) ([
 	if !errors.Is(err, os.ErrNotExist) {
 		return nil, errors.New("Cannot safely read the private Synara composer marker.")
 	}
-	sticky := map[string]any{
-		synaraCodexProxyID:  map[string]any{"provider": "codex", "instanceId": synaraCodexProxyID, "model": options.Library.DefaultModel},
-		synaraClaudeProxyID: map[string]any{"provider": "claudeAgent", "instanceId": synaraClaudeProxyID, "model": options.Library.DefaultModel},
-	}
-	for _, choice := range terminalLibraryChoices(options.Library, options.Catalog) {
-		if choice.Model.ID == options.Library.DefaultModel {
-			_, effort := nativeReasoningFor(choice)
-			if effort != "" {
-				sticky[synaraCodexProxyID].(map[string]any)["options"] = map[string]any{"reasoningEffort": effort}
+	sticky := map[string]any{}
+	active := synaraCodexProxyID
+	if options.Preferences == nil {
+		sticky = map[string]any{
+			synaraCodexProxyID:  map[string]any{"provider": "codex", "instanceId": synaraCodexProxyID, "model": options.Library.DefaultModel},
+			synaraClaudeProxyID: map[string]any{"provider": "claudeAgent", "instanceId": synaraClaudeProxyID, "model": options.Library.DefaultModel},
+		}
+		for _, choice := range terminalLibraryChoices(options.Library, options.Catalog) {
+			if choice.Model.ID == options.Library.DefaultModel {
+				_, effort := nativeReasoningFor(choice)
+				if effort != "" {
+					sticky[synaraCodexProxyID].(map[string]any)["options"] = map[string]any{"reasoningEffort": effort}
+				}
+			}
+		}
+	} else {
+		policy := synaraOptionsPolicy(options)
+		for _, entry := range []struct {
+			id      string
+			library modelLibrary
+			driver  string
+			enabled bool
+		}{{synaraCodexProxyID, policy.CodexLibrary, "codex", options.Preferences.KiloCodex}, {synaraClaudeProxyID, t3CodeClaudePickerLibrary(policy.ClaudeLibrary, policy.ClaudeRoutes), "claudeAgent", options.Preferences.KiloClaude}, {synaraOpenCodeProxyID, t3CodeOpenCodePickerLibrary(policy.OpenCodeLibrary), "opencode", synaraOpenCodeKiloEnabled(*options.Preferences)}} {
+			if entry.enabled && len(entry.library.Models) > 0 {
+				sticky[entry.id] = map[string]any{"provider": entry.driver, "instanceId": entry.id, "model": entry.library.DefaultModel}
+			}
+		}
+		for _, entry := range []struct {
+			id, driver string
+			enabled    bool
+		}{{synaraCodexNormalID, "codex", options.Preferences.Codex}, {synaraClaudeNormalID, "claudeAgent", options.Preferences.Claude}} {
+			if model := options.NativeDefaults[entry.id]; entry.enabled && model != "" {
+				sticky[entry.id] = map[string]any{"provider": entry.driver, "instanceId": entry.id, "model": model}
+			}
+		}
+		for _, provider := range options.SupportedProviders {
+			if instance, ok := options.AdditionalProviders[provider.ID].(map[string]any); ok && instance["enabled"] == true {
+				if model := options.NativeDefaults[provider.ID]; model != "" {
+					sticky[provider.ID] = map[string]any{"provider": provider.ID, "instanceId": provider.ID, "model": model}
+				}
+			}
+		}
+		active = ""
+		candidates := []string{synaraCodexProxyID, synaraClaudeProxyID, synaraOpenCodeProxyID, synaraCodexNormalID, synaraClaudeNormalID}
+		for _, provider := range options.SupportedProviders {
+			candidates = append(candidates, provider.ID)
+		}
+		for _, id := range candidates {
+			if sticky[id] != nil {
+				active = id
+				break
+			}
+		}
+		if active == "" {
+			if options.Preferences.Codex {
+				active = synaraCodexNormalID
+			} else if options.Preferences.Claude {
+				active = synaraClaudeNormalID
+			} else {
+				for _, provider := range options.SupportedProviders {
+					if instance, ok := options.AdditionalProviders[provider.ID].(map[string]any); ok && instance["enabled"] == true {
+						active = provider.ID
+						break
+					}
+				}
 			}
 		}
 	}
-	payload, _ := json.Marshal(map[string]any{"state": map[string]any{"draftsByThreadId": map[string]any{}, "draftThreadsByThreadId": map[string]any{}, "projectDraftThreadIdByProjectId": map[string]any{}, "stickyModelSelectionByProvider": sticky, "stickyActiveProvider": synaraCodexProxyID}, "version": 6})
+	payload, _ := json.Marshal(map[string]any{"state": map[string]any{"draftsByThreadId": map[string]any{}, "draftThreadsByThreadId": map[string]any{}, "projectDraftThreadIdByProjectId": map[string]any{}, "stickyModelSelectionByProvider": sticky, "stickyActiveProvider": active}, "version": 6})
 	seed, _ := json.MarshalIndent(map[string]any{"version": 1, "exportedAt": time.Now().UTC().Format(time.RFC3339Nano), "entries": map[string]string{"synara:composer-drafts:v1": string(payload)}}, "", "  ")
 	seedFile, err := prepareProfileFile(filepath.Join(userDataDir, synaraComposerSeedName), append(seed, '\n'))
 	if err != nil {
@@ -704,7 +806,7 @@ func synaraProfilesReady(options synaraProfileOptions, expectedProviders map[str
 		// choice. Keep every owned connection/profile field bound to preparation.
 		connection := make(map[string]any, len(owned))
 		for name, value := range owned {
-			if name != "enabled" {
+			if name != "enabled" || options.Preferences != nil {
 				connection[name] = value
 			}
 		}
@@ -722,18 +824,26 @@ func synaraProfilesReady(options synaraProfileOptions, expectedProviders map[str
 		return false
 	}
 	for _, driver := range synaraDrivers() {
-		if legacy[driver]["enabled"] != (driver == "codex" || driver == "claudeAgent") {
+		enabled := driver == "codex" || driver == "claudeAgent"
+		if options.Preferences != nil {
+			enabled = synaraDriverEnabled(expectedProviders, driver)
+		}
+		if legacy[driver]["enabled"] != enabled {
 			return false
 		}
 	}
 	if accounts, ok := legacy["codex"]["accounts"].([]any); !ok || len(accounts) != 0 {
 		return false
 	}
-	var selection map[string]any
-	if json.Unmarshal(settings["textGenerationModelSelection"], &selection) != nil || !reflect.DeepEqual(selection, map[string]any{"provider": "codex", "instanceId": synaraCodexProxyID, "model": options.Library.DefaultModel}) {
+	var selected any
+	expectedSelection, selectionErr := synaraSettingsSelectionChecked(options, expectedProviders, settings)
+	if selectionErr != nil || json.Unmarshal(settings["textGenerationModelSelection"], &selected) != nil || !reflect.DeepEqual(selected, expectedSelection) {
 		return false
 	}
 	for id, name := range map[string]string{synaraCodexProxyID: "KILO_LOCAL_API_KEY", synaraClaudeProxyID: "ANTHROPIC_AUTH_TOKEN"} {
+		if options.Preferences != nil && (id == synaraCodexProxyID && !options.Preferences.KiloCodex || id == synaraClaudeProxyID && !options.Preferences.KiloClaude) {
+			continue
+		}
 		data, err := readCatalogFile(filepath.Join(dataDir, "userdata", "secrets", t3CodeSecretName(id, name)))
 		if err != nil || string(data) != options.LocalKey {
 			return false

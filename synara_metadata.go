@@ -69,20 +69,13 @@ func synaraVersion(executable, platform string) (string, error) {
 }
 
 func (a *app) synaraAvailability(binary string, rt clientLaunchRuntime) error {
-	_, err := synaraPackageMetadata(binary, rt.platform)
+	a.mu.Lock()
+	prefs, err := a.synaraPreferencesSnapshotLocked()
+	a.mu.Unlock()
 	if err != nil {
 		return err
 	}
-	if err := a.synaraSystemRequirement(rt.platform); err != nil {
-		return err
-	}
-	if _, err := resolveOpenDesignCLI("codex-cli", rt); err != nil {
-		return errors.New("Install a native Codex CLI executable before preparing Synara.")
-	}
-	if _, err := rt.resolve("claude", ""); err != nil {
-		return errors.New("Install Claude Code CLI before preparing Synara. Claude Desktop is a separate application.")
-	}
-	return nil
+	return a.synaraAvailabilityFor(binary, rt, prefs)
 }
 
 func synaraUnsetEnvironment(parent []string) []string {
@@ -110,10 +103,7 @@ func synaraNormalEnvironment(home string, parent []string, platform string) map[
 }
 
 func (a *app) synaraProfileOptions(rt clientLaunchRuntime, library modelLibrary) synaraProfileOptions {
-	paths := synaraPaths(a.dir)
-	codex, _ := resolveOpenDesignCLI("codex-cli", rt)
-	claude, _ := rt.resolve("claude", "")
-	return synaraProfileOptions{RootDir: paths.Root, DataDir: paths.Data, UserDataDir: paths.Electron, NormalHome: rt.home, CodexBinary: codex, NormalCodexBinary: synaraCodexNormalShimPath(paths.Root, rt.platform), ClaudeBinary: claude, NormalEnvironment: synaraNormalEnvironment(rt.home, os.Environ(), rt.platform), Library: library, Catalog: readNativeCatalogCache(a.dir, a.catalogScopeLocked()), Port: a.config.Port, LocalKey: a.config.LocalKey, Images: a.clientImageSettingsLocked()}
+	return a.synaraOptions(rt, library)
 }
 
 func (a *app) synaraClaudeCapabilities(binary string, rt clientLaunchRuntime) claudeCapabilities {

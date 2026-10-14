@@ -35,6 +35,7 @@ type settings struct {
 	ClaudeCodeExecutable            string                  `json:"claudeCodeExecutable,omitempty"`
 	MuseCodeExecutable              string                  `json:"museCodeExecutable,omitempty"`
 	MuseCode                        musePreferences         `json:"museCode"`
+	Synara                          synaraPreferences       `json:"synara,omitempty"`
 	SynaraExecutable                string                  `json:"synaraExecutable,omitempty"`
 	OpenCodeMajor                   int                     `json:"openCodeMajor,omitempty"`
 	OpenCode1Executable             string                  `json:"openCode1Executable,omitempty"`
@@ -58,6 +59,7 @@ func readSettings(dir string) (settings, error) {
 	s := settings{MuseCode: normalizeMusePreferences(musePreferences{}), T3Code: normalizeT3CodePreferences(t3CodePreferences{}), Port: 8877, LocalKey: randomKey("kl_local_"), VaultID: randomKey("profile_"), TrayDisplay: trayDisplayIcon, ImageTransport: normalizeImageTransportSettings(imageTransportSettings{})}
 	b, err := os.ReadFile(filepath.Join(dir, "settings.json"))
 	if errors.Is(err, os.ErrNotExist) {
+		s.Synara = defaultSynaraPreferences()
 		return s, nil
 	}
 	if err != nil {
@@ -77,6 +79,19 @@ func readSettings(dir string) (settings, error) {
 	}
 	if validateSynaraExecutablePath(s.SynaraExecutable) != nil {
 		return s, errors.New("Invalid Synara executable preference.")
+	}
+	var members map[string]json.RawMessage
+	_ = json.Unmarshal(b, &members)
+	if _, present := members["synara"]; !present && s.Synara.Version == 0 {
+		if _, legacyErr := os.Lstat(synaraPaths(dir).Settings); errors.Is(legacyErr, os.ErrNotExist) {
+			s.Synara = defaultSynaraPreferences()
+		}
+	}
+	if s.Synara.Version != 0 {
+		s.Synara = normalizeSynaraPreferences(s.Synara)
+		if err := validateSynaraPreferences(s.Synara); err != nil {
+			return s, errors.New("invalid Synara settings; restore a valid configuration")
+		}
 	}
 	s.TrayDisplay = normalizeTrayDisplay(s.TrayDisplay)
 	s.MuseCode = normalizeMusePreferences(s.MuseCode)

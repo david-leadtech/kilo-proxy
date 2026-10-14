@@ -110,6 +110,10 @@ func (a *app) adminHandler() http.Handler {
 			a.openMausBotProfile(w, r)
 			return
 		}
+		if r.URL.Path == synaraPreferencesEndpoint {
+			a.synaraPreferencesAPI(w, r)
+			return
+		}
 		if r.URL.Path == synaraProfileEndpoint {
 			a.synaraProfileAPI(w, r)
 			return

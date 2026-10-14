@@ -87,6 +87,8 @@ func TestE2EServer(t *testing.T) {
 
 	openMausBotBinary := syntheticOpenMausBotExecutable(t, root, "macos")
 	synaraBinary := syntheticSynaraExecutable(t, root, "macos")
+	addSynaraInstalledPickerFixture(t, synaraBinary, "macos")
+	addSynaraNativeDefaultsFixture(t, synaraBinary, "macos")
 	t3CodeBinary := syntheticT3CodeExecutable(t, root, "macos")
 	t3CodeNightlyBinary := syntheticT3CodeExecutable(t, filepath.Join(root, "nightly"), "macos", t3CodeNightlyVersion)
 	t3CodeCapabilitiesBinary := syntheticT3CodeExecutable(t, filepath.Join(root, "capabilities"), "macos", t3CodeNightlyVersion)

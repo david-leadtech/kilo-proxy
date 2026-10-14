@@ -70,10 +70,20 @@ test('T3 shares OpenCode executable paths while keeping its major independent',a
  const {helper}=fixture(t,async path=>path==='clients/opencode/preferences'?{...prefs}:initial(),{openCodeSnapshot:()=>({...prefs,major:2})});await tick();
  const result=await helper.guardOperation('t3-code',async()=>{operations++;prefs.major=2;return 'prepared'});assert.equal(result,'prepared');assert.equal(operations,1);
 });
+test('Synara shares OpenCode executable paths while keeping its major independent',async t=>{
+ let prefs={version:1,major:1,executable1:'/oc/one',executable2:'/oc/two'},operations=0;
+ const {helper}=fixture(t,async path=>path==='clients/opencode/preferences'?{...prefs}:initial(),{openCodeSnapshot:()=>({...prefs,major:2})});await tick();
+ const result=await helper.guardOperation('synara',async()=>{operations++;prefs.major=2;return 'prepared'});assert.equal(result,'prepared');assert.equal(operations,1);
+});
 test('T3 rejects external OpenCode path changes before and during prepare and requests visible path reload',async t=>{
  let prefs={version:1,major:1,executable1:'/oc/one',executable2:'/oc/two'},known={...prefs},reloads=0;
  const {helper}=fixture(t,async path=>path==='clients/opencode/preferences'?{...prefs}:initial(),{openCodeSnapshot:()=>known,onOpenCodePathsChanged:()=>reloads++});await tick();prefs.executable2='/changed/two';
  await assert.rejects(helper.guardOperation('t3-code',async()=>assert.fail('stale preparation')),/settings changed/);known={...prefs};await assert.rejects(helper.guardOperation('t3-code',async()=>{prefs.executable1='/changed/one'}),/settings changed/);assert.equal(reloads,2);
+});
+test('Synara rejects external OpenCode path changes before and during prepare and requests visible path reload',async t=>{
+ let prefs={version:1,major:1,executable1:'/oc/one',executable2:'/oc/two'},known={...prefs},reloads=0;
+ const {helper}=fixture(t,async path=>path==='clients/opencode/preferences'?{...prefs}:initial(),{openCodeSnapshot:()=>known,onOpenCodePathsChanged:()=>reloads++});await tick();prefs.executable2='/changed/two';
+ await assert.rejects(helper.guardOperation('synara',async()=>assert.fail('stale preparation')),/settings changed/);known={...prefs};await assert.rejects(helper.guardOperation('synara',async()=>{prefs.executable1='/changed/one'}),/settings changed/);assert.equal(reloads,2);
 });
 test('confirmed preparations remain reusable across unchanged path reloads and each opening still verifies saved paths',async t=>{
  let reads=0,prepares=0,launches=0,refreshes=0;
@@ -113,7 +123,15 @@ test('T3 reuses confirmed executable paths independently of OpenCode major and b
  prefs.executable2='/external/two';known=null;
  await assert.rejects(helper.guardOperation('t3-code',async()=>assert.fail('external OpenCode route launched'),{preparation:false}),/settings changed/);assert.equal(helper.prepared('t3-code'),false);assert.equal(reloads,1);
 });
-test('an OpenCode path draft or pending save blocks only T3 and cannot be bypassed by preparing directly',async t=>{
+test('Synara reuses confirmed executable paths independently of OpenCode major and blocks an external path before launching',async t=>{
+ let prefs={version:1,major:1,executable1:'/oc/one',executable2:'/oc/two'},known=null,reloads=0;
+ const {helper}=fixture(t,async path=>path==='clients/opencode/preferences'?{...prefs}:initial(),{openCodeSnapshot:()=>known,onOpenCodePathsChanged:()=>reloads++});await tick();
+ await helper.guardOperation('synara',async()=>({prepared:true}));assert.equal(helper.prepared('synara'),true);
+ prefs.major=2;known={...prefs};await helper.guardOperation('synara',async()=>({opened:true}),{preparation:false});assert.equal(helper.prepared('synara'),true);
+ prefs.executable2='/external/two';known=null;
+ await assert.rejects(helper.guardOperation('synara',async()=>assert.fail('external OpenCode route launched'),{preparation:false}),/settings changed/);assert.equal(helper.prepared('synara'),false);assert.equal(reloads,1);
+});
+test('an OpenCode path draft or pending save blocks T3 without affecting unrelated CLI clients',async t=>{
  let pathBlocked=false;const oc={version:1,major:1,executable1:'',executable2:''};
  const {helper}=fixture(t,async path=>path==='clients/opencode/preferences'?{...oc}:initial(),{openCodePathsBlocked:()=>pathBlocked});await tick();
  await helper.guardOperation('t3-code',async()=>({prepared:true}));await helper.guardOperation('claude',async()=>({prepared:true}));
@@ -122,16 +140,36 @@ test('an OpenCode path draft or pending save blocks only T3 and cannot be bypass
  await assert.rejects(helper.guardOperation('t3-code',async()=>assert.fail('OpenCode draft reached T3 opening'),{preparation:false}),/settings changed/);
  await helper.guardOperation('claude',async()=>({opened:true}),{preparation:false});pathBlocked=false;assert.equal(helper.prepared('t3-code'),true);
 });
+test('an OpenCode path draft or pending save blocks Synara without affecting unrelated CLI clients',async t=>{
+ let pathBlocked=false;const oc={version:1,major:1,executable1:'',executable2:''};
+ const {helper}=fixture(t,async path=>path==='clients/opencode/preferences'?{...oc}:initial(),{openCodePathsBlocked:()=>pathBlocked});await tick();
+ await helper.guardOperation('synara',async()=>({prepared:true}));await helper.guardOperation('claude',async()=>({prepared:true}));
+ pathBlocked=true;assert.equal(helper.blocked('synara'),true);assert.equal(helper.prepared('synara'),false);assert.equal(helper.blocked('claude'),false);assert.equal(helper.prepared('claude'),true);
+ await assert.rejects(helper.guardOperation('synara',async()=>assert.fail('OpenCode draft reached T3 preparation')),/settings changed/);
+ await assert.rejects(helper.guardOperation('synara',async()=>assert.fail('OpenCode draft reached T3 opening'),{preparation:false}),/settings changed/);
+ await helper.guardOperation('claude',async()=>({opened:true}),{preparation:false});pathBlocked=false;assert.equal(helper.prepared('synara'),true);
+});
 test('an OpenCode draft during preflight or preparation prevents stale T3 execution or prepared success',async t=>{
  let pathBlocked=false,hold=false,release;const gate=new Promise(resolve=>release=resolve),oc={version:1,major:1,executable1:'',executable2:''};
  const {helper}=fixture(t,async path=>{if(path==='clients/opencode/preferences'){if(hold)await gate;return {...oc}}return initial()},{openCodePathsBlocked:()=>pathBlocked});await tick();
  hold=true;const preflight=helper.guardOperation('t3-code',async()=>assert.fail('draft during OpenCode preflight reached operation'));await tick();pathBlocked=true;release();await assert.rejects(preflight,/settings changed/);assert.equal(helper.prepared('t3-code'),false);
  hold=false;pathBlocked=false;await assert.rejects(helper.guardOperation('t3-code',async()=>{pathBlocked=true;return {prepared:true}}),/settings changed/);assert.equal(helper.prepared('t3-code'),false);
 });
+test('an OpenCode draft during preflight or preparation prevents stale Synara execution or prepared success',async t=>{
+ let pathBlocked=false,hold=false,release;const gate=new Promise(resolve=>release=resolve),oc={version:1,major:1,executable1:'',executable2:''};
+ const {helper}=fixture(t,async path=>{if(path==='clients/opencode/preferences'){if(hold)await gate;return {...oc}}return initial()},{openCodePathsBlocked:()=>pathBlocked});await tick();
+ hold=true;const preflight=helper.guardOperation('synara',async()=>assert.fail('draft during OpenCode preflight reached operation'));await tick();pathBlocked=true;release();await assert.rejects(preflight,/settings changed/);assert.equal(helper.prepared('synara'),false);
+ hold=false;pathBlocked=false;await assert.rejects(helper.guardOperation('synara',async()=>{pathBlocked=true;return {prepared:true}}),/settings changed/);assert.equal(helper.prepared('synara'),false);
+});
 test('an OpenCode draft during the final path verification prevents a prepared confirmation',async t=>{
  let pathBlocked=false,reads=0,release;const gate=new Promise(resolve=>release=resolve),oc={version:1,major:1,executable1:'',executable2:''};
  const {helper}=fixture(t,async path=>{if(path==='clients/opencode/preferences'){if(++reads===2)await gate;return {...oc}}return initial()},{openCodePathsBlocked:()=>pathBlocked});await tick();
  const pending=helper.guardOperation('t3-code',async()=>({prepared:true}));await tick();assert.equal(reads,2);pathBlocked=true;release();await assert.rejects(pending,/settings changed/);assert.equal(helper.prepared('t3-code'),false);
+});
+test('an OpenCode draft during the final path verification prevents a prepared Synara confirmation',async t=>{
+ let pathBlocked=false,reads=0,release;const gate=new Promise(resolve=>release=resolve),oc={version:1,major:1,executable1:'',executable2:''};
+ const {helper}=fixture(t,async path=>{if(path==='clients/opencode/preferences'){if(++reads===2)await gate;return {...oc}}return initial()},{openCodePathsBlocked:()=>pathBlocked});await tick();
+ const pending=helper.guardOperation('synara',async()=>({prepared:true}));await tick();assert.equal(reads,2);pathBlocked=true;release();await assert.rejects(pending,/settings changed/);assert.equal(helper.prepared('synara'),false);
 });
 
 test('Synara optional v1 path preserves CLI choices and confirms both save and automatic reset',async t=>{
