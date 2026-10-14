@@ -87,6 +87,6 @@ For the terminal edition, follow the [headless setup guide](docs/headless.md).
 
 **Activity → History / CSV** retrieves historical Kilo usage by UTC day and up to three dimensions, including model, provider and project. Filter a date range and save raw CSV rows with exact token counts and microdollar costs. [Historical usage and CSV limits](docs/billing.md#historical-queries-and-raw-csv).
 
-[Muse Code](docs/muse-code.md) uses its own Meta login and official models in the terminal or as an optional native T3 provider. Its `kilo-muse` terminal command also works with Kilo Proxy closed.
+[Muse Code](docs/muse-code.md) can use Kilo's shared models or its own Meta account in the terminal and as an optional T3 provider. Keep Kilo Proxy open for Kilo connections; `kilo-muse` also works with the app closed in native Meta mode. Muse is not yet available as a Synara provider.
 
 [Desktop guide](docs/desktop.md) · [Agents and editors](docs/clients.md) · [Models](docs/shared-models.md) · [Security](docs/security-and-debugging.md) · [Development and releases](docs/releases.md)
