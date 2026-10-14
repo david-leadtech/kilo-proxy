@@ -18,7 +18,8 @@ import (
 // formats must survive and reach only their own upstream, without a keyring.
 func TestHeadlessSavedProvidersRouteAfterOfflineSetup(t *testing.T) {
 	setup := headlessTestClient(t)
-	dir, port := setup.dir, headlessTestPort(t)
+	dir := setup.dir
+	port, listenProxy := headlessTestProxyReservation(t)
 	if err := setup.call(context.Background(), "POST", "/api/config", map[string]any{"apiKey": "synthetic-kilo", "orgId": "synthetic-org", "port": port, "remember": true}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -33,6 +34,7 @@ func TestHeadlessSavedProvidersRouteAfterOfflineSetup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	c.app.listenProxy = listenProxy
 	t.Cleanup(c.close)
 	if !c.app.kiloReadyLocked() || !c.app.chatGPTReadyLocked() {
 		t.Fatal("saved headless providers did not reload")
