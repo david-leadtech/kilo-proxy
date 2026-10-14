@@ -43,6 +43,7 @@ type nativeUI struct {
 	packs               *nativePackUI
 	agents              *nativeAgents
 	terminalCommands    *nativeTerminalCommands
+	usageExplorer       *nativeUsageExplorer
 	setupStep           int
 	traceGeneration     uint64
 	modelsPending       bool
@@ -576,7 +577,11 @@ func nativeRequest(owner *app, method, path string, payload any) (json.RawMessag
 	}
 	req.Header.Set("Authorization", "Bearer "+owner.adminToken)
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 45 * time.Second, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	timeout := 45 * time.Second
+	if path == "/api/usage/query" {
+		timeout = 160 * time.Second
+	}
+	client := &http.Client{Timeout: timeout, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	defer client.CloseIdleConnections()
 	response, err := client.Do(req)
 	if err != nil {

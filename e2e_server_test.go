@@ -233,6 +233,24 @@ func TestE2EServer(t *testing.T) {
 			}
 			var query map[string]any
 			_ = json.Unmarshal([]byte(r.URL.Query().Get("input")), &query)
+			if query["limit"] == float64(usageQueryRowLimit) {
+				if query["organizationId"] != org || query["viewAs"] != "self" || query["personalScope"] != "personal-only" || query["granularity"] != "day" || (query["costSource"] != "cost" && query["costSource"] != "market") {
+					http.Error(w, "Unexpected historical usage scope", 400)
+					return
+				}
+				dimensions := map[string]string{}
+				for _, dimension := range query["groupBy"].([]any) {
+					dim := dimension.(string)
+					values := map[string]string{"model": "vendor/one", "provider": "synthetic", "project": "repo/ticket", "feature": "cli", "mode": "code", "user": "self"}
+					dimensions[dim] = values[dim]
+				}
+				rows := usageQueryTestRow(query["startDate"].(string)[:10], dimensions)
+				if org == "other-team" {
+					rows = ""
+				}
+				_, _ = io.WriteString(w, billingTestUsage(rows))
+				return
+			}
 			if query["organizationId"] != org || query["viewAs"] != "self" || query["costSource"] != "cost" || query["granularity"] != "day" {
 				http.Error(w, "Unexpected billed usage scope", 400)
 				return

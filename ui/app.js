@@ -1,6 +1,7 @@
 import {chatGPTConnected,chatGPTReady,connectionReady,validChatGPTVerificationURL,renderChatGPT,renderSubscriptionUsage} from './chatgpt-helper.mjs';
 import {contextControls,contextModel,syncContextModels,contextError,contextPreview} from './context-policy.mjs';
 import {renderAccountUsage} from './account-usage.mjs';
+import {createUsageExplorer} from './usage-explorer.mjs';
 import {renderUpdates, updateView, packageUpdateFailureCode} from './update-helper.mjs';
 import {createOpenMausBotHelper} from './openmausbot-helper.mjs';
 import {createT3CodeHelper} from './t3-code-helper.mjs';
@@ -49,6 +50,7 @@ if (token && /^[a-f0-9]{64}$/.test(token)) {
   history.replaceState(null, '', '/');
 } else token = sessionStorage.getItem('kilo-local-control') || '';
 let state, client = 'generic', busy = false, stopped = false, initialized = false, toastTimer, imageTransportPending = null;
+const usageExplorer = createUsageExplorer(document.getElementById('usage-explorer'), api);
 let imageDependencyPrompt={};
 let updateCheckPending = false, updateRequestError = false;
 let updateInstall = {};
@@ -510,6 +512,7 @@ function render(s) {
   $('empty-activity-help').textContent=s.captureEnabled?t('Verás el endpoint, las cabeceras y los cuerpos capturados para depurar.'):t('Activa la captura cuando necesites inspeccionar peticiones para depurar.');
   renderUsage(s.usage);
   renderAccountUsage($('account-usage'),s,language,busy);
+  usageExplorer.update(s,language);
   if(subscription){const quota=document.createElement('section');quota.id='subscription-usage';renderSubscriptionUsage(quota,s,language,busy);$('account-usage').append(quota);}
   renderChatGPT(document,s,language,busy);
   $('diagram-routing').textContent=subscription?(language==='en'?'Local authentication':'Autenticación local'):t('Añade la organización');

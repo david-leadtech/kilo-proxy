@@ -74,6 +74,10 @@ func (a *app) adminHandler() http.Handler {
 			files.ServeHTTP(w, r)
 			return
 		}
+		if r.URL.Path == "/usage-explorer.mjs" && r.Method == http.MethodGet {
+			files.ServeHTTP(w, r)
+			return
+		}
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			if r.Method != "GET" || (r.URL.Path != "/" && r.URL.Path != "/app.js" && r.URL.Path != "/desktop-helper.mjs" && r.URL.Path != "/editor-helper.mjs" && r.URL.Path != "/opencode-version-helper.mjs" && r.URL.Path != "/cli-preferences-helper.mjs" && r.URL.Path != "/omp-helper.mjs" && r.URL.Path != "/open-design-helper.mjs" && r.URL.Path != "/xcode-helper.mjs" && r.URL.Path != "/activity-helper.mjs" && r.URL.Path != "/usage-helper.mjs" && r.URL.Path != "/update-helper.mjs" && r.URL.Path != "/account-usage.mjs" && r.URL.Path != "/codex-catalog.mjs" && r.URL.Path != "/model-helper.mjs" && r.URL.Path != "/context-policy.mjs" && r.URL.Path != "/client-config.mjs" && r.URL.Path != "/claude-helper.mjs" && r.URL.Path != "/claude-desktop-helper.mjs" && r.URL.Path != "/i18n.mjs" && r.URL.Path != "/style.css" && r.URL.Path != "/icon.svg") {
 				http.NotFound(w, r)
@@ -210,6 +214,10 @@ func (a *app) adminHandler() http.Handler {
 			a.state(w)
 			return
 		}
+		if r.URL.Path == "/api/usage/query" {
+			a.usageQueryAPI(w, r)
+			return
+		}
 		if r.URL.Path == "/api/tray-settings" && (r.Method == "GET" || r.Method == "PUT") {
 			a.traySettings(w, r)
 			return
@@ -305,6 +313,7 @@ func (a *app) state(w http.ResponseWriter) {
 		"chatgptUsageHistory": a.usageHistory.snapshot(usageAccountID(a.chatgpt.identity(), "chatgpt"), time.Now()),
 		"catalogWarnings":     a.catalogWarnings,
 		"billing":             a.billingSnapshotLocked(),
+		"usageAccountScope":   usageAccountID(a.apiKey, a.config.OrgID),
 		"captureEnabled":      a.captureEnabled, "activityEpoch": a.activityEpoch,
 		"events": a.events, "warning": a.vaultWarning,
 	})
