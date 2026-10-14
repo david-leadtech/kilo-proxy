@@ -54,7 +54,9 @@ func TestNativeT3CodeWideCardAndIntegrationSettings(t *testing.T) {
 			h.frame()
 			// Opening T3 now confirms whether its saved accounts need Kilo before
 			// enabling Open, including native-only workspaces with no shared models.
-			nativeTestWait(t, u, func() bool { return u.agentsState().T3Code.PreferencesState.Loaded })
+			nativeTestWait(t, u, func() bool {
+				return u.agentsState().T3Code.PreferencesState.Loaded && u.agentsState().Synara.PreferencesState.Loaded
+			})
 			h.frame()
 			synara := h.target(u.tr("Open Synara", "Abrir Synara"), semantic.Button).Desc.Bounds
 			claude := h.target(u.tr("Open Claude Desktop", "Abrir Claude Desktop"), semantic.Button).Desc.Bounds

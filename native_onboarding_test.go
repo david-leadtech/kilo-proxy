@@ -517,6 +517,7 @@ func TestNativeOnboardingProxyControlsIgnoreOlderState(t *testing.T) {
 			c.LaunchChecked, c.LaunchDetectStarted = true, true
 			c.OpenDesignChecked, c.OpenDesignDetectStarted = true, true
 			u.agentsState().T3Code.PreferencesState.Requested = true
+			u.agentsState().Synara.PreferencesState.Requested = true
 			u.page = "agents"
 			h := &nativePointerHarness{t: t, u: u, size: image.Pt(720, 700), now: time.Now()}
 			h.frame()

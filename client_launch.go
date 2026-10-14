@@ -308,7 +308,7 @@ func (a *app) clientsLaunch(w http.ResponseWriter, r *http.Request) {
 		a.mu.Unlock()
 	}
 	if input.Client == "synara" {
-		message = "Synara opened with four agents in its separate Kilo workspace."
+		message = "Synara opened with your selected accounts in its separate Kilo workspace."
 		a.mu.Lock()
 		a.synaraLaunchUntil = time.Now().Add(30 * time.Second)
 		a.mu.Unlock()
@@ -429,6 +429,11 @@ func (a *app) planClientLaunch(input clientLaunchRequest, rt clientLaunchRuntime
 		p.skipProxy = !t3CodeUsesKilo(a.config.T3Code)
 	} else if input.Client == "synara" {
 		err = a.applySynaraLaunch(&p, rt)
+		if err == nil {
+			prefs, prefsErr := a.synaraPreferencesSnapshotLocked()
+			err = prefsErr
+			p.skipProxy = !synaraUsesKilo(prefs)
+		}
 	} else {
 		err = a.launchProfile(&p, rt.home)
 	}

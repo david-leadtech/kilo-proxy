@@ -55,8 +55,13 @@ func (u *nativeUI) detectLaunchers() {
 	if u.busy["GET"+nativeLaunchEndpoint] {
 		return
 	}
+	c.LaunchRefreshPending = false
 	c.LaunchDetectStarted = true
 	u.clientRequest("GET", nativeLaunchEndpoint, nil, func(raw json.RawMessage, err error) {
+		if c.LaunchRefreshPending {
+			u.detectLaunchers()
+			return
+		}
 		var detected nativeLaunchInfo
 		if err == nil {
 			err = json.Unmarshal(raw, &detected)
@@ -69,6 +74,17 @@ func (u *nativeUI) detectLaunchers() {
 		c.LaunchChecked = true
 		c.LaunchError = ""
 	})
+}
+
+// A saved account policy can change availability while an older detection is
+// still in flight. Discard that response and refresh after it completes.
+func (u *nativeUI) refreshSynaraLaunchDiscovery() {
+	c := u.clientState()
+	c.LaunchChecked = false
+	c.LaunchRefreshPending = true
+	if !u.busy["GET"+nativeLaunchEndpoint] {
+		u.detectLaunchers()
+	}
 }
 
 func (u *nativeUI) nativeLaunchAvailable(key string) bool {
@@ -182,7 +198,7 @@ func (u *nativeUI) launchSettingsFingerprintWithPreferences(key, directoryField 
 		values := []any{u.uxhLaunchDirectory(key, directoryField), u.clientState().LaunchInfo.Directory, u.clientState().LaunchInfo.Clients[key].Path}
 		if includePreferences {
 			prefs := &u.clientState().CLIPreferences
-			values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation, u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")), u.value(nativeCLIPathField("muse")))
+			values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation, u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")), u.value(nativeCLIPathField("muse")), u.value(nativeCLIPathField("synara")))
 			muse := &u.clientState().Muse
 			values = append(values, muse.Loaded, muse.Preferences, muse.Pending, muse.Generation)
 			if !u.museNative() {
@@ -203,6 +219,16 @@ func (u *nativeUI) launchSettingsFingerprintWithPreferences(key, directoryField 
 			prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation})
 		return sha256.Sum256(data)
 	}
+	if key == "synara" && includePreferences && u.synaraNativeOnly() {
+		paths := &u.clientState().CLIPreferences
+		openCode := &u.clientState().OpenCodePreferences
+		prefs := &u.agentsState().Synara.PreferencesState
+		data, _ := json.Marshal([]any{paths.Loaded, paths.Preferences, paths.Pending, paths.Generation,
+			u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")), u.value(nativeCLIPathField("synara")),
+			openCode.Loaded, openCode.Preferences, openCode.Pending, openCode.Generation, u.value(nativeOpenCodePathField(1)), u.value(nativeOpenCodePathField(2)),
+			prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation})
+		return sha256.Sum256(data)
+	}
 	s := u.sharedClientSelection(key)
 	u.syncClientSelection(key, s)
 	base, local, _ := u.clientBase()
@@ -217,14 +243,18 @@ func (u *nativeUI) launchSettingsFingerprintWithPreferences(key, directoryField 
 	values := []any{nativeSelectionFingerprint(key, s, base, local, u.clientCaps(key)), u.modelLibraryValue(), limits, u.uxhLaunchDirectory(key, directoryField), appPath, u.launchConnectionFingerprint()}
 	if nativeCLIPathClient(key) && includePreferences {
 		prefs := &u.clientState().CLIPreferences
-		values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation, u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")), u.value(nativeCLIPathField("muse")))
+		values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation, u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")), u.value(nativeCLIPathField("muse")), u.value(nativeCLIPathField("synara")))
 	}
-	if key == "t3-code" && includePreferences {
+	if (key == "t3-code" || key == "synara") && includePreferences {
 		paths := &u.clientState().OpenCodePreferences
 		values = append(values, paths.Loaded, paths.Preferences.Executable1, paths.Preferences.Executable2, u.value(nativeOpenCodePathField(1)), u.value(nativeOpenCodePathField(2)))
 	}
 	if key == "t3-code" && includePreferences {
 		prefs := &u.agentsState().T3Code.PreferencesState
+		values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending)
+	}
+	if key == "synara" && includePreferences {
+		prefs := &u.agentsState().Synara.PreferencesState
 		values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending)
 	}
 	if (key == "opencode" || key == "opencode2") && includePreferences {
@@ -252,6 +282,14 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 	if c.Launching != "" || key == "claude-desktop" && u.busy["POST/api/claude-desktop/options"] {
 		return
 	}
+	if key == "synara" && c.LaunchChecked && !u.nativeLaunchAvailable(key) {
+		reason := nativeMessage(c.LaunchInfo.Clients[key].Reason, u.language)
+		if reason == "" {
+			reason = u.tr("Refresh installed apps before opening this tool.", "Actualiza las aplicaciones instaladas antes de abrir esta herramienta.")
+		}
+		u.setNotice(nativeToneWarning, reason)
+		return
+	}
 	if nativeCLIPathClient(key) {
 		prefs := &c.CLIPreferences
 		if u.cliPreferencesBusy() || prefs.Pending != nil || u.cliPathDirty() {
@@ -275,7 +313,7 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 			})
 			return
 		}
-		if key == "t3-code" && !c.OpenCodePreferences.Loaded {
+		if (key == "t3-code" || key == "synara") && !c.OpenCodePreferences.Loaded {
 			before := u.launchSettingsFingerprintWithPreferences(key, directoryField, false)
 			c.Launching = key
 			u.refreshOpenCodePreferencesAfter(func(err error) {
@@ -349,6 +387,30 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 			return
 		}
 	}
+	if key == "synara" {
+		prefs := &a.Synara.PreferencesState
+		if u.synaraPreferencesBusy() || prefs.Pending != nil || u.busy["GET"+nativeSynaraPreferencesEndpoint] {
+			u.setNotice(nativeToneWarning, u.tr("Wait for Synara settings to finish, or retry the unconfirmed change in Settings.", "Espera a que terminen los ajustes de Synara o reintenta el cambio no confirmado en Ajustes."))
+			return
+		}
+		if !prefs.Loaded {
+			before := u.launchSettingsFingerprintWithPreferences(key, directoryField, false)
+			c.Launching, a.Phase = key, u.tr("Loading Synara preferences…", "Cargando preferencias de Synara…")
+			u.refreshSynaraPreferencesAfter(func(err error) {
+				c.Launching, a.Phase = "", ""
+				if err != nil {
+					u.noticeError(err)
+					return
+				}
+				if before != u.launchSettingsFingerprintWithPreferences(key, directoryField, false) {
+					u.setNotice(nativeToneWarning, u.launchSettingsChangedMessage())
+					return
+				}
+				u.launchClientFrom(key, directoryField)
+			})
+			return
+		}
+	}
 	if key == "t3-code" {
 		if err := u.t3CodeOpenCodeConnectionError(); err != nil {
 			u.noticeError(err)
@@ -359,15 +421,21 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 			return
 		}
 	}
-	nativeT3 := key == "t3-code" && u.t3CodeNativeOnly()
-	if err := u.packReadinessError(key); !nativeT3 && err != nil {
+	if key == "synara" {
+		if err := u.synaraProviderSelectionError(); err != nil {
+			u.noticeError(err)
+			return
+		}
+	}
+	nativeAccounts := key == "t3-code" && u.t3CodeNativeOnly() || key == "synara" && u.synaraNativeOnly()
+	if err := u.packReadinessError(key); !nativeAccounts && err != nil {
 		u.noticeError(err)
 		return
 	}
-	if !nativeT3 {
+	if !nativeAccounts {
 		u.persistLibraryEdits()
 	}
-	if status, ready := u.libraryStatus(); !nativeT3 && !ready {
+	if status, ready := u.libraryStatus(); !nativeAccounts && !ready {
 		w := u.library.writer
 		w.mu.Lock()
 		saving := w.running
@@ -406,7 +474,7 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 	}
 	s := u.sharedClientSelection(key)
 	u.syncClientSelection(key, s)
-	if _, err := nativeClientPayload(key, s); !nativeT3 && (err != nil || len(s.Models) == 0) {
+	if _, err := nativeClientPayload(key, s); !nativeAccounts && (err != nil || len(s.Models) == 0) {
 		u.setNotice(nativeToneWarning, u.tr("Choose valid models before launching.", "Elige modelos válidos antes de abrir."))
 		if err != nil {
 			u.noticeError(err)
@@ -439,7 +507,7 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 			return
 		}
 		current := u.sharedClientSelection(key)
-		if !nativeT3 && current != s || prepared != u.launchSettingsFingerprint(key, directoryField) {
+		if !nativeAccounts && current != s || prepared != u.launchSettingsFingerprint(key, directoryField) {
 			finish(errors.New(u.launchSettingsChangedMessage()))
 			return
 		}

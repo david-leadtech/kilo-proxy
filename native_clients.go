@@ -32,6 +32,7 @@ type nativeClients struct {
 	LaunchInfo                  nativeLaunchInfo
 	LaunchChecked               bool
 	LaunchDetectStarted         bool
+	LaunchRefreshPending        bool
 	LaunchError                 string
 	Launching                   string
 	Variant                     string
@@ -164,7 +165,7 @@ func nativeClientPayload(key string, s *nativeClientSelection) (any, error) {
 			return map[string]any{"library": library}, validateModelLibrary(library)
 		}
 		if key == "synara" {
-			return map[string]any{"library": library}, validateSynaraLibrary(library)
+			return map[string]any{"library": library}, validateModelLibrary(library)
 		}
 		return map[string]any{"library": library}, validateModelLibrary(library)
 	}
@@ -1174,7 +1175,7 @@ func (u *nativeUI) prepareClientAfter(key string, done func(error)) {
 		})
 		return
 	}
-	if key == "t3-code" && !u.clientState().OpenCodePreferences.Loaded && !u.openCodePreferencesBusy() {
+	if (key == "t3-code" || key == "synara") && !u.clientState().OpenCodePreferences.Loaded && !u.openCodePreferencesBusy() {
 		u.refreshOpenCodePreferencesAfter(func(err error) {
 			if err != nil {
 				done(err)
@@ -1188,7 +1189,7 @@ func (u *nativeUI) prepareClientAfter(key string, done func(error)) {
 	expectedOpenCode := u.clientState().OpenCodePreferences.Preferences
 	verify := func(after func(error)) {
 		u.verifyCLIPreferencesAfter(expected, func(err error) {
-			if err != nil || key != "t3-code" {
+			if err != nil || key != "t3-code" && key != "synara" {
 				after(err)
 				return
 			}
@@ -1310,12 +1311,45 @@ func (u *nativeUI) prepareClientAfterPreferencesChecked(key string, done func(er
 		t3Preferences = prefs.Preferences
 		t3Preferences.Providers = append([]string{}, t3Preferences.Providers...)
 	}
+	var synaraPreferences nativeSynaraPreferences
+	if key == "synara" {
+		prefs := &u.agentsState().Synara.PreferencesState
+		if u.synaraPreferencesBusy() || prefs.Pending != nil {
+			done(errors.New(u.tr("Finish saving Synara settings before preparing.", "Termina de guardar los ajustes de Synara antes de preparar.")))
+			return
+		}
+		if !prefs.Loaded {
+			before := u.launchSettingsFingerprintWithPreferences(key, "", false)
+			u.refreshSynaraPreferencesAfter(func(err error) {
+				if err != nil {
+					done(err)
+					return
+				}
+				if before != u.launchSettingsFingerprintWithPreferences(key, "", false) {
+					done(errors.New(u.launchSettingsChangedMessage()))
+					return
+				}
+				u.prepareClientAfter(key, done)
+			})
+			return
+		}
+		if !validNativeSynaraPreferences(prefs.Preferences) {
+			done(errors.New(u.tr("Invalid Synara preferences. Reload settings before preparing.", "Preferencias de Synara no válidas. Carga los ajustes antes de preparar.")))
+			return
+		}
+		synaraPreferences = prefs.Preferences
+		synaraPreferences.Providers = append([]string{}, synaraPreferences.Providers...)
+	}
 	if key == "claude-desktop" && u.busy["POST/api/claude-desktop/options"] {
 		done(errors.New(u.tr("Wait for the current agent operation to finish.", "Espera a que termine la operación actual del agente.")))
 		return
 	}
 	if key == "t3-code" && u.t3CodeNativeOnly() {
 		u.prepareT3CodeNativeAfter(t3Preferences, done)
+		return
+	}
+	if key == "synara" && u.synaraNativeOnly() {
+		u.prepareSynaraNativeAfter(synaraPreferences, done)
 		return
 	}
 	if err := u.packReadinessError(key); err != nil {
@@ -1336,6 +1370,14 @@ func (u *nativeUI) prepareClientAfterPreferencesChecked(key string, done func(er
 			return
 		}
 		payload.(map[string]any)["preferences"] = t3Preferences
+	}
+	if key == "synara" {
+		library := payload.(map[string]any)["library"].(modelLibrary)
+		if err := nativeSynaraPreferenceLibraryError(synaraPreferences, library); err != nil {
+			done(err)
+			return
+		}
+		payload.(map[string]any)["preferences"] = synaraPreferences
 	}
 	base, local, _ := u.clientBase()
 	fingerprint := nativeSelectionFingerprint(key, s, base, local, u.clientCaps(key))
@@ -1363,6 +1405,14 @@ func (u *nativeUI) prepareClientAfterPreferencesChecked(key string, done func(er
 			prefs := &u.agentsState().T3Code.PreferencesState
 			var confirmed nativeT3CodeInfo
 			if json.Unmarshal(data, &confirmed) != nil || !nativeT3CodePreferencesEqual(confirmed.Preferences, t3Preferences) || !nativeT3CodePreferencesEqual(prefs.Preferences, t3Preferences) || prefs.Pending != nil || u.t3CodePreferencesBusy() || openMausBotConnection != u.launchConnectionFingerprint() {
+				done(errors.New(u.launchSettingsChangedMessage()))
+				return
+			}
+		}
+		if key == "synara" {
+			prefs := &u.agentsState().Synara.PreferencesState
+			var confirmed nativeSynaraInfo
+			if json.Unmarshal(data, &confirmed) != nil || !confirmed.Prepared || !nativeSynaraPreferencesEqual(confirmed.Preferences, synaraPreferences) || !nativeSynaraPreferencesEqual(prefs.Preferences, synaraPreferences) || prefs.Pending != nil || u.synaraPreferencesBusy() || openMausBotConnection != u.launchConnectionFingerprint() {
 				done(errors.New(u.launchSettingsChangedMessage()))
 				return
 			}
@@ -1430,6 +1480,37 @@ func (u *nativeUI) prepareT3CodeNativeAfter(preferences nativeT3CodePreferences,
 	})
 }
 
+func (u *nativeUI) prepareSynaraNativeAfter(preferences nativeSynaraPreferences, done func(error)) {
+	before := u.launchSettingsFingerprint("synara", "")
+	u.clientRequest(http.MethodPost, nativeClientEndpoint("synara"), map[string]any{"preferences": preferences}, func(data json.RawMessage, err error) {
+		if err != nil {
+			done(err)
+			return
+		}
+		var confirmed struct {
+			nativeSynaraInfo
+			ProfileDir string `json:"profileDir"`
+			ConfigPath string `json:"configPath"`
+		}
+		if json.Unmarshal(data, &confirmed) != nil || confirmed.ProfileDir == "" && confirmed.ConfigPath == "" {
+			done(errors.New("Prepared profile did not return a path"))
+			return
+		}
+		prefs := &u.agentsState().Synara.PreferencesState
+		if !confirmed.Prepared || !nativeSynaraPreferencesEqual(confirmed.Preferences, preferences) || !nativeSynaraPreferencesEqual(prefs.Preferences, preferences) || prefs.Pending != nil || u.synaraPreferencesBusy() || before != u.launchSettingsFingerprint("synara", "") {
+			done(errors.New(u.launchSettingsChangedMessage()))
+			return
+		}
+		selection := u.sharedClientSelection("synara")
+		selection.Path = confirmed.ProfileDir
+		if confirmed.ConfigPath != "" {
+			selection.Path = confirmed.ConfigPath
+		}
+		u.acceptSynaraProfile(data, [32]byte{})
+		done(nil)
+	})
+}
+
 func (u *nativeUI) clientPreparedNotice(key string) {
 	if key != "opencode" && key != "opencode2" {
 		u.setNotice(nativeToneSuccess, u.tr("Editor profile prepared.", "Perfil del editor preparado."))
@@ -1441,7 +1522,7 @@ func (u *nativeUI) clientPreparedNotice(key string) {
 		u.setNotice(nativeToneSuccess, u.tr("Your saved accounts and models are prepared. Open T3 Code · Kilo to choose an account.", "Las cuentas y modelos guardados están preparados. Abre T3 Code · Kilo para elegir una cuenta."))
 	}
 	if key == "synara" {
-		u.setNotice(nativeToneSuccess, u.tr("Four agents prepared. Open Synara · Kilo and start a new chat to choose an agent.", "Cuatro agentes preparados. Abre Synara · Kilo e inicia un chat nuevo para elegir un agente."))
+		u.setNotice(nativeToneSuccess, u.tr("Your saved accounts and models are prepared. Open Synara · Kilo to choose an account.", "Las cuentas y modelos guardados están preparados. Abre Synara · Kilo para elegir una cuenta."))
 	}
 }
 

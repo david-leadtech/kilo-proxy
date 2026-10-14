@@ -123,6 +123,7 @@ func (u *nativeUI) uxaPeriodSelector() layout.Widget {
 func (u *nativeUI) uxaTabBar(trailing layout.Widget) layout.Widget {
 	s := u.uxa()
 	choices := []nativeChoice{{Value: "summary", Label: u.tr("Overview", "Resumen")}, {Value: "requests", Label: u.tr("Requests", "Peticiones")}, {Value: "conversations", Label: u.tr("Conversations", "Conversaciones")}}
+	choices = append(choices, nativeChoice{Value: "history", Label: u.tr("History / CSV", "Histórico / CSV")})
 	return func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Min.X = gtx.Constraints.Max.X
 		dims := layout.Flex{Axis: layout.Horizontal, Alignment: layout.End}.Layout(gtx,

@@ -94,9 +94,17 @@ func (a *app) applySynaraLaunch(plan *clientLaunchPlan, rt clientLaunchRuntime) 
 	if err != nil || !a.synaraReady(saved, plan.Executable, rt) {
 		return errors.New("Prepare Synara again: its private profiles or proxy connection changed.")
 	}
-	{
+	if err := a.synaraAdditionalAvailability(plan.Executable, rt, normalizeSynaraPreferences(a.config.Synara), true); err != nil {
+		return err
+	}
+	plan.skipProxy = saved.Preferences != nil && !synaraUsesKilo(*saved.Preferences)
+	if saved.Preferences == nil || saved.Preferences.KiloClaude {
 		var caps *claudeCapabilities
-		for _, model := range saved.Library.Models {
+		library := saved.Library
+		if saved.Preferences != nil {
+			library = saved.ClaudeLibrary
+		}
+		for _, model := range library.Models {
 			if model.ReasoningEffort == "" || !validClaudeEffort(model.ID, model.ReasoningEffort) {
 				continue
 			}

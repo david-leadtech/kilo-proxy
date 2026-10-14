@@ -106,6 +106,7 @@ func synaraTestApp(t *testing.T, platform string, versions ...string) *app {
 	t.Helper()
 	platform = synaraTestPlatform(platform)
 	a := launchTestApp(t)
+	a.config.Synara = synaraPreferences{} // Legacy integration fixtures retain the shared-profile contract.
 	a.synaraRuntimeDisabled = true
 	// These filesystem/profile fixtures do not start Electron. Sandbox policy
 	// is exercised separately with restricted, allowed and unreadable controls.
@@ -115,6 +116,7 @@ func synaraTestApp(t *testing.T, platform string, versions ...string) *app {
 	a.config.Port = 9988
 	a.config.Language = "en"
 	binary := syntheticSynaraExecutable(t, a.launcher.home, platform, versions...)
+	addSynaraNativeDefaultsFixture(t, binary, platform)
 	cli := filepath.Join(a.launcher.home, "codex-native")
 	if platform == "windows" {
 		cli += ".exe"

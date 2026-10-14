@@ -60,7 +60,9 @@ func TestNativeSynaraWideCardAndIntegrationSettings(t *testing.T) {
 			u.setValue(agentProjectField("synara"), "/does-not-exist/ignored")
 			h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 2200), now: time.Now()}
 			h.frame()
-			nativeTestWait(t, u, func() bool { return u.agentsState().T3Code.PreferencesState.Loaded })
+			nativeTestWait(t, u, func() bool {
+				return u.agentsState().T3Code.PreferencesState.Loaded && u.agentsState().Synara.PreferencesState.Loaded
+			})
 			h.frame()
 			codex := h.target(u.tr("Open Codex", "Abrir Codex"), semantic.Button).Desc.Bounds
 			t3 := h.target(u.tr("Open T3 Code", "Abrir T3 Code"), semantic.Button).Desc.Bounds
@@ -94,7 +96,7 @@ func TestNativeSynaraWideCardAndIntegrationSettings(t *testing.T) {
 			for _, node := range h.nodes() {
 				labels += node.Desc.Label + "\n"
 			}
-			for _, expected := range []string{"Codex · Normal", u.tr("Existing Codex CLI login", "Sesión existente de Codex CLI"), "Claude · Normal", u.tr("Existing Claude Code login", "Sesión existente de Claude Code"), "Kilo Proxy · Codex", "Kilo Proxy · Claude", u.tr("green account indicators", "indicadores verdes de cuenta"), u.tr("Choose one of these four options for each new chat.", "Elige una de estas cuatro opciones para cada chat nuevo."), u.tr("exact gateway ID", "ID exacto del gateway"), u.tr("check the selected model before continuing", "revisa el modelo elegido antes de continuar"), u.tr("Supports official Synara stable and Beta releases. Requires native Codex CLI and Claude Code.", "Admite versiones oficiales estables y Beta de Synara. Requiere Codex CLI nativo y Claude Code."), u.tr("Detected: 9.4.2-beta.8", "Detectado: 9.4.2-beta.8"), "Claude Code 2.1.251", "keyring/auto"} {
+			for _, expected := range []string{"Codex", u.tr("Existing Codex CLI login", "Sesión existente de Codex CLI"), "Claude", u.tr("Existing Claude Code login", "Sesión existente de Claude Code"), "Kilo Proxy · Codex", "Kilo Proxy · Claude", u.tr("green account indicators", "indicadores verdes"), u.tr("Accounts and models", "Cuentas y modelos"), u.tr("exact gateway ID", "ID exacto del gateway"), u.tr("check the selected model before continuing", "revisa el modelo elegido antes de continuar"), u.tr("Supports official Synara stable and Beta releases. Preparation checks the CLIs required by your enabled accounts.", "Admite versiones oficiales estables y Beta de Synara. La preparación comprueba los CLI que requieren las cuentas activadas."), u.tr("Detected: 9.4.2-beta.8", "Detectado: 9.4.2-beta.8"), "Claude Code 2.1.251", "keyring/auto"} {
 				if !strings.Contains(labels, expected) {
 					t.Fatalf("missing agent guidance: %q", expected)
 				}
@@ -111,7 +113,7 @@ func TestNativeSynaraWideCardAndIntegrationSettings(t *testing.T) {
 }
 
 func TestNativeSynaraPreparationFailureAndEditsNeverLaunch(t *testing.T) {
-	for _, failure := range []string{"prepare", "library", "connection"} {
+	for _, failure := range []string{"prepare", "library", "connection", "preferences"} {
 		t.Run(failure, func(t *testing.T) {
 			u, recorder := nativeLaunchTestUI(t, "synara", true, failure == "prepare")
 			before := append([]modelLibraryItem(nil), u.modelLibraryValue().Models...)
@@ -120,6 +122,8 @@ func TestNativeSynaraPreparationFailureAndEditsNeverLaunch(t *testing.T) {
 			switch failure {
 			case "library":
 				u.setValue(nativeClientField(sharedModelKey, "vendor/one", "name"), "Changed during preparation")
+			case "preferences":
+				u.agentsState().Synara.PreferencesState.Preferences.Codex = false
 			case "connection":
 				u.owner.mu.Lock()
 				u.owner.config.OrgID = "changed-team"
@@ -143,7 +147,10 @@ func TestNativeSynaraPreparedStatusIsFresh(t *testing.T) {
 	s := u.sharedClientSelection("synara")
 	payload, _ := nativeClientPayload("synara", s)
 	library := payload.(map[string]any)["library"].(modelLibrary)
-	data, _ := json.Marshal(map[string]any{"prepared": true, "library": library, "version": "9.4.2-beta.8"})
+	preferences := nativeSynaraPreferences{Version: 1, Codex: true, Claude: true, KiloCodex: true, KiloClaude: true, CodexModels: "shared", ClaudeModels: "shared"}
+	u.agentsState().Synara.PreferencesState.Loaded = true
+	u.agentsState().Synara.PreferencesState.Preferences = preferences
+	data, _ := json.Marshal(map[string]any{"prepared": true, "library": library, "version": "9.4.2-beta.8", "preferences": preferences})
 	u.acceptSynaraProfile(data, u.launchConnectionFingerprint())
 	if !u.synaraPrepared(s) {
 		t.Fatal("valid prepared metadata was not accepted")
@@ -167,7 +174,11 @@ func TestNativeSynaraRejectsMoreThan32SharedModels(t *testing.T) {
 	for i := 0; i < 33; i++ {
 		s.Models = append(s.Models, nativeModelChoice{Model: modelInfo{ID: fmt.Sprintf("vendor/model-%d", i)}})
 	}
-	if _, err := nativeClientPayload("synara", s); err == nil {
+	payload, err := nativeClientPayload("synara", s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := nativeSynaraPreferenceLibraryError(nativeSynaraPreferences{Version: 1, KiloCodex: true, CodexModels: "shared", ClaudeModels: "official"}, payload.(map[string]any)["library"].(modelLibrary)); err == nil {
 		t.Fatal("oversized library can lose its initial Synara model")
 	}
 }

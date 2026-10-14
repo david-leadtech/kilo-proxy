@@ -81,7 +81,17 @@ func (a *app) prepareSynaraRequest(r *http.Request) (*http.Request, error) {
 	if !ready {
 		return r, errors.New("Prepare Synara again before using its managed models.")
 	}
-	model, err := synaraResolveModel(saved.Library, requested)
+	library := saved.Library
+	if saved.Preferences != nil {
+		if !saved.Preferences.KiloClaude {
+			return r, errors.New("Claude with Kilo Proxy is disabled in Synara settings.")
+		}
+		library = saved.ClaudeLibrary
+	}
+	model, err := synaraResolveModel(library, requested)
+	if saved.Preferences != nil {
+		model, err = t3CodeResolveModel(library, saved.ClaudeRoutes, requested)
+	}
 	if err != nil {
 		return r, err
 	}

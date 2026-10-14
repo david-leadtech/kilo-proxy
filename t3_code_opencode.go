@@ -90,6 +90,10 @@ func t3CodeOpenCodePickerLibrary(library modelLibrary) modelLibrary {
 }
 
 func t3CodeOpenCodeConfig(options t3CodeProfileOptions) ([]byte, error) {
+	return t3CodeOpenCodeConfigWithKey(options, t3CodeOpenCodeKey)
+}
+
+func t3CodeOpenCodeConfigWithKey(options t3CodeProfileOptions, keyName string) ([]byte, error) {
 	if err := validateModelLibrary(options.Library); err != nil || len(options.Library.Models) == 0 {
 		return nil, errors.New("Choose shared models before preparing OpenCode with Kilo Proxy.")
 	}
@@ -113,7 +117,7 @@ func t3CodeOpenCodeConfig(options t3CodeProfileOptions) ([]byte, error) {
 			}
 			selection.Models = append(selection.Models, editorModel{ID: choice.Model.ID, Name: name, Context: limits.ContextWindow, Output: limits.MaxOutputTokens})
 		}
-		data, err := mergeEditorSettings(nil, "opencode", selection, baseURL, "{env:"+t3CodeOpenCodeKey+"}")
+		data, err := mergeEditorSettings(nil, "opencode", selection, baseURL, "{env:"+keyName+"}")
 		if err != nil || json.Unmarshal(data, &config) != nil {
 			return nil, errors.New("Cannot build the private T3 OpenCode configuration.")
 		}
@@ -121,7 +125,7 @@ func t3CodeOpenCodeConfig(options t3CodeProfileOptions) ([]byte, error) {
 		for _, choice := range choices {
 			variants := map[string]any{}
 			levels, _ := nativeReasoningFor(choice)
-			key := "{env:" + t3CodeOpenCodeKey + "}"
+			key := "{env:" + keyName + "}"
 			for _, level := range levels {
 				variants[level] = map[string]any{"model": choice.Model.ID, "baseURL": baseURL, "apiKey": key,
 					"headers": map[string]string{"Authorization": "Bearer " + key}, "reasoningEffort": level}
@@ -141,7 +145,7 @@ func t3CodeOpenCodeConfig(options t3CodeProfileOptions) ([]byte, error) {
 			if name == "" {
 				name = choice.Model.ID
 			}
-			key := "{env:" + t3CodeOpenCodeKey + "}"
+			key := "{env:" + keyName + "}"
 			body := map[string]any{"model": choice.Model.ID}
 			model := map[string]any{"modelID": choice.Model.ID, "name": name,
 				"package":  "@opencode/ai/providers/openai-compatible",
@@ -181,7 +185,7 @@ func t3CodeOpenCodeConfig(options t3CodeProfileOptions) ([]byte, error) {
 				{"effect": "allow", "action": "provider.use", "resource": "kilo-local"},
 			}},
 			"update": "disable", "providers": map[string]any{"kilo-local": map[string]any{
-				"name": "Kilo Proxy", "env": []string{t3CodeOpenCodeKey}, "package": "@opencode/ai/providers/openai-compatible",
+				"name": "Kilo Proxy", "env": []string{keyName}, "package": "@opencode/ai/providers/openai-compatible",
 				"settings": map[string]any{"baseURL": baseURL}, "models": models,
 			}}}
 	}
@@ -216,6 +220,10 @@ func t3CodeOpenCodeCapabilities(model modelInfo) map[string]any {
 // The caller commits this profile with T3 settings, its redacted environment
 // secret and the preparation record in one existing file transaction.
 func planT3CodeOpenCode(options t3CodeProfileOptions) (map[string]any, string, []byte, error) {
+	return planT3CodeOpenCodeWithKey(options, t3CodeOpenCodeKey)
+}
+
+func planT3CodeOpenCodeWithKey(options t3CodeProfileOptions, keyName string) (map[string]any, string, []byte, error) {
 	native, exists := options.AdditionalProviders["opencode"].(map[string]any)
 	if !exists || !options.OpenCodeKiloSupported {
 		return nil, "", nil, nil
@@ -233,7 +241,7 @@ func planT3CodeOpenCode(options t3CodeProfileOptions) (map[string]any, string, [
 	if _, err := t3CodeOpenCodeIsolation(options.RootDir, prefs.OpenCode2, options.NormalOpenCodePaths); err != nil {
 		return nil, "", nil, err
 	}
-	data, err := t3CodeOpenCodeConfig(options)
+	data, err := t3CodeOpenCodeConfigWithKey(options, keyName)
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -241,7 +249,7 @@ func planT3CodeOpenCode(options t3CodeProfileOptions) (map[string]any, string, [
 	for _, entry := range []struct{ name, value string }{{"OPENCODE_CONFIG", path}, {"OPENCODE_CONFIG_DIR", filepath.Dir(path)}, {"OPENCODE_CONFIG_CONTENT", string(data)}} {
 		environment = append(environment, map[string]any{"name": entry.name, "value": entry.value, "sensitive": false})
 	}
-	environment = append(environment, map[string]any{"name": t3CodeOpenCodeKey, "value": options.LocalKey, "sensitive": true})
+	environment = append(environment, map[string]any{"name": keyName, "value": options.LocalKey, "sensitive": true})
 	provider["environment"], provider["enabled"] = environment, true
 	return provider, path, data, nil
 }

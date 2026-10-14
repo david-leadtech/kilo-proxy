@@ -49,6 +49,7 @@ type app struct {
 	imageUploadWarning        string
 	usageHistory              *usageHistoryStore
 	billing                   billingCache
+	usageQueryMu              sync.Mutex
 	billingAutoRefresh        bool
 	modelLibrary              *modelLibraryStore
 	imageGenerationURL        string

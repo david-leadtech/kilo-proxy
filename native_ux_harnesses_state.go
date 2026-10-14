@@ -90,6 +90,9 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 	if key == "t3-code" && !a.T3Code.PreferencesState.Requested {
 		u.refreshT3CodePreferences()
 	}
+	if key == "synara" && !a.Synara.PreferencesState.Requested {
+		u.refreshSynaraPreferences()
+	}
 	if key == "opencode" {
 		if !c.OpenCodePreferences.Requested {
 			u.refreshOpenCodePreferencesAfter(nil)
@@ -103,12 +106,12 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 	_, validation := nativeClientPayload(key, s)
 	libraryStatus, libraryReady := u.libraryStatus()
 	connectionReady := u.agentConnectionReady() && !u.connectionWorking() && !u.setupConnectionNeeded()
-	nativeT3 := key == "t3-code" && u.t3CodeNativeOnly()
-	if nativeT3 {
+	nativeAccounts := key == "t3-code" && u.t3CodeNativeOnly() || key == "synara" && u.synaraNativeOnly()
+	if nativeAccounts {
 		packIssue, validation, libraryReady, connectionReady = nil, nil, true, true
 	}
 	busy := c.Launching != "" || u.busy["POST"+nativeClientEndpoint(key)] || key == "claude-desktop" && u.busy["POST/api/claude-desktop/options"]
-	l.canOpen = available && libraryReady && connectionReady && (nativeT3 || len(s.Models) > 0) && validation == nil && packIssue == nil && !busy
+	l.canOpen = available && libraryReady && connectionReady && (nativeAccounts || len(s.Models) > 0) && validation == nil && packIssue == nil && !busy
 	if key == "codex" || key == "codex-cli" {
 		l.canOpen = l.canOpen && nativeClientImagesReady(s, u.models, u.state)
 	}
@@ -150,7 +153,7 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 		local(reason)
 	case len(s.Models) == 0 && key == "claude-desktop":
 		local(u.claudeDesktopModelSummary(s))
-	case len(s.Models) == 0 && !nativeT3:
+	case len(s.Models) == 0 && !nativeAccounts:
 		l.reason = u.tr("Add at least one shared model before opening a harness.", "Añade al menos un modelo compartido antes de abrir un harness.")
 	case validation != nil:
 		local(nativeMessage(validation.Error(), u.language))
@@ -188,6 +191,29 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 		if preferences.Loaded {
 			if payload, err := nativeClientPayload(key, s); err == nil {
 				if err := nativeT3CodePreferenceLibraryError(preferences.Preferences, payload.(map[string]any)["library"].(modelLibrary)); err != nil {
+					l.canOpen = false
+					l.reason, l.local = nativeMessage(err.Error(), u.language), true
+				}
+			}
+		}
+	}
+	if key == "synara" && available {
+		if u.clientState().OpenCodePreferences.Loaded && (u.openCodePathDirty() || u.openCodePreferencesBusy() || u.clientState().OpenCodePreferences.Pending != nil) {
+			l.canOpen = false
+			l.reason, l.local = u.tr("Finish saving the OpenCode paths before opening Synara.", "Termina de guardar las rutas de OpenCode antes de abrir Synara."), true
+		}
+		preferences := &a.Synara.PreferencesState
+		if preferences.Pending != nil || u.synaraPreferencesBusy() || u.busy["GET"+nativeSynaraPreferencesEndpoint] || preferences.Requested && !preferences.Loaded {
+			l.canOpen = false
+			l.reason, l.local = u.tr("Load or finish saving Synara settings before opening.", "Carga o termina de guardar los ajustes de Synara antes de abrir."), true
+		}
+		if err := u.synaraProviderSelectionError(); err != nil {
+			l.canOpen = false
+			l.reason, l.local = err.Error(), true
+		}
+		if preferences.Loaded {
+			if payload, err := nativeClientPayload(key, s); err == nil {
+				if err := nativeSynaraPreferenceLibraryError(preferences.Preferences, payload.(map[string]any)["library"].(modelLibrary)); err != nil {
 					l.canOpen = false
 					l.reason, l.local = nativeMessage(err.Error(), u.language), true
 				}

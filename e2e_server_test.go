@@ -87,6 +87,8 @@ func TestE2EServer(t *testing.T) {
 
 	openMausBotBinary := syntheticOpenMausBotExecutable(t, root, "macos")
 	synaraBinary := syntheticSynaraExecutable(t, root, "macos")
+	addSynaraInstalledPickerFixture(t, synaraBinary, "macos")
+	addSynaraNativeDefaultsFixture(t, synaraBinary, "macos")
 	t3CodeBinary := syntheticT3CodeExecutable(t, root, "macos")
 	t3CodeNightlyBinary := syntheticT3CodeExecutable(t, filepath.Join(root, "nightly"), "macos", t3CodeNightlyVersion)
 	t3CodeCapabilitiesBinary := syntheticT3CodeExecutable(t, filepath.Join(root, "capabilities"), "macos", t3CodeNightlyVersion)
@@ -231,6 +233,24 @@ func TestE2EServer(t *testing.T) {
 			}
 			var query map[string]any
 			_ = json.Unmarshal([]byte(r.URL.Query().Get("input")), &query)
+			if query["limit"] == float64(usageQueryRowLimit) {
+				if query["organizationId"] != org || query["viewAs"] != "self" || query["personalScope"] != "personal-only" || query["granularity"] != "day" || (query["costSource"] != "cost" && query["costSource"] != "market") {
+					http.Error(w, "Unexpected historical usage scope", 400)
+					return
+				}
+				dimensions := map[string]string{}
+				for _, dimension := range query["groupBy"].([]any) {
+					dim := dimension.(string)
+					values := map[string]string{"model": "vendor/one", "provider": "synthetic", "project": "repo/ticket", "feature": "cli", "mode": "code", "user": "self"}
+					dimensions[dim] = values[dim]
+				}
+				rows := usageQueryTestRow(query["startDate"].(string)[:10], dimensions)
+				if org == "other-team" {
+					rows = ""
+				}
+				_, _ = io.WriteString(w, billingTestUsage(rows))
+				return
+			}
 			if query["organizationId"] != org || query["viewAs"] != "self" || query["costSource"] != "cost" || query["granularity"] != "day" {
 				http.Error(w, "Unexpected billed usage scope", 400)
 				return

@@ -77,6 +77,8 @@ func (u *nativeUI) uxhHarnessPage(key string, s *nativeClientSelection, d uxhDet
 	}
 	if key == "t3-code" && u.t3CodeNativeOnly() {
 		onOpen = append(onOpen, u.uxhKV(u.tr("Models", "Modelos"), u.column(u.uxhValue(u.tr("Native provider catalogs", "Catálogos nativos de los proveedores")), u.note(u.tr("Choose models in T3 using each account's native catalog. Shared Kilo models are only needed when a Kilo account is enabled.", "Elige modelos en T3 desde el catálogo nativo de cada cuenta. Los modelos compartidos de Kilo solo se necesitan si activas una cuenta Kilo.")))))
+	} else if key == "synara" && u.synaraNativeOnly() {
+		onOpen = append(onOpen, u.uxhKV(u.tr("Models", "Modelos"), u.column(u.uxhValue(u.tr("Native provider catalogs", "Catálogos nativos de los proveedores")), u.note(u.tr("Choose models in Synara using each account's native catalog. Shared Kilo models are only needed when a Kilo account is enabled.", "Elige modelos en Synara desde el catálogo nativo de cada cuenta. Los modelos compartidos de Kilo solo se necesitan si activas una cuenta Kilo.")))))
 	} else {
 		onOpen = append(onOpen, u.uxhModelsRow(key, summary))
 	}
