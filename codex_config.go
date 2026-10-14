@@ -77,10 +77,22 @@ func mergeCodexConfig(data, catalog []byte, port int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// OpenAI-backed desktop tools need the saved ChatGPT session. Keep this
+	// explicit preference when preparing a profile or updating its catalog;
+	// inference still authenticates with KILO_LOCAL_API_KEY. New profiles do
+	// not require a ChatGPT login unless the user opts in.
+	requiresOpenAIAuth := false
+	if raw, exists := provider["requires_openai_auth"]; exists {
+		var ok bool
+		requiresOpenAIAuth, ok = raw.(bool)
+		if !ok {
+			return nil, errors.New("model_providers.kilo-local.requires_openai_auth must be a boolean; no profile changes saved")
+		}
+	}
 	for key, value := range map[string]any{
 		"name": "Kilo Proxy", "base_url": "http://127.0.0.1:" + strconv.Itoa(port) + "/v1",
 		"env_key": "KILO_LOCAL_API_KEY", "env_key_instructions": "Launch Codex Kilo with the command from the Kilo Proxy Codex helper.",
-		"wire_api": "responses", "requires_openai_auth": false, "supports_websockets": false,
+		"wire_api": "responses", "requires_openai_auth": requiresOpenAIAuth, "supports_websockets": false,
 	} {
 		provider[key] = value
 	}
