@@ -278,6 +278,8 @@ func codexXcodeAuth(data []byte, key string) ([]byte, error) {
 	delete(provider, "env_key")
 	delete(provider, "env_key_instructions")
 	provider["experimental_bearer_token"] = key
+	// Xcode keeps local-key-only authentication, even if a copied profile opted in to desktop tools.
+	provider["requires_openai_auth"] = false
 	return editCodexTOML(data, before, after)
 }
 
