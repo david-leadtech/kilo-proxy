@@ -97,14 +97,17 @@ func (u *nativeUI) uxhHarnessPage(key string, s *nativeClientSelection, d uxhDet
 	return u.column(widgets...)
 }
 
-// Muse keeps its native authentication and model picker. It has no Kilo
-// profile to prepare, model pack to assign or proxy credential to export.
+// Muse keeps native Meta state separate from its selected Kilo connection.
 func (u *nativeUI) uxhMuseHarnessPage(widgets []layout.Widget) layout.Widget {
 	const key = "muse"
+	connectionRow := u.museConnectionRow()
+	if !u.museNative() {
+		return u.uxhMuseKiloHarnessPage(widgets, connectionRow)
+	}
 	widgets = append(widgets, u.uxhBlock(u.tr("When opening", "Al abrir"), "",
-		u.uxhFolderRow(key),
-		u.uxhKV(u.tr("Account", "Cuenta"), u.column(u.uxhValue(u.tr("Muse Code · Meta login", "Muse Code · inicio de sesión de Meta")), u.note(u.tr("Sign in through Muse Code. Its existing configuration, login and chats stay with Muse.", "Inicia sesión desde Muse Code. Su configuración, sesión y chats permanecen en Muse.")))),
-		u.uxhKV(u.tr("Models", "Modelos"), u.column(u.uxhValue(u.tr("Official Muse catalog", "Catálogo oficial de Muse")), u.note(u.tr("Choose a model in Muse Code. Kilo's shared models and model packs do not apply to this connection.", "Elige un modelo en Muse Code. Los modelos compartidos y los packs de Kilo no se aplican a esta conexión.")))),
+		u.uxhFolderRow(key), connectionRow,
+		u.uxhKV(u.tr("Account", "Cuenta"), u.column(u.uxhValue(u.tr("Muse Code · Meta login", "Muse Code · inicio de sesión de Meta")), u.note(u.tr("Muse requires its own Meta sign-in. In the Muse terminal, use /login. Your Kilo login does not sign in to Meta. Muse keeps its existing configuration, login and chats.", "Muse requiere su propio inicio de sesión de Meta. Usa /login en Muse. Tu sesión de Kilo no inicia sesión en Meta. Muse conserva su configuración, sesión y chats.")))),
+		u.uxhKV(u.tr("Models", "Modelos"), u.column(u.uxhValue(u.tr("Official Muse catalog", "Catálogo oficial de Muse")), u.note(u.tr("After signing in, use /models in Muse Code to choose a model available to your Meta account. Kilo's shared models and model packs do not configure this catalog.", "Tras iniciar sesión, usa /models en Muse Code para elegir un modelo disponible para tu cuenta de Meta. Los modelos compartidos y los packs de Kilo no configuran este catálogo.")))),
 	))
 	path := u.clientState().LaunchInfo.Clients[key].Path
 	if path == "" {
@@ -136,6 +139,9 @@ func (u *nativeUI) uxhCompatibilityRow(key string) layout.Widget {
 		case "open-design":
 			u.detectOpenDesign()
 		}
+	}
+	if key == "muse" {
+		detect = func() { u.detectLaunchers(); u.refreshMuseProfile() }
 	}
 	if key == "claude" {
 		if u.value("clients-claude-mode") == "" {

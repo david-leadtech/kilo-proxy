@@ -83,6 +83,9 @@ func (u *nativeUI) acceptCLIPreferences(next cliPreferences, discardDraft bool) 
 		}
 	}
 	if changed {
+		u.clientState().Muse.Info.Prepared = false
+		u.clientState().Muse.ProfileRequested = false
+		u.clientState().Muse.ProfileGeneration++
 		u.clientState().OpenDesignChecked, u.clientState().OpenDesignDetectStarted = false, false
 		u.detectOpenDesign()
 		for key, selection := range u.clientState().Selections {
@@ -254,7 +257,7 @@ func (u *nativeUI) cliPreferencesPanel() layout.Widget {
 			rows = append(rows, uxhCell(u.note(u.tr("Resolved executable: ", "Ejecutable detectado: ")+info.Path)))
 		}
 		if client == "muse" {
-			rows = append(rows, uxhCell(u.note(u.tr("Muse Code uses its own Meta login and official models in the terminal and T3 Code. It does not use your Kilo gateway or shared model selection.", "Muse Code usa su propio inicio de sesión de Meta y sus modelos oficiales en la terminal y T3 Code. No usa tu gateway de Kilo ni la selección compartida de modelos."))))
+			rows = append(rows, uxhCell(u.note(u.tr("Choose Kilo shared models or your Meta account in the Muse or T3 Code harness settings. Both use this selected executable, including custom versions.", "Elige los modelos compartidos de Kilo o tu cuenta de Meta en los ajustes del harness Muse o T3 Code. Ambas opciones usan este ejecutable seleccionado, incluidas las versiones personalizadas."))))
 		}
 		if client == "synara" {
 			rows = append(rows, uxhCell(u.note(u.tr("On Linux, select a persistent extracted Synara executable. A raw AppImage can be detected but is not ready to open: install a verified Kilo copy or select the extracted executable. Detection does not verify its source, version or channel. Ubuntu sandbox restrictions still apply.", "En Linux, selecciona un ejecutable de Synara extraído en una ubicación permanente. Un AppImage sin extraer puede detectarse, pero no está listo para abrir: instala una copia Kilo verificada o selecciona el ejecutable extraído. La detección no verifica su origen, versión ni canal. Se mantienen las restricciones del sandbox de Ubuntu."))))

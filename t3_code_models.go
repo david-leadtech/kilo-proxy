@@ -9,9 +9,11 @@ import (
 )
 
 type t3CodeModelPolicy struct {
-	CodexLibrary, ClaudeLibrary, OpenCodeLibrary modelLibrary
-	ClaudeRoutes                                 map[string]string
-	OpenCodeVariantLevels                        map[string][]string
+	CodexLibrary, ClaudeLibrary, OpenCodeLibrary, MuseLibrary modelLibrary
+	ClaudeRoutes                                              map[string]string
+	OpenCodeVariantLevels                                     map[string][]string
+	MuseReasoningLevels                                       map[string][]string
+	MuseReasoningDefaults                                     map[string]string
 }
 
 var t3CodeClaudeGatewayID = regexp.MustCompile(`^anthropic/(claude-(?:opus|sonnet|haiku|fable)-[0-9]+(?:[.-][0-9]+)?)(-[0-9]{8})?$`)
@@ -25,7 +27,7 @@ var t3CodeOfficialClaudeModels = []struct{ Slug, Name string }{
 // Effective selections belong to individual T3 instances. Deriving them never
 // rewrites the shared library or the selections used by other integrations.
 func deriveT3CodeModelPolicy(prefs t3CodePreferences, library modelLibrary, catalog []modelInfo) (t3CodeModelPolicy, error) {
-	result := t3CodeModelPolicy{CodexLibrary: emptyModelLibrary(), ClaudeLibrary: emptyModelLibrary(), OpenCodeLibrary: emptyModelLibrary(), ClaudeRoutes: map[string]string{}, OpenCodeVariantLevels: map[string][]string{}}
+	result := t3CodeModelPolicy{CodexLibrary: emptyModelLibrary(), ClaudeLibrary: emptyModelLibrary(), OpenCodeLibrary: emptyModelLibrary(), MuseLibrary: emptyModelLibrary(), ClaudeRoutes: map[string]string{}, OpenCodeVariantLevels: map[string][]string{}, MuseReasoningLevels: map[string][]string{}, MuseReasoningDefaults: map[string]string{}}
 	prefs = normalizeT3CodePreferences(prefs)
 	if err := validateT3CodePreferences(prefs); err != nil {
 		return result, err
@@ -41,6 +43,17 @@ func deriveT3CodeModelPolicy(prefs t3CodePreferences, library modelLibrary, cata
 		for _, choice := range terminalLibraryChoices(library, catalog) {
 			levels, _ := nativeReasoningFor(choice)
 			result.OpenCodeVariantLevels[choice.Model.ID] = append([]string{}, levels...)
+		}
+	}
+	if t3CodeMuseKiloEnabled(prefs) {
+		if len(library.Models) == 0 {
+			return result, errors.New("Choose shared models before preparing Muse Code with Kilo Proxy.")
+		}
+		result.MuseLibrary = cloneModelLibrary(library)
+		for _, choice := range terminalLibraryChoices(library, catalog) {
+			levels, initial := nativeReasoningFor(choice)
+			result.MuseReasoningLevels[choice.Model.ID] = append([]string{}, levels...)
+			result.MuseReasoningDefaults[choice.Model.ID] = initial
 		}
 	}
 	if prefs.KiloCodex {

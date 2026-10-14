@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-const t3CodeRuntimeRevision = 5
+const t3CodeRuntimeRevision = 6
 const t3CodeRuntimeFileLimit int64 = 32 << 20
 const t3CodeRuntimeTotalLimit int64 = 128 << 20
 
@@ -28,17 +28,19 @@ const t3CodeRuntimeTotalLimit int64 = 128 << 20
 // Its official development-assets contract serves these private public files
 // under the original desktop protocol and original bootstrap/authentication.
 type t3CodePrivateRuntime struct {
-	Revision         int                 `json:"revision"`
-	Root             string              `json:"root"`
-	SourceDigest     string              `json:"sourceDigest"`
-	SourceArchive    string              `json:"sourceArchive"`
-	SourceFiles      map[string]string   `json:"sourceFiles"`
-	Files            map[string]string   `json:"files"`
-	ProvidersAsset   string              `json:"providersAsset"`
-	ModelsAsset      string              `json:"modelsAsset,omitempty"`
-	ModelAllowlist   map[string][]string `json:"modelAllowlist"`
-	ModelDefaults    map[string]string   `json:"modelDefaults"`
-	OpenCodeVariants map[string][]string `json:"openCodeVariants"`
+	Revision              int                 `json:"revision"`
+	Root                  string              `json:"root"`
+	SourceDigest          string              `json:"sourceDigest"`
+	SourceArchive         string              `json:"sourceArchive"`
+	SourceFiles           map[string]string   `json:"sourceFiles"`
+	Files                 map[string]string   `json:"files"`
+	ProvidersAsset        string              `json:"providersAsset"`
+	ModelsAsset           string              `json:"modelsAsset,omitempty"`
+	ModelAllowlist        map[string][]string `json:"modelAllowlist"`
+	ModelDefaults         map[string]string   `json:"modelDefaults"`
+	OpenCodeVariants      map[string][]string `json:"openCodeVariants"`
+	MuseReasoningLevels   map[string][]string `json:"museReasoningLevels"`
+	MuseReasoningDefaults map[string]string   `json:"museReasoningDefaults"`
 }
 
 var t3CodeRuntimeDefaultRow = regexp.MustCompile(`([A-Za-z_$][A-Za-z0-9_$]*)\.push\(\{instanceId:([A-Za-z_$][A-Za-z0-9_$]*),instance:([A-Za-z_$][A-Za-z0-9_$]*),driver:([A-Za-z_$][A-Za-z0-9_$]*),isDefault:!0,isDirty:([A-Za-z_$][A-Za-z0-9_$]*)\}\)`)
@@ -72,7 +74,7 @@ func patchT3CodeProvidersAsset(source []byte) ([]byte, error) {
 func normalizeT3CodeRuntimeModelAllowlist(input map[string][]string) (map[string][]string, error) {
 	result := map[string][]string{}
 	for id, models := range input {
-		if id != t3CodeCodexProxyID && id != t3CodeClaudeProxyID && id != t3CodeOpenCodeProxyID || len(models) > 2048 {
+		if id != t3CodeCodexProxyID && id != t3CodeClaudeProxyID && id != t3CodeOpenCodeProxyID && id != t3CodeMuseProxyID || len(models) > 2048 {
 			return nil, errors.New("Invalid private T3 Code model policy.")
 		}
 		seen := map[string]bool{}
@@ -93,7 +95,7 @@ func normalizeT3CodeRuntimeModelDefaults(defaults map[string]string, policy map[
 	result := map[string]string{}
 	for id, model := range defaults {
 		models, exists := policy[id]
-		if !exists || id != t3CodeCodexProxyID && id != t3CodeClaudeProxyID && id != t3CodeOpenCodeProxyID {
+		if !exists || id != t3CodeCodexProxyID && id != t3CodeClaudeProxyID && id != t3CodeOpenCodeProxyID && id != t3CodeMuseProxyID {
 			return nil, errors.New("Invalid private T3 Code default model account.")
 		}
 		valid := model == "" && len(models) == 0
@@ -127,16 +129,65 @@ func normalizeT3CodeRuntimeOpenCodeVariants(input map[string][]string, policy ma
 	return result, nil
 }
 
+type t3CodeMuseRuntimePolicy struct {
+	Levels   map[string][]string
+	Defaults map[string]string
+}
+
+func normalizeT3CodeRuntimeMusePolicy(input t3CodeMuseRuntimePolicy, policy map[string][]string) (t3CodeMuseRuntimePolicy, error) {
+	result := t3CodeMuseRuntimePolicy{Levels: map[string][]string{}, Defaults: map[string]string{}}
+	allowed := policy[t3CodeMuseProxyID]
+	if len(input.Levels) != len(allowed) || len(input.Defaults) != len(allowed) {
+		return result, errors.New("Invalid private T3 Muse reasoning policy.")
+	}
+	for model, levels := range input.Levels {
+		if !helperContains(allowed, model) || len(levels) > len(nativeReasoningLevels) {
+			return result, errors.New("Invalid private T3 Muse model policy.")
+		}
+		seen := map[string]bool{}
+		result.Levels[model] = []string{}
+		for _, level := range levels {
+			if !helperContains(nativeReasoningLevels, level) || seen[level] {
+				return result, errors.New("Invalid private T3 Muse reasoning level.")
+			}
+			seen[level] = true
+			result.Levels[model] = append(result.Levels[model], level)
+		}
+		initial, present := input.Defaults[model]
+		if !present || (len(levels) == 0 && initial != "") || (len(levels) > 0 && !helperContains(levels, initial)) {
+			return result, errors.New("Invalid private T3 Muse default reasoning level.")
+		}
+		result.Defaults[model] = initial
+	}
+	return result, nil
+}
+
 func t3CodeRuntimeModelFilter(allowlist map[string][]string, defaults map[string]string, requestedVariants ...map[string][]string) []byte {
-	policy, _ := json.Marshal(allowlist)
-	initial, _ := json.Marshal(defaults)
-	variants := map[string][]string{}
-	if len(requestedVariants) > 0 && requestedVariants[0] != nil {
+	var variants map[string][]string
+	if len(requestedVariants) > 0 {
 		variants = requestedVariants[0]
 	}
+	return t3CodeRuntimeModelFilterWithMuse(allowlist, defaults, variants, t3CodeMuseRuntimePolicy{})
+}
+
+func t3CodeRuntimeModelFilterWithMuse(allowlist map[string][]string, defaults map[string]string, variants map[string][]string, muse t3CodeMuseRuntimePolicy) []byte {
+	policy, _ := json.Marshal(allowlist)
+	initial, _ := json.Marshal(defaults)
+	if variants == nil {
+		variants = map[string][]string{}
+	}
+	if muse.Levels == nil {
+		muse.Levels = map[string][]string{}
+	}
+	if muse.Defaults == nil {
+		muse.Defaults = map[string]string{}
+	}
 	variantJSON, _ := json.Marshal(variants)
+	museLevels, _ := json.Marshal(muse.Levels)
+	museDefaults, _ := json.Marshal(muse.Defaults)
 	return []byte(`function __kiloT3OpenCodeVariants(model){const variants=` + string(variantJSON) + `,allowed=variants[model.slug]??[],cap=model.capabilities;if(!cap||!Array.isArray(cap.optionDescriptors))return model;let changed=false;const descriptors=cap.optionDescriptors.flatMap(descriptor=>{if(descriptor.id!=="variant")return [descriptor];changed=true;const options=Array.isArray(descriptor.options)?descriptor.options.filter(option=>allowed.includes(option.id)):[];if(options.length===0)return [];const result={...descriptor,options};if(Object.prototype.hasOwnProperty.call(result,"currentValue")&&!allowed.includes(result.currentValue))delete result.currentValue;return [result];});return changed?{...model,capabilities:{...cap,optionDescriptors:descriptors}}:model;}
-function __kiloT3InstanceModels(id,driver,models){const policy=` + string(policy) + `,defaults=` + string(initial) + `;const expected=id==="` + t3CodeCodexProxyID + `"?"codex":id==="` + t3CodeClaudeProxyID + `"?"claudeAgent":id==="` + t3CodeOpenCodeProxyID + `"?"opencode":null;if(expected===null||expected!==driver||!Object.prototype.hasOwnProperty.call(policy,id))return models;return Array.isArray(models)?models.filter(model=>policy[id].includes(model.slug)).map(model=>id==="` + t3CodeOpenCodeProxyID + `"?__kiloT3OpenCodeVariants(model):model).map(model=>defaults[id]&&((model.isDefault===true)!==(model.slug===defaults[id]))?{...model,isDefault:model.slug===defaults[id]}:model):models;}` + "\n" + `function __kiloT3InstanceSnapshot(snapshot){const models=__kiloT3InstanceModels(snapshot.instanceId,snapshot.driver,snapshot.models);return models===snapshot.models?snapshot:{...snapshot,models};}` + "\n")
+function __kiloT3MuseReasoning(model){const levels=` + string(museLevels) + `,defaults=` + string(museDefaults) + `,allowed=levels[model.slug]??[],initial=defaults[model.slug],cap=model.capabilities;if(!cap||!Array.isArray(cap.optionDescriptors))return model;let changed=false;const descriptors=cap.optionDescriptors.flatMap(descriptor=>{if(descriptor.id!=="reasoningEffort")return [descriptor];changed=true;if(descriptor.type!=="select")return [];const options=Array.isArray(descriptor.options)?descriptor.options.filter(option=>allowed.includes(option.id)).map(option=>{const result={...option};delete result.isDefault;if(option.id===initial)result.isDefault=true;return result;}):[];if(options.length===0)return [];const result={...descriptor,options};if(options.some(option=>option.id===initial))result.currentValue=initial;else delete result.currentValue;return [result];});return changed?{...model,capabilities:{...cap,optionDescriptors:descriptors}}:model;}
+function __kiloT3InstanceModels(id,driver,models){const policy=` + string(policy) + `,defaults=` + string(initial) + `;const expected=id==="` + t3CodeCodexProxyID + `"?"codex":id==="` + t3CodeClaudeProxyID + `"?"claudeAgent":id==="` + t3CodeOpenCodeProxyID + `"?"opencode":id==="` + t3CodeMuseProxyID + `"?"muse":null;if(expected===null||expected!==driver||!Object.prototype.hasOwnProperty.call(policy,id))return models;return Array.isArray(models)?models.filter(model=>policy[id].includes(model.slug)).map(model=>id==="` + t3CodeOpenCodeProxyID + `"?__kiloT3OpenCodeVariants(model):id==="` + t3CodeMuseProxyID + `"?__kiloT3MuseReasoning(model):model).map(model=>defaults[id]&&((model.isDefault===true)!==(model.slug===defaults[id]))?{...model,isDefault:model.slug===defaults[id]}:model):models;}` + "\n" + `function __kiloT3InstanceSnapshot(snapshot){const models=__kiloT3InstanceModels(snapshot.instanceId,snapshot.driver,snapshot.models);return models===snapshot.models?snapshot:{...snapshot,models};}` + "\n")
 }
 
 var t3CodeRuntimeModelsProjection = regexp.MustCompile(`snapshot:([A-Za-z_$][A-Za-z0-9_$]*),models:([A-Za-z_$][A-Za-z0-9_$]*)\.models`)
@@ -188,6 +239,10 @@ func patchT3CodeModelsProjection(source []byte, policy map[string][]string, defa
 }
 
 func patchT3CodeModelsProjectionWithVariants(source []byte, policy map[string][]string, initial map[string]string, variants map[string][]string) ([]byte, error) {
+	return patchT3CodeModelsProjectionWithMuse(source, policy, initial, variants, t3CodeMuseRuntimePolicy{})
+}
+
+func patchT3CodeModelsProjectionWithMuse(source []byte, policy map[string][]string, initial map[string]string, variants map[string][]string, muse t3CodeMuseRuntimePolicy) ([]byte, error) {
 	matches := t3CodeRuntimeModelsProjection.FindAllSubmatchIndex(source, -1)
 	if len(matches) != 1 || bytes.Contains(source, []byte("__kiloT3InstanceModels")) {
 		return nil, errors.New("This T3 Code model picker has an incompatible instance projection.")
@@ -216,7 +271,7 @@ func patchT3CodeModelsProjectionWithVariants(source []byte, policy map[string][]
 	m = t3CodeRuntimeModelsProjection.FindSubmatchIndex(labelSource)
 	filter := fmt.Sprintf("__kiloT3InstanceModels(%s.instanceId,%s.driver,%s.models)", snapshot, snapshot, snapshot)
 	replacement := []byte("snapshot:__kiloT3InstanceSnapshot(" + snapshot + "),models:" + filter)
-	result := append(t3CodeRuntimeModelFilter(policy, initial, variants), labelSource[:m[0]]...)
+	result := append(t3CodeRuntimeModelFilterWithMuse(policy, initial, variants, muse), labelSource[:m[0]]...)
 	result = append(result, replacement...)
 	return append(result, labelSource[m[1]:]...), nil
 }
@@ -230,6 +285,10 @@ func patchT3CodeModelsCard(source []byte, policy map[string][]string, defaults .
 }
 
 func patchT3CodeModelsCardWithVariants(source []byte, policy map[string][]string, initial map[string]string, variants map[string][]string) ([]byte, error) {
+	return patchT3CodeModelsCardWithMuse(source, policy, initial, variants, t3CodeMuseRuntimePolicy{})
+}
+
+func patchT3CodeModelsCardWithMuse(source []byte, policy map[string][]string, initial map[string]string, variants map[string][]string, muse t3CodeMuseRuntimePolicy) ([]byte, error) {
 	matches := t3CodeRuntimeModelsCard.FindAllSubmatchIndex(source, -1)
 	if len(matches) != 1 || bytes.Contains(source, []byte("__kiloT3InstanceModels")) {
 		return nil, errors.New("This T3 Code Models settings interface has an incompatible contract.")
@@ -249,13 +308,13 @@ func patchT3CodeModelsCardWithVariants(source []byte, policy map[string][]string
 	}
 	id, instance := string(arguments[0][1]), string(arguments[0][2])
 	replacement := fmt.Sprintf("liveModels:__kiloT3InstanceModels(%s,%s.driver,%s?.models),customModels:__kiloT3InstanceModels(%s,%s.driver,%s)", id, instance, live, id, instance, custom)
-	result := append(t3CodeRuntimeModelFilter(policy, initial, variants), source[:m[0]]...)
+	result := append(t3CodeRuntimeModelFilterWithMuse(policy, initial, variants, muse), source[:m[0]]...)
 	result = append(result, []byte(replacement)...)
 	return append(result, source[m[1]:]...), nil
 }
 
 func t3CodeRuntimeIdentity(record t3CodePrivateRuntime) []byte {
-	identity, _ := json.Marshal([]any{record.Revision, record.SourceDigest, record.SourceArchive, record.SourceFiles, record.ModelAllowlist, record.ModelDefaults, record.OpenCodeVariants})
+	identity, _ := json.Marshal([]any{record.Revision, record.SourceDigest, record.SourceArchive, record.SourceFiles, record.ModelAllowlist, record.ModelDefaults, record.OpenCodeVariants, record.MuseReasoningLevels, record.MuseReasoningDefaults})
 	return identity
 }
 
@@ -277,6 +336,11 @@ func validT3CodeRuntimeRoot(record t3CodePrivateRuntime, privateRoot string) boo
 	if err != nil {
 		return false
 	}
+	muse, err := normalizeT3CodeRuntimeMusePolicy(t3CodeMuseRuntimePolicy{Levels: record.MuseReasoningLevels, Defaults: record.MuseReasoningDefaults}, policy)
+	if err != nil {
+		return false
+	}
+	record.MuseReasoningLevels, record.MuseReasoningDefaults = muse.Levels, muse.Defaults
 	record.ModelAllowlist = policy
 	expected := filepath.Join(privateRoot, "runtime-web", openDesignHash(t3CodeRuntimeIdentity(record)))
 	return record.Root == expected && safeLaunchDir(privateRoot, filepath.Dir(privateRoot)) && safeLaunchDir(record.Root, privateRoot)
@@ -384,6 +448,17 @@ func prepareT3CodeRuntime(privateRoot, executable, platform string, allowlists .
 }
 
 func prepareT3CodeRuntimeWithModelDefaults(privateRoot, executable, platform string, input map[string][]string, requestedDefaults map[string]string, requestedVariants ...map[string][]string) (t3CodePrivateRuntime, error) {
+	if len(requestedVariants) > 1 {
+		return t3CodePrivateRuntime{}, errors.New("Ambiguous private T3 OpenCode variant policy.")
+	}
+	var variants map[string][]string
+	if len(requestedVariants) == 1 {
+		variants = requestedVariants[0]
+	}
+	return prepareT3CodeRuntimeWithMuse(privateRoot, executable, platform, input, requestedDefaults, variants, t3CodeMuseRuntimePolicy{})
+}
+
+func prepareT3CodeRuntimeWithMuse(privateRoot, executable, platform string, input map[string][]string, requestedDefaults map[string]string, variantInput map[string][]string, requestedMuse t3CodeMuseRuntimePolicy) (t3CodePrivateRuntime, error) {
 	var result t3CodePrivateRuntime
 	policy, err := normalizeT3CodeRuntimeModelAllowlist(input)
 	if err != nil {
@@ -393,14 +468,11 @@ func prepareT3CodeRuntimeWithModelDefaults(privateRoot, executable, platform str
 	if err != nil {
 		return result, err
 	}
-	var variantInput map[string][]string
-	if len(requestedVariants) > 1 {
-		return result, errors.New("Ambiguous private T3 OpenCode variant policy.")
-	}
-	if len(requestedVariants) == 1 {
-		variantInput = requestedVariants[0]
-	}
 	variants, err := normalizeT3CodeRuntimeOpenCodeVariants(variantInput, policy)
+	if err != nil {
+		return result, err
+	}
+	muse, err := normalizeT3CodeRuntimeMusePolicy(requestedMuse, policy)
 	if err != nil {
 		return result, err
 	}
@@ -417,7 +489,7 @@ func prepareT3CodeRuntimeWithModelDefaults(privateRoot, executable, platform str
 	if err != nil {
 		return result, err
 	}
-	result = t3CodePrivateRuntime{Revision: t3CodeRuntimeRevision, SourceDigest: installation.SourceDigest, SourceArchive: archive.file.Name(), ModelAllowlist: policy, ModelDefaults: defaults, OpenCodeVariants: variants, Files: map[string]string{}, SourceFiles: map[string]string{}}
+	result = t3CodePrivateRuntime{Revision: t3CodeRuntimeRevision, SourceDigest: installation.SourceDigest, SourceArchive: archive.file.Name(), ModelAllowlist: policy, ModelDefaults: defaults, OpenCodeVariants: variants, MuseReasoningLevels: muse.Levels, MuseReasoningDefaults: muse.Defaults, Files: map[string]string{}, SourceFiles: map[string]string{}}
 	for name, data := range files {
 		result.SourceFiles[name] = openDesignHash(data)
 		if strings.HasPrefix(name, "assets/settings.providers-") && strings.HasSuffix(name, ".js") {
@@ -429,7 +501,7 @@ func prepareT3CodeRuntimeWithModelDefaults(privateRoot, executable, platform str
 				return t3CodePrivateRuntime{}, err
 			}
 			if len(policy) > 0 {
-				patched, err = patchT3CodeModelsCardWithVariants(patched, policy, defaults, variants)
+				patched, err = patchT3CodeModelsCardWithMuse(patched, policy, defaults, variants, muse)
 				if err != nil {
 					return t3CodePrivateRuntime{}, err
 				}
@@ -445,7 +517,7 @@ func prepareT3CodeRuntimeWithModelDefaults(privateRoot, executable, platform str
 			if result.ModelsAsset != "" {
 				return t3CodePrivateRuntime{}, errors.New("Ambiguous T3 Code instance model projection assets.")
 			}
-			patched, err := patchT3CodeModelsProjectionWithVariants(data, policy, defaults, variants)
+			patched, err := patchT3CodeModelsProjectionWithMuse(data, policy, defaults, variants, muse)
 			if err != nil {
 				return t3CodePrivateRuntime{}, err
 			}
@@ -548,6 +620,9 @@ func verifyT3CodeRuntimeFiles(runtime t3CodePrivateRuntime) bool {
 	if _, err := normalizeT3CodeRuntimeOpenCodeVariants(runtime.OpenCodeVariants, runtime.ModelAllowlist); err != nil {
 		return false
 	}
+	if _, err := normalizeT3CodeRuntimeMusePolicy(t3CodeMuseRuntimePolicy{Levels: runtime.MuseReasoningLevels, Defaults: runtime.MuseReasoningDefaults}, runtime.ModelAllowlist); err != nil {
+		return false
+	}
 	if len(runtime.ModelAllowlist) > 0 && (runtime.ModelsAsset == "" || runtime.Files[runtime.ModelsAsset] == "") {
 		return false
 	}
@@ -582,6 +657,7 @@ func t3CodeRuntimeReady(runtime t3CodePrivateRuntime, executable, platform strin
 	if err != nil || len(files) != len(runtime.SourceFiles) {
 		return false
 	}
+	muse := t3CodeMuseRuntimePolicy{Levels: runtime.MuseReasoningLevels, Defaults: runtime.MuseReasoningDefaults}
 	for name, data := range files {
 		if openDesignHash(data) != runtime.SourceFiles[name] {
 			return false
@@ -590,14 +666,14 @@ func t3CodeRuntimeReady(runtime t3CodePrivateRuntime, executable, platform strin
 		if name == runtime.ProvidersAsset {
 			expected, err = patchT3CodeProvidersAsset(data)
 			if err == nil && len(runtime.ModelAllowlist) > 0 {
-				expected, err = patchT3CodeModelsCardWithVariants(expected, runtime.ModelAllowlist, runtime.ModelDefaults, runtime.OpenCodeVariants)
+				expected, err = patchT3CodeModelsCardWithMuse(expected, runtime.ModelAllowlist, runtime.ModelDefaults, runtime.OpenCodeVariants, muse)
 			}
 			if err != nil {
 				return false
 			}
 		}
 		if name == runtime.ModelsAsset {
-			expected, err = patchT3CodeModelsProjectionWithVariants(data, runtime.ModelAllowlist, runtime.ModelDefaults, runtime.OpenCodeVariants)
+			expected, err = patchT3CodeModelsProjectionWithMuse(data, runtime.ModelAllowlist, runtime.ModelDefaults, runtime.OpenCodeVariants, muse)
 			if err != nil {
 				return false
 			}

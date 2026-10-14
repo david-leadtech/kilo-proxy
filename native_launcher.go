@@ -183,6 +183,12 @@ func (u *nativeUI) launchSettingsFingerprintWithPreferences(key, directoryField 
 		if includePreferences {
 			prefs := &u.clientState().CLIPreferences
 			values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation, u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")), u.value(nativeCLIPathField("muse")))
+			muse := &u.clientState().Muse
+			values = append(values, muse.Loaded, muse.Preferences, muse.Pending, muse.Generation)
+			if !u.museNative() {
+				u.initModelLibrary()
+				values = append(values, u.modelLibraryValue(), u.launchConnectionFingerprint())
+			}
 		}
 		data, _ := json.Marshal(values)
 		return sha256.Sum256(data)
@@ -348,6 +354,10 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 			u.noticeError(err)
 			return
 		}
+		if err := u.t3CodeMuseConnectionError(); err != nil {
+			u.noticeError(err)
+			return
+		}
 	}
 	nativeT3 := key == "t3-code" && u.t3CodeNativeOnly()
 	if err := u.packReadinessError(key); !nativeT3 && err != nil {
@@ -475,8 +485,8 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 	u.prepareClientAfter(key, launch)
 }
 
-// Muse launches the native Meta CLI without preparing a Kilo model profile or
-// starting the proxy. Confirm its selected executable before the process API.
+// Confirm Muse's connection and selected executable before and after preparing
+// its Kilo profile. Native Meta keeps its own profile and bypasses the proxy.
 func (u *nativeUI) launchMuseFrom(directoryField string) {
 	const key = "muse"
 	a, c := u.agentsState(), u.clientState()
@@ -502,6 +512,31 @@ func (u *nativeUI) launchMuseFrom(directoryField string) {
 			}
 			u.launchMuseFrom(directoryField)
 		})
+		return
+	}
+	if c.Muse.Pending != nil || u.busy["GET"+nativeMusePreferencesEndpoint] || u.busy["POST"+nativeMusePreferencesEndpoint] {
+		u.noticeError(errors.New(u.launchSettingsChangedMessage()))
+		return
+	}
+	if !c.Muse.Loaded {
+		before := u.launchSettingsFingerprintWithPreferences(key, directoryField, false)
+		c.Launching = key
+		u.refreshMusePreferencesAfter(func(err error) {
+			c.Launching = ""
+			if err != nil {
+				u.noticeError(err)
+				return
+			}
+			if before != u.launchSettingsFingerprintWithPreferences(key, directoryField, false) {
+				u.noticeError(errors.New(u.launchSettingsChangedMessage()))
+				return
+			}
+			u.launchMuseFrom(directoryField)
+		})
+		return
+	}
+	if reason := u.museReadinessReason(); reason != "" {
+		u.noticeError(errors.New(reason))
 		return
 	}
 	if !u.nativeLaunchAvailable(key) {
@@ -531,17 +566,24 @@ func (u *nativeUI) launchMuseFrom(directoryField string) {
 			u.noticeError(err)
 		}
 	}
-	u.verifyCLIPreferencesAfter(expected, func(err error) {
-		if err != nil {
-			finish(err)
-			return
-		}
-		if prepared != u.launchSettingsFingerprint(key, directoryField) {
-			finish(errors.New(u.launchSettingsChangedMessage()))
-			return
-		}
+	musePreferences := c.Muse.Preferences
+	verify := func(done func(error)) {
+		u.verifyMusePreferencesAfter(musePreferences, func(err error) {
+			if err != nil {
+				done(err)
+				return
+			}
+			u.verifyCLIPreferencesAfter(expected, func(err error) {
+				if err == nil && prepared != u.launchSettingsFingerprint(key, directoryField) {
+					err = errors.New(u.launchSettingsChangedMessage())
+				}
+				done(err)
+			})
+		})
+	}
+	launch := func() {
 		a.Phase = u.tr("Opening…", "Abriendo…")
-		u.clientRequest("POST", nativeLaunchEndpoint, map[string]string{"client": key, "directory": directory, "museExecutable": executable}, func(raw json.RawMessage, err error) {
+		u.clientRequest("POST", nativeLaunchEndpoint, map[string]string{"client": key, "directory": directory, "museExecutable": executable, "museConnection": musePreferences.Connection}, func(raw json.RawMessage, err error) {
 			if err != nil {
 				finish(err)
 				return
@@ -562,8 +604,28 @@ func (u *nativeUI) launchMuseFrom(directoryField string) {
 			u.uxhNoteOpened(key, resolvedDirectory)
 			u.setNotice(nativeToneWarning, result.Message)
 			if u.notice == "" {
-				u.setNotice(nativeToneSuccess, u.tr("Muse Code opened with its own login and models.", "Muse Code abierto con su propio inicio de sesión y modelos."))
+				u.setNotice(nativeToneSuccess, u.museOpenedMessage())
 			}
+		})
+	}
+	verify(func(err error) {
+		if err != nil {
+			finish(err)
+			return
+		}
+		a.Phase = u.tr("Preparing Muse…", "Preparando Muse…")
+		u.prepareMuseAfter(executable, func(err error) {
+			if err != nil {
+				finish(err)
+				return
+			}
+			verify(func(err error) {
+				if err != nil {
+					finish(err)
+					return
+				}
+				launch()
+			})
 		})
 	})
 }

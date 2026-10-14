@@ -70,7 +70,7 @@ func (a *app) adminHandler() http.Handler {
 			files.ServeHTTP(w, r)
 			return
 		}
-		if r.URL.Path == "/t3-code-helper.mjs" && r.Method == http.MethodGet {
+		if (r.URL.Path == "/t3-code-helper.mjs" || r.URL.Path == "/muse-helper.mjs") && r.Method == http.MethodGet {
 			files.ServeHTTP(w, r)
 			return
 		}
@@ -120,6 +120,14 @@ func (a *app) adminHandler() http.Handler {
 		}
 		if r.URL.Path == cliPreferencesEndpoint {
 			a.cliPreferencesAPI(w, r)
+			return
+		}
+		if r.URL.Path == musePreferencesEndpoint {
+			a.musePreferencesAPI(w, r)
+			return
+		}
+		if r.URL.Path == museProfileEndpoint {
+			a.museProfileAPI(w, r)
 			return
 		}
 		if r.URL.Path == "/api/clients/opencode2" {

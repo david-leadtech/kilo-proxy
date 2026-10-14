@@ -40,6 +40,9 @@ func planT3CodeOptionalProviders(prefs t3CodePreferences, installation t3CodeIns
 		}
 		environment := t3CodeOptionalProviderEnvironment(rt.home, os.Environ(), rt.platform)
 		if selected[provider.ID] && provider.ID == "muse" {
+			if t3CodeMuseKiloEnabled(prefs) && !installation.MuseKiloSupported {
+				return nil, errors.New("This T3 Code installation cannot isolate the Muse Code Kilo account. Update T3 Code or choose its native Meta account.")
+			}
 			if rt.resolve == nil {
 				return nil, errors.New("Cannot resolve the selected Muse Code executable.")
 			}
@@ -89,7 +92,7 @@ func planT3CodeOptionalProviders(prefs t3CodePreferences, installation t3CodeIns
 		}
 		// Writing disabled slots is deliberate: absent slots are synthesized by
 		// upstream, so omission alone would not enforce the user's opt-in choice.
-		enabled := selected[provider.ID] && !(provider.ID == "opencode" && t3CodeOpenCodeKiloEnabled(prefs))
+		enabled := selected[provider.ID] && !(provider.ID == "opencode" && t3CodeOpenCodeKiloEnabled(prefs)) && !(provider.ID == "muse" && t3CodeMuseKiloEnabled(prefs))
 		result[provider.ID] = map[string]any{"driver": provider.ID, "displayName": provider.Label, "enabled": enabled, "config": config, "environment": environment}
 	}
 	return result, nil

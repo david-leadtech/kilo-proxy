@@ -66,6 +66,7 @@ type app struct {
 	cliPathsMu                sync.RWMutex
 	cliExecutables            [2]string
 	museExecutable            string
+	museVersionProbe          func(string) (string, error) // Synthetic fixtures only.
 	synaraExecutable          string
 	t3CodeProbeClaude         func(string, clientLaunchRuntime) claudeCapabilities // Synthetic test fixtures only.
 	t3CodeCheckRunning        func(string) (bool, error)
@@ -260,9 +261,22 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 			return
 		}
 		bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || !secureEqual(bearer, localKey) {
+		museScope := museProxyScope(bearer, localKey)
+		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || museScope == "" && !secureEqual(bearer, localKey) {
 			jsonError(w, http.StatusUnauthorized, "API key local incorrecta. Cópiala desde Kilo Proxy.")
 			return
+		}
+		if museScope != "" {
+			if museCatalogPath(r) {
+				jsonError(w, http.StatusNotFound, "Use the private Muse Code model catalogue prepared by Kilo Proxy.")
+				return
+			}
+			if !museInferencePath(r, museScope) {
+				jsonError(w, http.StatusNotFound, "This credential is scoped to its Muse Code connection.")
+				return
+			}
+			r = r.Clone(context.WithValue(r.Context(), museRequestScopeKey{}, museScope))
+			r.URL.Path = "/v1/responses"
 		}
 		if r.URL.Path == "/mcp/images" && r.URL.RawPath == "" && r.URL.RawQuery == "" {
 			a.imageMCPHandler(w, r, key, orgID, localKey)
@@ -307,6 +321,9 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 		recorder := &statusWriter{ResponseWriter: w, status: http.StatusOK, capture: capture}
 		w = recorder
 		if capture != nil {
+			if museScope != "" {
+				capture.addSecrets(museProxyToken(localKey, museScope))
+			}
 			r = r.WithContext(context.WithValue(r.Context(), traceContextKey{}, capture))
 			if r.Body != nil {
 				r.Body = &traceReader{r.Body, &capture.request}
@@ -362,6 +379,22 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
+		if scope, _ := r.Context().Value(museRequestScopeKey{}).(string); scope != "" {
+			library, catalog, err := a.museScopeLibrary(scope)
+			if err != nil {
+				jsonError(w, http.StatusConflict, err.Error())
+				return
+			}
+			if err = prepareMuseModelRequest(r, library, catalog); err != nil {
+				status := http.StatusBadRequest
+				var oversized *http.MaxBytesError
+				if errors.As(err, &oversized) {
+					status = http.StatusRequestEntityTooLarge
+				}
+				jsonError(w, status, err.Error())
+				return
+			}
+		}
 		if err := a.prepareOpenMausBotReasoning(r); err != nil {
 			status := http.StatusBadRequest
 			var oversized *http.MaxBytesError

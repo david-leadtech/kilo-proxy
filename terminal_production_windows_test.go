@@ -105,6 +105,7 @@ func main() {
 		t.Fatal(err)
 	}
 	config.MuseCodeExecutable = filepath.Join(bin, "muse.exe")
+	config.MuseCode = musePreferences{Version: 1, Connection: "native"}
 	if err := writeSettings(a.dir, config); err != nil {
 		t.Fatal(err)
 	}

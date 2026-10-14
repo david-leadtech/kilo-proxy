@@ -22,6 +22,7 @@ type t3CodeInstallation struct {
 	SupportedProviders    []t3CodeProviderSupport
 	OpenCode2Supported    bool
 	OpenCodeKiloSupported bool
+	MuseKiloSupported     bool
 }
 
 type t3CodePackageMetadata struct{ Name, Version, Main string }
@@ -196,6 +197,7 @@ func inspectT3CodeInstallation(executable, platform string) (t3CodeInstallation,
 	result.ClaudeModelDefaults = result.ProtocolV2
 	result.SupportedProviders, result.OpenCode2Supported = t3CodeOptionalProviderCapabilities(string(server))
 	result.OpenCodeKiloSupported = t3CodeOpenCodeKiloSupported(string(server))
+	result.MuseKiloSupported = t3CodeMuseKiloSupported(string(server))
 	seen := map[string]bool{}
 	for _, match := range t3CodePackagedClaudeSlug.FindAllSubmatch(server, -1) {
 		slug := string(match[1])
@@ -466,4 +468,88 @@ func t3CodeDiscoveredCandidates(platform, home, localAppData string) []string {
 		}
 	}
 	return result
+}
+
+// A Kilo Muse instance needs the live native driver to carry its private
+// environment into discovery, interactive sessions and background generation.
+// Labels, commented examples and a generic multiple-instance flag are not enough.
+func t3CodeMuseKiloSupported(source string) bool {
+	providers, _ := t3CodeOptionalProviderCapabilities(source)
+	found := false
+	for _, provider := range providers {
+		found = found || provider.ID == "muse"
+	}
+	if !found {
+		return false
+	}
+	code := t3CodeContractCode(source)
+	registry := regexp.MustCompile(`(?s)const\s+BUILT_IN_DRIVERS\s*=\s*\[(.*?)\n\];`).FindAllStringSubmatch(code, -1)
+	if len(registry) != 1 || !regexp.MustCompile(`\bMuseDriver\s*,`).MatchString(registry[0][1]) {
+		return false
+	}
+	declarations := regexp.MustCompile(`(?m)^const\s+MuseDriver\s*=\s*\{`).FindAllStringIndex(code, -1)
+	if len(declarations) != 1 {
+		return false
+	}
+	body, ok := t3CodeContractBody(code, declarations[0][1]-1)
+	if !ok || !regexp.MustCompile(`(?s)metadata:\s*\{[^{}]*\bsupportsMultipleInstances:\s*true\b`).MatchString(body) || !regexp.MustCompile(`configSchema:\s*MuseSettings\s*,`).MatchString(body) || !regexp.MustCompile(`create:\s*\(\{[^{}]*\benvironment\b[^{}]*\}\)\s*=>`).MatchString(body) {
+		return false
+	}
+	kind := regexp.MustCompile(`driverKind:\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*,`).FindStringSubmatch(body)
+	if len(kind) != 2 {
+		return false
+	}
+	kinds := regexp.MustCompile(`const\s+`+regexp.QuoteMeta(kind[1])+`\s*=\s*ProviderDriverKind\.make\(["']muse["']\);`).FindAllStringIndex(source, -1)
+	liveKinds := 0
+	for _, binding := range kinds {
+		if strings.HasPrefix(code[binding[0]:], "const") {
+			liveKinds++
+		}
+	}
+	if liveKinds != 1 {
+		return false
+	}
+	merged := regexp.MustCompile(`const\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*yield\*\s+(mergeProviderInstanceEnvironment[A-Za-z0-9_$]*)\(environment,\s*makeMuseEnvironment\(hostEnvironment\)\)`).FindStringSubmatch(body)
+	if len(merged) != 3 {
+		return false
+	}
+	env := regexp.QuoteMeta(merged[1])
+	if !regexp.MustCompile(`checkMuseProviderStatus\([^,]+,\s*` + env + `,\s*cwd\)`).MatchString(body) {
+		return false
+	}
+	for _, call := range []string{`makeMuseAdapterV2\(\{`, `makeMuseTextGeneration\([^,]+,\s*\{`} {
+		calls := regexp.MustCompile(call).FindAllStringIndex(body, -1)
+		if len(calls) != 1 {
+			return false
+		}
+		options, valid := t3CodeContractBody(body, calls[0][1]-1)
+		if !valid || !regexp.MustCompile(`\benvironment:\s*`+env+`\b`).MatchString(options) {
+			return false
+		}
+	}
+	mergers := regexp.MustCompile(`const\s+`+regexp.QuoteMeta(merged[2])+`\s*=\s*(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?fn[A-Za-z0-9_$]*\(function\*\s*\(environment,\s*baseEnv\s*=\s*process\.env\)\s*\{`).FindAllStringIndex(code, -1)
+	if len(mergers) != 1 {
+		return false
+	}
+	mergeBody, ok := t3CodeContractBody(code, mergers[0][1]-1)
+	if !ok {
+		return false
+	}
+	copy := regexp.MustCompile(`const\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*\{\s*\.\.\.baseEnv\s*\}`).FindStringSubmatch(mergeBody)
+	loop := regexp.MustCompile(`for\s*\(const\s+([A-Za-z_$][A-Za-z0-9_$]*)\s+of\s+environment\)`).FindStringSubmatch(mergeBody)
+	if len(copy) != 2 || len(loop) != 2 {
+		return false
+	}
+	next, variable := regexp.QuoteMeta(copy[1]), regexp.QuoteMeta(loop[1])
+	assignment := regexp.MustCompile(next + `\[` + variable + `\.name\]\s*=\s*` + variable + `\.value\b`).MatchString(mergeBody)
+	// Current T3 expands only the two native CLI homes before assigning every
+	// other instance variable unchanged. An unrelated variable.value is not proof.
+	rawBody := source[mergers[0][1]-1 : mergers[0][1]-1+len(mergeBody)]
+	conditional := regexp.MustCompile(next+`\[`+variable+`\.name\]\s*=\s*`+variable+`\.name\s*===\s*"CODEX_HOME"\s*\|\|\s*`+variable+`\.name\s*===\s*"CLAUDE_CONFIG_DIR"\s*\?\s*expandHomePath\(`+variable+`\.value,\s*home\)\s*:\s*`+variable+`\.value\s*;`).FindAllStringIndex(rawBody, -1)
+	for _, match := range conditional {
+		if strings.HasPrefix(mergeBody[match[0]:], copy[1]+"[") {
+			assignment = true
+		}
+	}
+	return assignment && regexp.MustCompile(`\breturn\s+`+next+`\b`).MatchString(mergeBody)
 }

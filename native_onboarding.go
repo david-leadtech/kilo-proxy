@@ -66,6 +66,10 @@ func (u *nativeUI) connectionHasKey() bool {
 }
 
 func (u *nativeUI) connectionWorking() bool {
+	return u.connectionWorkingExceptLaunch("")
+}
+
+func (u *nativeUI) connectionWorkingExceptLaunch(client string) bool {
 	if u.chatGPTRequestBusy() {
 		return true
 	}
@@ -74,7 +78,7 @@ func (u *nativeUI) connectionWorking() bool {
 			return true
 		}
 	}
-	if u.clients != nil && u.clients.Launching != "" {
+	if u.clients != nil && u.clients.Launching != "" && u.clients.Launching != client {
 		return true
 	}
 	auth := nativeString(nativeMap(u.state["auth"]), "status")

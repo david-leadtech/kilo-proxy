@@ -125,6 +125,24 @@ func newNativeUpdateFixture(t *testing.T, language string, size image.Point) *na
 				return
 			}
 			jsonResponse(w, 200, cliPreferences{Version: 1})
+		case nativeMusePreferencesEndpoint:
+			f.mu.Unlock()
+			if r.Method != http.MethodGet {
+				t.Errorf("update fixture attempted to change Muse preferences: %s", r.Method)
+				jsonError(w, 405, "read-only fixture")
+				return
+			}
+			jsonResponse(w, 200, map[string]any{"preferences": normalizeMusePreferences(musePreferences{})})
+		case nativeMuseEndpoint:
+			f.mu.Unlock()
+			if r.Method != http.MethodGet {
+				t.Errorf("update fixture attempted to prepare Muse: %s", r.Method)
+				jsonError(w, 405, "read-only fixture")
+				return
+			}
+			// The fixture has no Muse installation. Describe only readiness;
+			// never resolve, probe, prepare or launch an application here.
+			jsonResponse(w, 200, museProfileInfo{Preferences: normalizeMusePreferences(musePreferences{}), Library: emptyModelLibrary(), EffectiveModels: []museModelSummary{}})
 		default:
 			f.mu.Unlock()
 			t.Errorf("unexpected request in isolated update fixture: %s %s", r.Method, r.URL.Path)

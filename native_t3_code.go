@@ -21,6 +21,7 @@ type nativeT3CodeInfo struct {
 	EffectiveCodexModels    []nativeT3CodeModelSummary `json:"effectiveCodexModels"`
 	EffectiveClaudeModels   []nativeT3CodeModelSummary `json:"effectiveClaudeModels"`
 	EffectiveOpenCodeModels []nativeT3CodeModelSummary `json:"effectiveOpenCodeModels"`
+	EffectiveMuseModels     []nativeT3CodeModelSummary `json:"effectiveMuseModels"`
 }
 
 type nativeT3CodeState struct {
@@ -37,7 +38,7 @@ type nativeT3CodeState struct {
 // Older or unloaded responses retain the existing Kilo readiness checks.
 func (u *nativeUI) t3CodeNativeOnly() bool {
 	prefs := &u.agentsState().T3Code.PreferencesState
-	return prefs.Loaded && validNativeT3CodePreferences(prefs.Preferences) && !prefs.Preferences.KiloCodex && !prefs.Preferences.KiloClaude && !nativeT3OpenCodeUsesKilo(prefs.Preferences)
+	return prefs.Loaded && validNativeT3CodePreferences(prefs.Preferences) && !prefs.Preferences.KiloCodex && !prefs.Preferences.KiloClaude && !nativeT3OpenCodeUsesKilo(prefs.Preferences) && !nativeT3MuseUsesKilo(prefs.Preferences)
 }
 
 func (u *nativeUI) acceptT3CodeProfile(data json.RawMessage, connection [32]byte) {
@@ -118,6 +119,9 @@ func (u *nativeUI) t3CodeDetail(s *nativeClientSelection) uxhDetail {
 		validation, libraryReady, canPrepare = nil, true, !working
 	}
 	if err := u.t3CodeOpenCodeConnectionError(); err != nil {
+		validation, canPrepare = err, false
+	}
+	if err := u.t3CodeMuseConnectionError(); err != nil {
 		validation, canPrepare = err, false
 	}
 	d := uxhDetail{canPrepare: &canPrepare}

@@ -29,9 +29,10 @@ type terminalRuntime struct {
 	ClaudeProfile  string `json:"claudeProfile"`
 	OMPProfile     string `json:"ompProfile,omitempty"`
 	OpenCodeConfig string `json:"openCodeConfig,omitempty"`
+	MuseProfile    string `json:"museProfile,omitempty"`
 }
 
-var errTerminalAppUnavailable = errors.New("Start Kilo Proxy first: open the app or run kilo-proxy-headless serve with this configuration directory, then use kilo-codex, kilo-claude, kilo-omp or kilo-opencode.")
+var errTerminalAppUnavailable = errors.New("Start Kilo Proxy first: open the app or run kilo-proxy-headless serve with this configuration directory, then use kilo-codex, kilo-claude, kilo-omp, kilo-opencode or kilo-muse.")
 
 func validateTerminalRuntime(info terminalRuntime) error {
 	host, port, err := net.SplitHostPort(info.Host)
@@ -48,6 +49,9 @@ func validateTerminalRuntime(info terminalRuntime) error {
 	}
 	if info.OpenCodeConfig != "" {
 		paths = append(paths, info.OpenCodeConfig)
+	}
+	if info.MuseProfile != "" {
+		paths = append(paths, info.MuseProfile)
 	}
 	for _, path := range paths {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path || len(path) > 4096 || strings.ContainsAny(path, "\x00\r\n") {
@@ -75,6 +79,7 @@ func (a *app) publishTerminalRuntime() (func(), error) {
 	info := terminalRuntime{Version: 1, Host: a.adminHost, Token: a.adminToken}
 	home := a.launchRuntime().home
 	info.CodexProfile, info.ClaudeProfile = a.codexCLIProfileDir, a.claudeProfileDir
+	info.MuseProfile = museTerminalHome(a.dir)
 	if info.CodexProfile == "" {
 		info.CodexProfile = filepath.Join(home, ".codex-kilo-cli")
 	}
@@ -159,6 +164,9 @@ func requestTerminalPlan(ctx context.Context, dir string, input terminalPrepareR
 	if err := validateTerminalProfile(plan, info); err != nil {
 		return clientLaunchPlan{}, err
 	}
+	if input.Client == "muse" && (input.MuseConnection == "kilo") != (plan.Env["HOME"] != "") {
+		return clientLaunchPlan{}, errors.New("The Muse Code connection changed. Open its settings and try again.")
+	}
 	return plan, nil
 }
 
@@ -189,8 +197,29 @@ func validateTerminalProfile(plan clientLaunchPlan, info terminalRuntime) error 
 			return invalid
 		}
 	case "muse":
-		if len(plan.Args) != 0 || !reflect.DeepEqual(plan.Env, map[string]string{"MUSE_NO_AUTO_UPDATE": "1"}) || !reflect.DeepEqual(plan.Unset, []string{"KILO_LOCAL_API_KEY"}) {
+		if len(plan.Args) != 0 {
 			return invalid
+		}
+		if plan.Env["HOME"] == "" {
+			if !reflect.DeepEqual(plan.Env, map[string]string{"MUSE_NO_AUTO_UPDATE": "1"}) || !reflect.DeepEqual(plan.Unset, []string{"KILO_LOCAL_API_KEY"}) {
+				return invalid
+			}
+		} else {
+			if info.MuseProfile == "" || !reflect.DeepEqual(plan.Env, museKiloEnvironment(info.MuseProfile)) || len(plan.Unset) == 0 || len(plan.Unset) > 512 {
+				return invalid
+			}
+			seen := map[string]bool{}
+			for _, name := range plan.Unset {
+				if name == "" || strings.ContainsAny(name, "=\x00\r\n") || seen[name] || !(strings.HasPrefix(strings.ToUpper(name), "MUSE_") || strings.HasPrefix(strings.ToUpper(name), "META_") || helperContains(museKiloInheritedEnvironment(nil), name)) {
+					return invalid
+				}
+				seen[name] = true
+			}
+			for _, required := range museKiloInheritedEnvironment(nil) {
+				if !seen[required] {
+					return invalid
+				}
+			}
 		}
 	case "opencode":
 		if info.OpenCodeConfig == "" || len(plan.Args) != 0 || !reflect.DeepEqual(plan.Env, map[string]string{"OPENCODE_CONFIG": info.OpenCodeConfig}) || !reflect.DeepEqual(plan.Unset, []string{"OPENCODE_CONFIG_CONTENT"}) {

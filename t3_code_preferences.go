@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"reflect"
 	"sort"
@@ -24,6 +25,7 @@ type t3CodePreferences struct {
 	Providers          []string `json:"providers"`
 	OpenCode2          bool     `json:"openCode2"`
 	OpenCodeConnection string   `json:"openCodeConnection"`
+	MuseConnection     string   `json:"museConnection"`
 }
 
 type t3CodeProviderSupport struct {
@@ -38,10 +40,13 @@ var t3CodeOptionalProviders = []t3CodeProviderSupport{
 
 func normalizeT3CodePreferences(p t3CodePreferences) t3CodePreferences {
 	if p.Version == 0 {
-		return t3CodePreferences{Version: 1, Codex: true, Claude: true, KiloCodex: true, KiloClaude: true, CodexModels: "official", ClaudeModels: "official", Providers: []string{}, OpenCodeConnection: "native"}
+		return t3CodePreferences{Version: 1, Codex: true, Claude: true, KiloCodex: true, KiloClaude: true, CodexModels: "official", ClaudeModels: "official", Providers: []string{}, OpenCodeConnection: "native", MuseConnection: "native"}
 	}
 	if p.OpenCodeConnection == "" {
 		p.OpenCodeConnection = "native"
+	}
+	if p.MuseConnection == "" {
+		p.MuseConnection = "native"
 	}
 	if p.Providers == nil {
 		p.Providers = []string{}
@@ -58,6 +63,9 @@ func validateT3CodePreferences(p t3CodePreferences) error {
 	}
 	if p.OpenCodeConnection != "" && p.OpenCodeConnection != "native" && p.OpenCodeConnection != "kilo" {
 		return errors.New("Choose the native OpenCode account or Kilo Proxy models.")
+	}
+	if p.MuseConnection != "" && p.MuseConnection != "native" && p.MuseConnection != "kilo" {
+		return errors.New("Choose the native Meta account or Kilo Proxy models for Muse Code.")
 	}
 	seen := map[string]bool{}
 	for _, id := range p.Providers {
@@ -76,17 +84,49 @@ func validateT3CodePreferences(p t3CodePreferences) error {
 	return nil
 }
 
-func decodeT3CodePreferencesDocument(raw json.RawMessage) (t3CodePreferences, bool, error) {
+type t3CodePreferenceFields struct {
+	OpenCodeConnection bool
+	MuseConnection     bool
+}
+
+func decodeT3CodePreferencesDocument(raw json.RawMessage) (t3CodePreferences, t3CodePreferenceFields, error) {
 	var prefs t3CodePreferences
+	var present t3CodePreferenceFields
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	var fields map[string]json.RawMessage
-	if decoder.Decode(&prefs) != nil || json.Unmarshal(raw, &fields) != nil || fields == nil {
-		return prefs, false, errors.New("Invalid T3 Code preferences.")
+	if decoder.Decode(&prefs) != nil || decoder.Decode(&struct{}{}) != io.EOF {
+		return prefs, present, errors.New("Invalid T3 Code preferences.")
 	}
-	connection, present := fields["openCodeConnection"]
-	if present && bytes.Equal(bytes.TrimSpace(connection), []byte("null")) {
-		return prefs, false, errors.New("Choose the native OpenCode account or Kilo Proxy models.")
+	// Inspect raw members as well: decoding into strings alone treats null as
+	// an omitted value and duplicate members can silently change a choice.
+	decoder = json.NewDecoder(bytes.NewReader(raw))
+	opening, err := decoder.Token()
+	if err != nil || opening != json.Delim('{') {
+		return prefs, present, errors.New("Invalid T3 Code preferences.")
+	}
+	seen := map[string]bool{}
+	for decoder.More() {
+		key, err := decoder.Token()
+		name, ok := key.(string)
+		if err != nil || !ok || seen[name] {
+			return prefs, present, errors.New("Invalid T3 Code preferences.")
+		}
+		seen[name] = true
+		var value json.RawMessage
+		if decoder.Decode(&value) != nil {
+			return prefs, present, errors.New("Invalid T3 Code preferences.")
+		}
+		switch name {
+		case "openCodeConnection", "museConnection":
+			if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+				return prefs, present, errors.New("Choose a native account or Kilo Proxy models for each provider.")
+			}
+			if name == "openCodeConnection" {
+				present.OpenCodeConnection = true
+			} else {
+				present.MuseConnection = true
+			}
+		}
 	}
 	return prefs, present, validateT3CodePreferences(prefs)
 }
@@ -97,14 +137,14 @@ func (a *app) t3CodePreferencesAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input t3CodePreferences
-	var openCodeConnectionPresent bool
+	var fields t3CodePreferenceFields
 	if r.Method == http.MethodPost {
 		var raw json.RawMessage
 		if !decodeBody(w, r, &raw) {
 			return
 		}
 		var err error
-		input, openCodeConnectionPresent, err = decodeT3CodePreferencesDocument(raw)
+		input, fields, err = decodeT3CodePreferencesDocument(raw)
 		if err != nil {
 			jsonError(w, http.StatusBadRequest, err.Error())
 			return
@@ -124,8 +164,11 @@ func (a *app) t3CodePreferencesAPI(w http.ResponseWriter, r *http.Request) {
 	defer a.mu.Unlock()
 	prefs := normalizeT3CodePreferences(a.config.T3Code)
 	if r.Method == http.MethodPost {
-		if !openCodeConnectionPresent {
+		if !fields.OpenCodeConnection {
 			input.OpenCodeConnection = prefs.OpenCodeConnection
+		}
+		if !fields.MuseConnection {
+			input.MuseConnection = prefs.MuseConnection
 		}
 		input = normalizeT3CodePreferences(input)
 		if !reflect.DeepEqual(input, prefs) {
@@ -140,5 +183,5 @@ func (a *app) t3CodePreferencesAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	saved, readErr := a.readT3CodePrepared()
 	ready := resolveErr == nil && readErr == nil && a.t3CodeReady(saved, binary, rt)
-	jsonResponse(w, http.StatusOK, map[string]any{"preferences": prefs, "requiresPreparation": !ready, "supportedProviders": installation.SupportedProviders, "openCode2Supported": installation.OpenCode2Supported, "openCodeKiloSupported": installation.OpenCodeKiloSupported})
+	jsonResponse(w, http.StatusOK, map[string]any{"preferences": prefs, "requiresPreparation": !ready, "supportedProviders": installation.SupportedProviders, "openCode2Supported": installation.OpenCode2Supported, "openCodeKiloSupported": installation.OpenCodeKiloSupported, "museKiloSupported": installation.MuseKiloSupported})
 }

@@ -6,7 +6,7 @@ export const cliPathClient=client=>['codex-cli','claude','muse','t3-code','synar
 export function cliPreferenceOperation(path,body,method) {
  if(method!=='POST')return '';
  if(path==='clients/launch')return cliPathClient(body?.client)?body.client:'';
- return ({'codex-cli/catalog':'codex-cli','claude/profile':'claude','clients/t3-code':'t3-code','clients/synara':'synara','open-design/profile':'open-design','xcode/codex':'xcode-codex','xcode/claude':'xcode-claude'})[path]||'';
+ return ({'codex-cli/catalog':'codex-cli','claude/profile':'claude','clients/muse':'muse','clients/t3-code':'t3-code','clients/synara':'synara','open-design/profile':'open-design','xcode/codex':'xcode-codex','xcode/claude':'xcode-claude'})[path]||'';
 }
 
 export function createCLIPreferencesHelper({api,notify,onChange=()=>{},onPreferencesSaved=()=>{},openCodeSnapshot=()=>null,openCodePathsBlocked=()=>false,onOpenCodePathsChanged=()=>{}}) {
@@ -22,7 +22,7 @@ export function createCLIPreferencesHelper({api,notify,onChange=()=>{},onPrefere
   ctx=context;if(!loaded&&!loading&&!error)void reload();
   $('cli-preferences-title').textContent=L('Application and CLI installations','Instalaciones de aplicaciones y CLI');
   $('cli-preferences-help').textContent=L('Choose an installed application or CLI, including a custom version. Empty paths use the current verified Kilo copy first, then the system installation. T3 Code, Synara and Open Design use these same CLI paths. Accounts and chats are kept.','Elige una aplicación o CLI instalada, incluida una versión personalizada. Las rutas vacías usan primero la copia Kilo actual verificada y después la instalación del sistema. T3 Code, Synara y Open Design usan las mismas rutas de las CLI. Se conservan las cuentas y los chats.');
-  $('cli-preferences-muse-help').textContent=L('Muse Code uses its own Meta login and official models in the terminal and T3 Code. It does not use your Kilo gateway or shared model selection.','Muse Code usa su propio inicio de sesión de Meta y sus modelos oficiales en la terminal y T3 Code. No usa tu gateway de Kilo ni la selección compartida de modelos.');
+  $('cli-preferences-muse-help').textContent=L('Choose Kilo shared models or your Meta account in the Muse or T3 Code harness settings. Both use this selected executable, including custom versions.','Elige los modelos compartidos de Kilo o tu cuenta de Meta en los ajustes del harness Muse o T3 Code. Ambas opciones usan este ejecutable seleccionado, incluidas las versiones personalizadas.');
   $('cli-preferences-synara-help').textContent=L('On Linux, select a persistent extracted Synara executable. A raw AppImage can be detected but is not ready to open: install a verified Kilo copy or select the extracted executable. Detection does not verify its source, version or channel. Ubuntu sandbox restrictions still apply.','En Linux, selecciona un ejecutable de Synara extraído en una ubicación permanente. Un AppImage sin extraer puede detectarse, pero no está listo para abrir: instala una copia Kilo verificada o selecciona el ejecutable extraído. La detección no verifica su origen, versión ni canal. Se mantienen las restricciones del sandbox de Ubuntu.');
   for(const [client,key,label]of [['codex-cli','codexExecutable','Codex CLI'],['claude','claudeExecutable','Claude Code'],['muse','museExecutable','Muse Code'],['synara','synaraExecutable','Synara']]) {
    const field=$('cli-path-'+client),editable=loaded&&!loading&&!saving&&!pending;

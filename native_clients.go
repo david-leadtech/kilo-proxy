@@ -18,6 +18,7 @@ import (
 
 type nativeClients struct {
 	CLIPreferences              nativeCLIPreferencesState
+	Muse                        nativeMuseState
 	OpenCodePreferences         nativeOpenCodePreferencesState
 	ManagedTools                *nativeManagedTools
 	Grids                       map[string]*nativeModelGridState

@@ -250,7 +250,7 @@ func terminalCommandsPlan(home, configDir, binary, shell, platform string, profi
 		files = append(files, f)
 	}
 	if result.Installed && result.PathConfigured {
-		result.Message = "kilo-codex, kilo-claude, kilo-omp, kilo-opencode and kilo-muse are installed. Open a new terminal to use them. Muse Code works with Kilo Proxy closed; the other commands require it open."
+		result.Message = "kilo-codex, kilo-claude, kilo-omp, kilo-opencode and kilo-muse are installed. Open a new terminal to use them. Kilo connections require Kilo Proxy open. Muse’s native Meta connection also works with Kilo Proxy closed."
 	} else {
 		result.Message = "Install kilo-codex, kilo-claude, kilo-omp, kilo-opencode and kilo-muse for your current login shell."
 	}
@@ -360,9 +360,9 @@ func installTerminalCommands(home, configDir, binary, shell, platform string, pr
 		changed = append(changed, f)
 	}
 	result.Installed, result.PathConfigured = true, true
-	result.Message = "kilo-codex, kilo-claude, kilo-omp, kilo-opencode and kilo-muse are installed. Open a new terminal to use them. Muse Code works with Kilo Proxy closed; the other commands require it open."
+	result.Message = "kilo-codex, kilo-claude, kilo-omp, kilo-opencode and kilo-muse are installed. Open a new terminal to use them. Kilo connections require Kilo Proxy open. Muse’s native Meta connection also works with Kilo Proxy closed."
 	if result.Shell == "powershell" {
-		result.Message = "The five Kilo commands are installed in your PowerShell profiles. Open a new PowerShell window. Muse Code works with Kilo Proxy closed; the other commands require it open. Execution policy was not changed."
+		result.Message = "The five Kilo commands are installed in your PowerShell profiles. Open a new PowerShell window. Kilo connections require Kilo Proxy open. Muse’s native Meta connection also works with Kilo Proxy closed. Execution policy was not changed."
 	}
 	return result, nil
 }

@@ -84,6 +84,7 @@ func managedToolProbeOutput(ctx context.Context, binary string) (string, error) 
 		"XDG_CONFIG_HOME=" + scratch, "XDG_DATA_HOME=" + scratch, "XDG_STATE_HOME=" + scratch, "XDG_CACHE_HOME=" + scratch,
 		"TMPDIR=" + scratch, "TMP=" + scratch, "TEMP=" + scratch, "NO_COLOR=1", "CI=1", "DO_NOT_TRACK=1",
 		"MUSE_NO_AUTO_UPDATE=1", "MUSE_LOGIN=0", "MUSE_AUTH_PATH=" + filepath.Join(scratch, "muse-auth.json"),
+		"TBH_CREDENTIAL_BACKEND=" + museKiloCredentialBackend,
 	}
 	if runtime.GOOS == "windows" {
 		// Native CLIs may require Windows' loader directory. No other ambient state

@@ -252,7 +252,8 @@ func TestMuseManagedBinaryEntrypointAndPrivateProbe(t *testing.T) {
 	t.Setenv("META_API_KEY", "must-not-inherit")
 	t.Setenv("MUSE_AUTH_PATH", filepath.Join(root, "personal-auth.json"))
 	t.Setenv("MUSE_NO_AUTO_UPDATE", "0")
-	script := "#!/bin/sh\n[ \"$#\" = 1 ] && [ \"$1\" = --version ] || exit 2\n[ \"$MUSE_NO_AUTO_UPDATE\" = 1 ] && [ \"$MUSE_LOGIN\" = 0 ] || exit 3\n[ \"$MUSE_AUTH_PATH\" = \"$HOME/muse-auth.json\" ] && [ \"$XDG_CONFIG_HOME\" = \"$HOME\" ] && [ \"$PWD\" = \"$HOME\" ] || exit 4\n[ -z \"${META_API_KEY-}${MODEL_API_KEY-}${KILO_LOCAL_API_KEY-}\" ] || exit 5\nprintf 'Muse Code 1.4.6 (1.4.6-R6000.1)\\n'\n"
+	t.Setenv("TBH_CREDENTIAL_BACKEND", "keychain")
+	script := "#!/bin/sh\n[ \"$#\" = 1 ] && [ \"$1\" = --version ] || exit 2\n[ \"$MUSE_NO_AUTO_UPDATE\" = 1 ] && [ \"$MUSE_LOGIN\" = 0 ] || exit 3\n[ \"$MUSE_AUTH_PATH\" = \"$HOME/muse-auth.json\" ] && [ \"$XDG_CONFIG_HOME\" = \"$HOME\" ] && [ \"$PWD\" = \"$HOME\" ] || exit 4\n[ -z \"${META_API_KEY-}${MODEL_API_KEY-}${KILO_LOCAL_API_KEY-}\" ] || exit 5\n[ \"$TBH_CREDENTIAL_BACKEND\" = file ] || exit 6\nprintf 'Muse Code 1.4.6 (1.4.6-R6000.1)\\n'\n"
 	if err := os.WriteFile(archive, []byte(script), 0600); err != nil {
 		t.Fatal(err)
 	}

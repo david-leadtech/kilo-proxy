@@ -305,6 +305,9 @@ func validateT3CodeOpenCodeManifest(saved t3CodePrepared, paths t3CodeManagedPat
 	if enabled {
 		count += 2
 	}
+	if t3CodeMuseKiloEnabled(saved.Preferences) {
+		count += 3
+	}
 	if len(saved.Files) != count {
 		return errors.New("The T3 profile integrity manifest contains unselected account files.")
 	}
