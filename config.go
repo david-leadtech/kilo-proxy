@@ -34,6 +34,7 @@ type settings struct {
 	CodexCLIExecutable              string                  `json:"codexCLIExecutable,omitempty"`
 	ClaudeCodeExecutable            string                  `json:"claudeCodeExecutable,omitempty"`
 	MuseCodeExecutable              string                  `json:"museCodeExecutable,omitempty"`
+	MuseCode                        musePreferences         `json:"museCode"`
 	SynaraExecutable                string                  `json:"synaraExecutable,omitempty"`
 	OpenCodeMajor                   int                     `json:"openCodeMajor,omitempty"`
 	OpenCode1Executable             string                  `json:"openCode1Executable,omitempty"`
@@ -54,7 +55,7 @@ type settings struct {
 }
 
 func readSettings(dir string) (settings, error) {
-	s := settings{T3Code: normalizeT3CodePreferences(t3CodePreferences{}), Port: 8877, LocalKey: randomKey("kl_local_"), VaultID: randomKey("profile_"), TrayDisplay: trayDisplayIcon, ImageTransport: normalizeImageTransportSettings(imageTransportSettings{})}
+	s := settings{MuseCode: normalizeMusePreferences(musePreferences{}), T3Code: normalizeT3CodePreferences(t3CodePreferences{}), Port: 8877, LocalKey: randomKey("kl_local_"), VaultID: randomKey("profile_"), TrayDisplay: trayDisplayIcon, ImageTransport: normalizeImageTransportSettings(imageTransportSettings{})}
 	b, err := os.ReadFile(filepath.Join(dir, "settings.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
@@ -78,6 +79,10 @@ func readSettings(dir string) (settings, error) {
 		return s, errors.New("Invalid Synara executable preference.")
 	}
 	s.TrayDisplay = normalizeTrayDisplay(s.TrayDisplay)
+	s.MuseCode = normalizeMusePreferences(s.MuseCode)
+	if err := validateMusePreferences(s.MuseCode); err != nil {
+		return s, errors.New("invalid Muse Code connection settings; restore a valid configuration")
+	}
 	s.ImageTransport = normalizeImageTransportSettings(s.ImageTransport)
 	s.T3Code = normalizeT3CodePreferences(s.T3Code)
 	if err := validateT3CodePreferences(s.T3Code); err != nil {

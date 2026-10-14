@@ -18,6 +18,7 @@ type clientLaunchRequest struct {
 	AppPath        string `json:"appPath,omitempty"`
 	Engine         string `json:"engine,omitempty"`
 	MuseExecutable string `json:"museExecutable,omitempty"`
+	MuseConnection string `json:"museConnection,omitempty"`
 }
 type clientLaunchPlan struct {
 	Client, Name, Kind, Executable, Directory string
@@ -355,7 +356,13 @@ func (a *app) planClientLaunch(input clientLaunchRequest, rt clientLaunchRuntime
 		if input.MuseExecutable == "" || validateCLIExecutable(input.MuseExecutable) != nil {
 			return p, errors.New("Refresh the installed Muse Code executable before opening it.")
 		}
-	} else if input.MuseExecutable != "" {
+		a.mu.Lock()
+		prefs := normalizeMusePreferences(a.config.MuseCode)
+		a.mu.Unlock()
+		if input.MuseConnection != prefs.Connection {
+			return p, errors.New("The Muse Code connection changed. Reload its settings before opening it.")
+		}
+	} else if input.MuseExecutable != "" || input.MuseConnection != "" {
 		return p, errors.New("A Muse Code executable confirmation is supported only for Muse Code.")
 	}
 	var err error
@@ -395,7 +402,21 @@ func (a *app) planClientLaunch(input clientLaunchRequest, rt clientLaunchRuntime
 		if filepath.Clean(input.MuseExecutable) != filepath.Clean(p.Executable) {
 			return p, errors.New("The Muse Code executable changed. Refresh installed apps and open it again.")
 		}
-		applyMuseNativeLaunch(&p)
+		if input.MuseConnection == "native" {
+			applyMuseNativeLaunch(&p)
+			return p, nil
+		}
+		state := a.modelLibrary.snapshot()
+		if state.RecoveryRequired || state.Warning != "" {
+			return p, errors.New("Open Models in Kilo Proxy and save a valid model selection first.")
+		}
+		a.mu.Lock()
+		err = a.museTerminalPrepared(p.Executable, state.Library)
+		a.mu.Unlock()
+		if err != nil {
+			return p, err
+		}
+		applyMuseKiloLaunch(&p, museTerminalHome(a.dir))
 		return p, nil
 	}
 	a.mu.Lock()

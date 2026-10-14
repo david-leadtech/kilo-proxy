@@ -619,3 +619,106 @@ func TestNativeT3OpenCodeConnectionRequiresExactConfirmationAndSupportedDriver(t
 		t.Fatal("own account still depends on Kilo driver capability")
 	}
 }
+
+func TestNativeT3MuseConnectionCompatibilityGatewayAndCapability(t *testing.T) {
+	legacy := nativeT3CodePreferences{Version: 1, CodexModels: "official", ClaudeModels: "official", Providers: []string{"muse"}}
+	explicit := legacy
+	explicit.MuseConnection = "native"
+	if !nativeT3CodePreferencesEqual(legacy, explicit) || !validNativeT3CodePreferences(legacy) || nativeT3MuseUsesKilo(legacy) {
+		t.Fatal("legacy Muse changed its native account")
+	}
+	var malformed nativeT3CodePreferences
+	if json.Unmarshal([]byte(`{"version":1,"museConnection":null}`), &malformed) == nil {
+		t.Fatal("null Muse response was treated as legacy native")
+	}
+	invalid := legacy
+	invalid.MuseConnection = "other"
+	if validNativeT3CodePreferences(invalid) {
+		t.Fatal("invalid Muse mode accepted")
+	}
+	for _, language := range []string{"en", "es"} {
+		t.Run(language, func(t *testing.T) {
+			f := newNativeT3PreferencesFixture(t, language)
+			u := f.u
+			s := &u.agentsState().T3Code.PreferencesState
+			s.Preferences = legacy
+			if !u.t3CodeNativeOnly() {
+				t.Fatal("legacy Muse requires Kilo")
+			}
+			s.Preferences.MuseConnection = "kilo"
+			s.MuseKiloSupported = true
+			if u.t3CodeNativeOnly() {
+				t.Fatal("Muse Kilo-only bypassed shared connection")
+			}
+			nativeSeedSharedForTest(t, u)
+			if u.uxhLaunchState("t3-code").canOpen {
+				t.Fatal("Muse Kilo opened without shared models")
+			}
+			s.MuseKiloSupported = false
+			if u.t3CodeMuseConnectionError() == nil || u.uxhLaunchState("t3-code").canOpen {
+				t.Fatal("missing Muse isolation capability was ignored")
+			}
+			s.Preferences.MuseConnection = "native"
+			if u.t3CodeMuseConnectionError() != nil || !u.t3CodeNativeOnly() {
+				t.Fatal("native Muse still depends on Kilo capability")
+			}
+		})
+	}
+}
+
+func TestNativeT3MuseConnectionControlsKeepExactAccountAndModelSummary(t *testing.T) {
+	for _, language := range []string{"en", "es"} {
+		t.Run(language, func(t *testing.T) {
+			f := newNativeT3PreferencesFixture(t, language)
+			u, h := f.u, f.h
+			state := &u.agentsState().T3Code.PreferencesState
+			f.mu.Lock()
+			f.response.MuseKiloSupported = true
+			f.mu.Unlock()
+			u.refreshT3CodePreferences()
+			nativeTestWait(t, u, func() bool { return !u.t3CodePreferencesBusy() && state.MuseKiloSupported })
+			h.frame()
+			h.reveal("Muse Code", semantic.Switch)
+			h.click("Muse Code", semantic.Switch)
+			nativeTestWait(t, u, func() bool {
+				return f.postCount() == 1 && !u.t3CodePreferencesBusy() && state.Pending == nil && !u.busy["GET/api/clients/t3-code"]
+			})
+			if !nativeT3MuseUsesKilo(state.Preferences) || f.lastPost().MuseConnection != "kilo" {
+				t.Fatal("newly enabled Muse did not explicitly save its Kilo connection")
+			}
+			gate := make(chan struct{})
+			close(gate)
+			f.mu.Lock()
+			f.profileGate = gate
+			f.profile = nativeT3CodeInfo{Preferences: state.Preferences, EffectiveMuseModels: []nativeT3CodeModelSummary{{ID: "vendor/one", Name: "Shared Muse model"}}}
+			f.mu.Unlock()
+			u.refreshT3CodeProfile()
+			nativeTestWait(t, u, func() bool { return !u.busy["GET/api/clients/t3-code"] })
+			own := u.tr("Own Meta account", "Cuenta propia de Meta")
+			for _, width := range []int{1120, 780} {
+				h.size = image.Pt(width, 1400)
+				h.frame()
+				h.reveal(own, semantic.RadioButton)
+				h.target(own, semantic.RadioButton)
+				if !nativeUpdateHasText(h, "Shared Muse model · vendor/one") {
+					t.Fatal("confirmed Muse Kilo summary was not shown")
+				}
+				nativeGridCapture(t, h, "native-t3-muse-kilo-"+strconv.Itoa(width)+"-"+language)
+			}
+			h.click(own, semantic.RadioButton)
+			nativeTestWait(t, u, func() bool { return f.postCount() == 2 && !u.t3CodePreferencesBusy() && state.Pending == nil })
+			if state.Preferences.MuseConnection != "native" || f.lastPost().MuseConnection != "native" || !helperContains(state.Preferences.Providers, "muse") {
+				t.Fatal("own Meta choice changed the provider or failed to save")
+			}
+			for _, width := range []int{1120, 780} {
+				h.size = image.Pt(width, 1400)
+				h.frame()
+				h.reveal(own, semantic.RadioButton)
+				if nativeUpdateHasText(h, "Shared Muse model · vendor/one") {
+					t.Fatal("native Meta displayed an old Kilo model summary")
+				}
+				nativeGridCapture(t, h, "native-t3-muse-native-"+strconv.Itoa(width)+"-"+language)
+			}
+		})
+	}
+}

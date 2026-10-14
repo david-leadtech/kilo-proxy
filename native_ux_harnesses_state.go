@@ -37,24 +37,39 @@ func (u *nativeUI) uxhInstallState(key string) uxhInstall {
 	return uxhMissing
 }
 
-// Muse is a native Meta connection, so shared Kilo model and account readiness
-// must not prevent opening it. Executable settings still need confirmation.
+// Only the confirmed native Muse connection bypasses shared Kilo readiness.
 func (u *nativeUI) uxhMuseLaunchState() uxhLaunch {
 	c, a := u.clientState(), u.agentsState()
+	if !c.Muse.Requested {
+		u.refreshMusePreferencesAfter(nil)
+	}
+	if c.Muse.ProfileLoaded && c.Muse.Info.ResolvedExecutable != c.LaunchInfo.Clients["muse"].Path {
+		c.Muse.ProfileRequested = false
+		c.Muse.ProfileLoaded = false
+		c.Muse.Info.Prepared = false
+	}
+	if c.Muse.Loaded && !c.Muse.ProfileRequested {
+		u.refreshMuseProfile()
+	}
 	l := uxhLaunch{install: u.uxhInstallState("muse"), label: u.tr("Open Muse Code", "Abrir Muse Code")}
-	l.canOpen = u.nativeLaunchAvailable("muse") && u.cliPreferencesReady() && c.Launching == "" && !u.busy["POST"+nativeLaunchEndpoint]
+	l.canOpen = u.nativeLaunchAvailable("muse") && u.cliPreferencesReady() && u.museReadinessReason() == "" && c.Launching == "" && !u.busy["POST"+nativeLaunchEndpoint]
 	switch {
 	case !c.LaunchChecked:
 		l.reason = u.tr("Wait for installation detection to finish.", "Espera a que termine la detección de la instalación.")
 	case !u.nativeLaunchAvailable("muse"):
 		l.reason, l.local = nativeMessage(c.LaunchInfo.Clients["muse"].Reason, u.language), true
 		if l.reason == "" {
-			l.reason = u.tr("Install Muse Code, then check again. It uses its own Meta login and official models.", "Instala Muse Code y vuelve a comprobarlo. Usa su propio inicio de sesión de Meta y sus modelos oficiales.")
+			l.reason = u.tr("Install Muse Code or choose its executable in CLI settings, then check again.", "Instala Muse Code o elige su ejecutable en los ajustes de las CLI y vuelve a comprobarlo.")
 		}
 	case !u.cliPreferencesReady():
 		l.reason, l.local = u.tr("Load or finish saving CLI executable settings before opening.", "Carga o termina de guardar las rutas de las CLI antes de abrir."), true
 	case c.Launching != "" || u.busy["POST"+nativeLaunchEndpoint]:
 		l.reason = u.tr("Wait for the current harness operation to finish.", "Espera a que termine la operación actual del harness.")
+	}
+	if l.reason == "" {
+		if reason := u.museReadinessReason(); reason != "" {
+			l.reason, l.local = reason, true
+		}
 	}
 	if c.Launching == "muse" && a.Phase != "" {
 		l.label = a.Phase
@@ -166,6 +181,10 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 			l.canOpen = false
 			l.reason, l.local = err.Error(), true
 		}
+		if err := u.t3CodeMuseConnectionError(); err != nil {
+			l.canOpen = false
+			l.reason, l.local = err.Error(), true
+		}
 		if preferences.Loaded {
 			if payload, err := nativeClientPayload(key, s); err == nil {
 				if err := nativeT3CodePreferenceLibraryError(preferences.Preferences, payload.(map[string]any)["library"].(modelLibrary)); err != nil {
@@ -185,18 +204,18 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 	return l
 }
 
-// uxhSharedReason is shared by Kilo-backed harnesses. Native Muse does not need
-// this connection or model library.
+// uxhSharedReason is shared by Kilo-backed harnesses. Only confirmed native
+// connection choices can bypass this connection and model library.
 func (u *nativeUI) uxhSharedReason() string {
 	libraryStatus, libraryReady := u.libraryStatus()
 	u.initModelLibrary()
 	switch {
 	case !(u.agentConnectionReady() && !u.connectionWorking() && !u.setupConnectionNeeded()):
-		return u.tr("Connect Kilo or ChatGPT to use Kilo-backed harnesses. Muse Code uses its own login.", "Conecta Kilo o ChatGPT para usar los harnesses conectados a Kilo. Muse Code usa su propio inicio de sesión.")
+		return u.tr("Connect Kilo or ChatGPT to use Kilo-backed harnesses.", "Conecta Kilo o ChatGPT para usar los harnesses conectados a Kilo.")
 	case !libraryReady:
 		return libraryStatus
 	case len(u.library.selection.Models) == 0:
-		return u.tr("Add shared models for Kilo-backed harnesses. Muse Code uses its official catalog.", "Añade modelos compartidos para los harnesses conectados a Kilo. Muse Code usa su catálogo oficial.")
+		return u.tr("Add shared models for Kilo-backed harnesses.", "Añade modelos compartidos para los harnesses conectados a Kilo.")
 	}
 	return ""
 }

@@ -339,3 +339,21 @@ test('T3 gear separates the OpenCode connection from its version and confirms sh
  await page.locator('#t3-code-helper').screenshot({path:testInfo.outputPath('t3-opencode-native-v2-es.png')});
  expect(await records(gateway)).toEqual([]);
 });
+
+test('Muse Kilo-only T3 requires shared connection and keeps its Meta account choice distinct',async({page,gateway,request},testInfo)=>{
+ await setControl(gateway,{t3Capabilities:true});await saveLibrary(request,gateway,library());
+ const selected=await request.post(new URL('/api/clients/cli/preferences',gateway.url).href,{headers:headers(gateway),data:{version:1,museExecutable:gateway.codexExecutable}});expect(selected.ok(),await selected.text()).toBe(true);
+ let preferences={version:1,codex:false,claude:false,kiloCodex:false,kiloClaude:false,codexModels:'official',claudeModels:'official',providers:['muse'],openCode2:false,openCodeConnection:'native',museConnection:'kilo'};
+ const shared=(await getAPI(request,gateway,'model-library')).library,writes=[];
+ await page.route('**/api/clients/t3-code**',async route=>{
+  const path=new URL(route.request().url()).pathname,body=route.request().method()==='POST'?route.request().postDataJSON():null;
+  if(path.endsWith('/preferences')){if(body){writes.push(body);preferences=body;}return route.fulfill({json:{preferences,supportedProviders:[{id:'muse',label:'Muse Code'}],museKiloSupported:true,requiresPreparation:true}});}
+  return route.fulfill({json:{preferences,library:shared,prepared:false,effectiveCodexModels:[],effectiveClaudeModels:[],effectiveMuseModels:preferences.museConnection==='kilo'?shared.models.map(model=>({id:model.id,name:model.displayName||model.id})):[]}});
+ });
+ await page.reload();await page.locator('#tab-t3-code').click();await expect(page.locator('#client-launch')).toBeDisabled();await expect(page.locator('#client-launch-status')).toContainText('Connect your selected provider first');
+ await startProxy(page,gateway);await expect(page.locator('#client-launch')).toBeEnabled();await expect(page.locator('#t3-code-agents')).toContainText('Kilo Proxy · Muse Code');await expect(page.locator('#t3-code-summary')).toContainText('Muse Code: 3');
+ await page.locator('#t3-code-settings-title').click();await expect(page.locator('#t3-code-muse-connection')).toHaveValue('kilo');await page.locator('#t3-code-muse-connection').selectOption('native');await expect(page.locator('#t3-code-muse-connection')).toBeEnabled();expect(writes.at(-1).museConnection).toBe('native');await expect(page.locator('#t3-code-agents')).toContainText('Meta login and catalog');await expect(page.locator('#t3-code-summary')).not.toContainText('Muse Code:');
+ await page.locator('#t3-code-muse-connection').selectOption('kilo');await expect(page.locator('#t3-code-muse-connection')).toBeEnabled();expect(writes.at(-1).museConnection).toBe('kilo');
+ await expect(page.locator('#toast')).toBeHidden();
+ for(const [language,width,height]of [['en',1180,1000],['es',780,1000]]){await page.locator('#language').selectOption(language);await page.setViewportSize({width,height});await expect(page.locator('#t3-code-muse-connection-help')).toContainText(language==='en'?'separate Muse profile':'perfil Muse separado');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.locator('#t3-code-settings').screenshot({path:testInfo.outputPath(`t3-muse-kilo-${language}-${width}.png`)});}
+});

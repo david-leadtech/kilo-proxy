@@ -86,14 +86,57 @@ func runTerminalAgentMode(args []string) int {
 	}
 	var plan clientLaunchPlan
 	if input.Client == "muse" {
-		plan = clientLaunchPlan{Client: "muse", Name: "Muse Code", Kind: "terminal", Directory: directory, Env: map[string]string{}}
-		applyMuseNativeLaunch(&plan)
+		cfg, configErr := readSettings(*dir)
+		if configErr != nil {
+			fmt.Fprintln(os.Stderr, "Cannot read Kilo Proxy settings.")
+			return 1
+		}
+		input.MuseConnection = normalizeMusePreferences(cfg.MuseCode).Connection
+		input.MuseExecutable = executable
+		if input.MuseConnection == "native" {
+			plan = clientLaunchPlan{Client: "muse", Name: "Muse Code", Kind: "terminal", Directory: directory, Env: map[string]string{}}
+			applyMuseNativeLaunch(&plan)
+		} else {
+			if err := validateMuseKiloArguments(arguments); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				return 1
+			}
+			info, runtimeErr := readTerminalRuntime(*dir)
+			if runtimeErr != nil || info.MuseProfile == "" {
+				fmt.Fprintln(os.Stderr, errTerminalAppUnavailable)
+				return 1
+			}
+			home, homeErr := os.UserHomeDir()
+			if homeErr != nil {
+				fmt.Fprintln(os.Stderr, "Cannot resolve the normal Muse Code profile.")
+				return 1
+			}
+			if _, isolationErr := museKiloIsolation(info.MuseProfile, museNormalPaths(home, os.Environ(), runtime.GOOS)); isolationErr != nil {
+				fmt.Fprintln(os.Stderr, isolationErr)
+				return 1
+			}
+			plan, err = requestTerminalPlan(context.Background(), *dir, input)
+		}
 	} else {
 		plan, err = requestTerminalPlan(context.Background(), *dir, input)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
+	}
+	if input.Client == "muse" && input.MuseConnection == "kilo" {
+		// The invoking terminal may have additional provider variables which
+		// were absent from the app's environment when the plan was produced.
+		plan.Unset = museKiloInheritedEnvironment(os.Environ())
+		home, homeErr := os.UserHomeDir()
+		if homeErr != nil {
+			fmt.Fprintln(os.Stderr, "Cannot resolve the normal Muse Code profile.")
+			return 1
+		}
+		if _, isolationErr := museKiloIsolation(plan.Env["HOME"], museNormalPaths(home, os.Environ(), runtime.GOOS)); isolationErr != nil {
+			fmt.Fprintln(os.Stderr, isolationErr)
+			return 1
+		}
 	}
 	plan.Executable = executable
 	if err := validateClientProcessPlan(plan); err != nil {

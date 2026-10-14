@@ -52,6 +52,7 @@ func TestMuseExecutablePreferencesPersistAndNeverFallback(t *testing.T) {
 
 func TestMuseNativeLaunchNeedsNeitherGatewayNorSharedModels(t *testing.T) {
 	a := launchTestApp(t)
+	a.config.MuseCode = musePreferences{Version: 1, Connection: "native"}
 	a.apiKey, a.config.OrgID = "", ""
 	a.modelLibrary.mu.Lock()
 	a.modelLibrary.state.RecoveryRequired = true
@@ -59,7 +60,7 @@ func TestMuseNativeLaunchNeedsNeitherGatewayNorSharedModels(t *testing.T) {
 	path := filepath.Join(a.launcher.home, "synthetic", "client")
 	var launched clientLaunchPlan
 	a.launcher.start = func(plan clientLaunchPlan) error { launched = plan; return nil }
-	request, _ := json.Marshal(clientLaunchRequest{Client: "muse", Directory: a.launcher.home, MuseExecutable: path})
+	request, _ := json.Marshal(clientLaunchRequest{Client: "muse", Directory: a.launcher.home, MuseExecutable: path, MuseConnection: "native"})
 	w := adminRequest(a, "clients/launch", string(request))
 	if w.Code != 200 || launched.Client != "muse" || launched.Executable != path || a.proxyListener != nil {
 		t.Fatal("native Muse required gateway/profile", w.Code, w.Body.String(), launched)
@@ -68,12 +69,12 @@ func TestMuseNativeLaunchNeedsNeitherGatewayNorSharedModels(t *testing.T) {
 		t.Fatal("Muse received a gateway override", launched)
 	}
 	for _, expected := range []string{"", "relative/muse", path + "-stale"} {
-		request, _ := json.Marshal(clientLaunchRequest{Client: "muse", Directory: a.launcher.home, MuseExecutable: expected})
+		request, _ := json.Marshal(clientLaunchRequest{Client: "muse", Directory: a.launcher.home, MuseExecutable: expected, MuseConnection: "native"})
 		if w := adminRequest(a, "clients/launch", string(request)); w.Code != 409 {
 			t.Fatal("unconfirmed Muse path accepted", w.Code)
 		}
 	}
-	request, _ = json.Marshal(terminalPrepareRequest{Client: "muse", Directory: a.launcher.home})
+	request, _ = json.Marshal(terminalPrepareRequest{Client: "muse", Directory: a.launcher.home, MuseExecutable: path, MuseConnection: "native"})
 	w = adminRequest(a, "terminal/prepare", string(request))
 	var plan clientLaunchPlan
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &plan) != nil || plan.Executable != "" || validateTerminalProfile(plan, terminalRuntime{}) != nil || a.proxyListener != nil {
@@ -104,6 +105,7 @@ func TestMuseTerminalRunsWithKiloClosedAndPreservesNativeArguments(t *testing.T)
 		t.Fatal(err)
 	}
 	config.MuseCodeExecutable = path
+	config.MuseCode = musePreferences{Version: 1, Connection: "native"}
 	if err := writeSettings(profile, config); err != nil {
 		t.Fatal(err)
 	}

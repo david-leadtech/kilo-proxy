@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 )
 
@@ -63,9 +64,11 @@ func (a *app) terminalCommandsAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 type terminalPrepareRequest struct {
-	Client        string `json:"client"`
-	Directory     string `json:"directory"`
-	ClaudeVersion string `json:"claudeVersion,omitempty"`
+	Client         string `json:"client"`
+	Directory      string `json:"directory"`
+	ClaudeVersion  string `json:"claudeVersion,omitempty"`
+	MuseExecutable string `json:"museExecutable,omitempty"`
+	MuseConnection string `json:"museConnection,omitempty"`
 }
 
 func (a *app) terminalPrepareAPI(w http.ResponseWriter, r *http.Request) {
@@ -97,8 +100,50 @@ func (a *app) terminalPrepareAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.Client == "muse" {
+		a.mu.Lock()
+		prefs := normalizeMusePreferences(a.config.MuseCode)
+		a.mu.Unlock()
+		binary, resolveErr := rt.resolve("muse", "")
+		if input.MuseConnection != prefs.Connection || input.MuseExecutable == "" || resolveErr != nil || input.MuseExecutable != binary {
+			jsonError(w, 409, "The Muse Code connection or executable changed. Open its settings and try again.")
+			return
+		}
 		plan := clientLaunchPlan{Client: "muse", Name: "Muse Code", Kind: "terminal", Directory: directory, Env: map[string]string{}}
-		applyMuseNativeLaunch(&plan)
+		if prefs.Connection == "native" {
+			applyMuseNativeLaunch(&plan)
+			jsonResponse(w, 200, plan)
+			return
+		}
+		state := a.modelLibrary.snapshot()
+		if state.RecoveryRequired || state.Warning != "" || len(state.Library.Models) == 0 {
+			jsonError(w, 409, "Open Models in Kilo Proxy and save a valid model selection first.")
+			return
+		}
+		release, probeErr := a.checkMuseKiloVersion(binary)
+		if probeErr != nil {
+			jsonError(w, 409, probeErr.Error())
+			return
+		}
+		a.mu.Lock()
+		a.modelLibrary.mu.Lock()
+		current := a.modelLibrary.snapshotLocked()
+		if current.RecoveryRequired || current.Warning != "" || !reflect.DeepEqual(current.Library, state.Library) {
+			err = errModelLibraryConflict
+		} else if !a.connectionReadyLocked() {
+			err = errors.New("Connect the selected provider in Kilo Proxy first.")
+		} else {
+			err = a.prepareMuseTerminalProfile(binary, release, state.Library)
+		}
+		if err == nil {
+			err = a.startLocked()
+		}
+		a.modelLibrary.mu.Unlock()
+		a.mu.Unlock()
+		if err != nil {
+			jsonError(w, 409, err.Error())
+			return
+		}
+		applyMuseKiloLaunch(&plan, museTerminalHome(a.dir))
 		jsonResponse(w, 200, plan)
 		return
 	}

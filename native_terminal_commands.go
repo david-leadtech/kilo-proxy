@@ -187,9 +187,9 @@ func (u *nativeUI) terminalCommandsPanel() layout.Widget {
 		return u.uxsBlock(title, "", u.uxsRow(u.tr("Shortcuts", "Atajos"), names, u.uxsValue(u.uxsPlain(u.tr("Not available here", "No disponibles aquí")), u.tr("They are available on macOS, Windows and Linux.", "Están disponibles en macOS, Windows y Linux.")), nil, nil))
 	}
 	powerShell := s.powerShell()
-	explain := u.tr("Open an installed CLI from your terminal. Muse uses its own login and models; the other commands use Kilo. They install to ~/.local/bin.", "Abre una CLI instalada desde tu terminal. Muse usa su propio inicio de sesión y sus modelos; los otros comandos usan Kilo. Se instalan en ~/.local/bin.")
+	explain := u.tr("Open an installed CLI from your terminal. Muse follows its harness connection choice; Kilo connections require the app open. They install to ~/.local/bin.", "Abre una CLI instalada desde tu terminal. Muse sigue la conexión elegida en su harness; las conexiones Kilo requieren la app abierta. Se instalan en ~/.local/bin.")
 	if powerShell {
-		explain = u.tr("Open an installed CLI from PowerShell. Muse uses its own login and models; the other commands use Kilo. They're added as functions to your PowerShell profile.", "Abre una CLI instalada desde PowerShell. Muse usa su propio inicio de sesión y sus modelos; los otros comandos usan Kilo. Se añaden como funciones a tu perfil de PowerShell.")
+		explain = u.tr("Open an installed CLI from PowerShell. Muse follows its harness connection choice; Kilo connections require the app open. They're added as functions to your PowerShell profile.", "Abre una CLI instalada desde PowerShell. Muse sigue la conexión elegida en su harness; las conexiones Kilo requieren la app abierta. Se añaden como funciones a tu perfil de PowerShell.")
 	}
 	status, tone := u.tr("Not installed", "No instalados"), nativeToneNeutral
 	switch {
@@ -238,7 +238,7 @@ func (u *nativeUI) terminalInstalledWidgets(installing, checking bool) []layout.
 	powerShell := s.powerShell()
 	children := []layout.Widget{
 		u.note(u.tr("Run these from any project terminal. They pass arguments through to the installed CLI. Codex CLI, Claude Code, Oh My Pi and OpenCode use your latest saved Kilo models and start the saved connection if the proxy is stopped.", "Ejecútalos desde cualquier terminal de proyecto. Pasan los argumentos a la CLI instalada. Codex CLI, Claude Code, Oh My Pi y OpenCode usan tus últimos modelos Kilo guardados e inician la conexión guardada si el proxy está detenido.")),
-		u.note(u.tr("kilo-muse uses the Muse Code installation selected in CLI settings, its own Meta login and official models. No Kilo connection or shared model selection is required.", "kilo-muse usa la instalación de Muse Code seleccionada en los ajustes de las CLI, su propio inicio de sesión de Meta y sus modelos oficiales. No requiere conexión Kilo ni selección compartida de modelos.")),
+		u.note(u.tr("kilo-muse uses the selected Muse executable and connection, including custom versions. Kilo mode uses saved shared models and requires Kilo Proxy open; the native Meta mode uses its own login and catalog.", "kilo-muse usa el ejecutable y la conexión Muse seleccionados, incluidas las versiones personalizadas. El modo Kilo usa los modelos compartidos guardados y requiere Kilo Proxy abierto; el modo nativo de Meta usa su sesión y catálogo propios.")),
 	}
 	label := u.tr("Update terminal commands", "Actualizar comandos de terminal")
 	if powerShell {
@@ -302,8 +302,8 @@ func (u *nativeUI) terminalManualWidgets() []layout.Widget {
 	ready := s.ManualChecked && s.Manual.Supported && s.ManualError == "" && !loading
 	children = append(children,
 		u.note(instructions),
-		u.note(u.tr("Muse Code works with Kilo Proxy closed; keep it open for the other commands. If you move the app or change its settings folder, refresh these functions and replace the copies in your shell file.", "Muse Code funciona con Kilo Proxy cerrado; mantenlo abierto para los demás comandos. Si mueves la aplicación o cambias su carpeta de configuración, actualiza estas funciones y sustituye las copias en el archivo de inicio del shell.")),
-		u.note(u.tr("kilo-muse uses Muse Code's own Meta login and official models, without Kilo gateway credentials.", "kilo-muse usa el inicio de sesión de Meta y los modelos oficiales de Muse Code, sin credenciales del gateway de Kilo.")),
+		u.note(u.tr("Kilo connections require Kilo Proxy open. Muse’s native Meta connection also works with Kilo Proxy closed. If you move the app or change its settings folder, refresh these functions and replace the copies in your shell file.", "Las conexiones Kilo requieren Kilo Proxy abierto. La conexión nativa de Meta de Muse también funciona con Kilo Proxy cerrado. Si mueves la aplicación o cambias su carpeta de configuración, actualiza estas funciones y sustituye las copias en el archivo de inicio del shell.")),
+		u.note(u.tr("kilo-muse follows the connection chosen in the Muse harness: Kilo shared models or your Meta account.", "kilo-muse sigue la conexión elegida en el harness Muse: modelos compartidos de Kilo o tu cuenta de Meta.")),
 	)
 	if s.powerShell() {
 		children = append(children, u.note(u.tr("Your execution policy must allow PowerShell profiles; Kilo Proxy does not change it.", "Tu política de ejecución debe permitir los perfiles de PowerShell; Kilo Proxy no la cambia.")))

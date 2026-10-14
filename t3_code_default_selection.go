@@ -32,6 +32,10 @@ func t3CodeDefaultSelection(current any, providers map[string]any, policy t3Code
 				if contains(openCodePicker, model) {
 					return t3CodeOpenCodeSelectionVariants(selected, policy.OpenCodeVariantLevels)
 				}
+			case t3CodeMuseProxyID:
+				if contains(policy.MuseLibrary, model) {
+					return t3CodeMuseSelectionReasoning(selected, policy.MuseReasoningLevels, policy.MuseReasoningDefaults)
+				}
 			case t3CodeCodexProxyID:
 				if contains(policy.CodexLibrary, model) {
 					return current
@@ -63,9 +67,13 @@ func t3CodeDefaultSelection(current any, providers map[string]any, policy t3Code
 	for _, candidate := range []struct {
 		id      string
 		library modelLibrary
-	}{{t3CodeCodexProxyID, policy.CodexLibrary}, {t3CodeClaudeProxyID, claudePicker}, {t3CodeOpenCodeProxyID, openCodePicker}} {
+	}{{t3CodeCodexProxyID, policy.CodexLibrary}, {t3CodeClaudeProxyID, claudePicker}, {t3CodeOpenCodeProxyID, openCodePicker}, {t3CodeMuseProxyID, policy.MuseLibrary}} {
 		if enabled(candidate.id) && len(candidate.library.Models) > 0 {
-			return map[string]any{"instanceId": candidate.id, "model": candidate.library.DefaultModel}
+			selected := map[string]any{"instanceId": candidate.id, "model": candidate.library.DefaultModel}
+			if candidate.id == t3CodeMuseProxyID {
+				return t3CodeMuseSelectionReasoning(selected, policy.MuseReasoningLevels, policy.MuseReasoningDefaults)
+			}
+			return selected
 		}
 	}
 	// Null delegates direct/optional model choice to T3's enabled-instance
@@ -112,6 +120,71 @@ func t3CodeOpenCodeSelectionVariants(selected map[string]any, levels map[string]
 			return selected
 		}
 		next = copy
+	default:
+		return selected
+	}
+	result := map[string]any{}
+	for key, value := range selected {
+		result[key] = value
+	}
+	result["options"] = next
+	return result
+}
+
+// Remove only stale Muse reasoning choices. Other options, native accounts and
+// every conversation remain untouched; valid saved per-turn choices persist.
+func t3CodeMuseSelectionReasoning(selected map[string]any, levels map[string][]string, defaults map[string]string) any {
+	model, _ := selected["model"].(string)
+	allowed := levels[model]
+	initial := defaults[model]
+	if !helperContains(allowed, initial) {
+		initial = ""
+	}
+	valid := func(value any) bool { effort, ok := value.(string); return ok && helperContains(allowed, effort) }
+	var next any
+	switch options := selected["options"].(type) {
+	case map[string]any:
+		value, exists := options["reasoningEffort"]
+		if (exists && valid(value)) || (!exists && initial == "") {
+			return selected
+		}
+		copy := map[string]any{}
+		for key, value := range options {
+			if key != "reasoningEffort" {
+				copy[key] = value
+			}
+		}
+		if initial != "" {
+			copy["reasoningEffort"] = initial
+		}
+		next = copy
+	case []any:
+		copy := []any{}
+		changed, kept := false, false
+		for _, raw := range options {
+			option, ok := raw.(map[string]any)
+			if ok && option["id"] == "reasoningEffort" {
+				if !valid(option["value"]) {
+					changed = true
+					continue
+				}
+				kept = true
+			}
+			copy = append(copy, raw)
+		}
+		if !kept && initial != "" {
+			copy = append(copy, map[string]any{"id": "reasoningEffort", "value": initial})
+			changed = true
+		}
+		if !changed {
+			return selected
+		}
+		next = copy
+	case nil:
+		if initial == "" {
+			return selected
+		}
+		next = []any{map[string]any{"id": "reasoningEffort", "value": initial}}
 	default:
 		return selected
 	}

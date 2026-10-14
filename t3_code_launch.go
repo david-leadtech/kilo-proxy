@@ -239,6 +239,11 @@ func (a *app) applyT3CodeLaunch(plan *clientLaunchPlan, rt clientLaunchRuntime) 
 			}
 		}
 	}
+	if t3CodeMuseKiloEnabled(saved.Preferences) {
+		if _, err := a.checkMuseKiloVersion(saved.MuseBinary.Path); err != nil {
+			return err
+		}
+	}
 	paths := t3CodePaths(a.dir)
 	check := a.t3CodeCheckRunning
 	if check == nil {

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"reflect"
@@ -25,6 +26,26 @@ type nativeT3CodePreferences struct {
 	Providers          []string `json:"providers"`
 	OpenCode2          bool     `json:"openCode2"`
 	OpenCodeConnection string   `json:"openCodeConnection"`
+	MuseConnection     string   `json:"museConnection"`
+}
+
+// Missing Muse connection is the legacy native account; explicit null is not a
+// valid choice and must never acknowledge a saved Kilo connection.
+func (p *nativeT3CodePreferences) UnmarshalJSON(data []byte) error {
+	type document nativeT3CodePreferences
+	var next document
+	if err := json.Unmarshal(data, &next); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if raw, present := fields["museConnection"]; present && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return errors.New("Invalid Muse connection.")
+	}
+	*p = nativeT3CodePreferences(next)
+	return nil
 }
 
 type nativeT3CodeProvider struct {
@@ -68,6 +89,7 @@ type nativeT3CodePreferencesResponse struct {
 	SupportedProviders    []nativeT3CodeProvider  `json:"supportedProviders"`
 	OpenCode2Supported    bool                    `json:"openCode2Supported"`
 	OpenCodeKiloSupported bool                    `json:"openCodeKiloSupported"`
+	MuseKiloSupported     bool                    `json:"museKiloSupported"`
 }
 type nativeT3CodePreferencesState struct {
 	nativeT3CodePreferencesResponse
@@ -84,12 +106,30 @@ func nativeT3OpenCodeConnection(p nativeT3CodePreferences) string {
 	return p.OpenCodeConnection
 }
 
+func nativeT3MuseConnection(p nativeT3CodePreferences) string {
+	if p.MuseConnection == "" {
+		return "native"
+	}
+	return p.MuseConnection
+}
+func nativeT3MuseUsesKilo(p nativeT3CodePreferences) bool {
+	return helperContains(p.Providers, "muse") && nativeT3MuseConnection(p) == "kilo"
+}
+func (u *nativeUI) t3CodeMuseConnectionError() error {
+	s := &u.agentsState().T3Code.PreferencesState
+	if s.Loaded && nativeT3MuseUsesKilo(s.Preferences) && !s.MuseKiloSupported {
+		return errors.New(u.tr("This T3 build cannot use the Kilo Muse connection. Choose your Meta account, disable Muse or install a compatible T3 build.", "Esta compilación de T3 no admite la conexión Kilo de Muse. Elige tu cuenta de Meta, desactiva Muse o instala una compilación T3 compatible."))
+	}
+	return nil
+}
+
 func nativeT3OpenCodeUsesKilo(p nativeT3CodePreferences) bool {
 	return helperContains(p.Providers, "opencode") && nativeT3OpenCodeConnection(p) == "kilo"
 }
 
 func nativeT3CodePreferencesEqual(a, b nativeT3CodePreferences) bool {
 	a.OpenCodeConnection, b.OpenCodeConnection = nativeT3OpenCodeConnection(a), nativeT3OpenCodeConnection(b)
+	a.MuseConnection, b.MuseConnection = nativeT3MuseConnection(a), nativeT3MuseConnection(b)
 	a.Providers = append([]string(nil), a.Providers...)
 	b.Providers = append([]string(nil), b.Providers...)
 	sort.Strings(a.Providers)
@@ -104,7 +144,7 @@ func nativeT3CodePreferencesEqual(a, b nativeT3CodePreferences) bool {
 }
 
 func validNativeT3CodePreferences(p nativeT3CodePreferences) bool {
-	return p.Version == 1 && (p.CodexModels == "official" || p.CodexModels == "shared") && (p.ClaudeModels == "official" || p.ClaudeModels == "shared") && (!p.OpenCode2 || helperContains(p.Providers, "opencode")) && (nativeT3OpenCodeConnection(p) == "native" || nativeT3OpenCodeConnection(p) == "kilo")
+	return p.Version == 1 && (p.CodexModels == "official" || p.CodexModels == "shared") && (p.ClaudeModels == "official" || p.ClaudeModels == "shared") && (!p.OpenCode2 || helperContains(p.Providers, "opencode")) && (nativeT3OpenCodeConnection(p) == "native" || nativeT3OpenCodeConnection(p) == "kilo") && (nativeT3MuseConnection(p) == "native" || nativeT3MuseConnection(p) == "kilo")
 }
 
 func nativeT3CodePreferenceLibraryError(p nativeT3CodePreferences, library modelLibrary) error {
@@ -173,6 +213,7 @@ func (u *nativeUI) saveT3CodePreferences(next nativeT3CodePreferences) {
 	}
 	next.Providers = append([]string{}, next.Providers...)
 	next.OpenCodeConnection = nativeT3OpenCodeConnection(next)
+	next.MuseConnection = nativeT3MuseConnection(next)
 	s.Pending, s.Error = &next, ""
 	s.Generation++
 	generation := s.Generation
@@ -269,7 +310,7 @@ func (u *nativeUI) t3CodePreferencesPanel() layout.Widget {
 			continue
 		}
 		help := u.tr("Uses this provider's own installation and login", "Usa la instalación y sesión propias de este proveedor")
-		if id == "opencode" && nativeT3OpenCodeUsesKilo(p) {
+		if id == "opencode" && nativeT3OpenCodeUsesKilo(p) || id == "muse" && nativeT3MuseUsesKilo(p) {
 			help = u.tr("Uses your saved shared models through Kilo Proxy", "Usa tus modelos compartidos guardados a través de Kilo Proxy")
 		}
 		if !provider.Supported {
@@ -278,9 +319,44 @@ func (u *nativeUI) t3CodePreferencesPanel() layout.Widget {
 		}
 		rows = append(rows, account("provider:"+id, label, help, helperContains(p.Providers, id), func(p *nativeT3CodePreferences, enabled bool) {
 			if provider.Supported || !enabled {
+				if id == "muse" && enabled {
+					p.MuseConnection = "kilo"
+				}
 				*p = nativeT3CodeToggleProvider(*p, id, enabled)
 			}
 		}))
+		if id == "muse" && helperContains(p.Providers, id) {
+			connection := nativeT3MuseConnection(p)
+			choices := []nativeChoice{{Value: "kilo", Label: u.tr("Kilo Proxy · shared models", "Kilo Proxy · modelos compartidos")}, {Value: "native", Label: u.tr("Own Meta account", "Cuenta propia de Meta")}}
+			editable := ready && helperContains(p.Providers, id) && provider.Supported
+			choose := func(value string) {
+				if value == "kilo" && !s.MuseKiloSupported {
+					return
+				}
+				next := p
+				next.MuseConnection = value
+				u.saveT3CodePreferences(next)
+			}
+			controls := u.column(u.uxsRadio("t3-preferences:muse-connection:kilo", choices[0], connection == "kilo", editable && s.MuseKiloSupported, choose), u.uxsRadio("t3-preferences:muse-connection:native", choices[1], connection == "native", editable, choose))
+			help := u.tr("Kilo uses your saved shared models in a separate Muse profile. Your Meta account keeps its own login and catalog. Both use the Muse executable selected in Settings. Close T3 Code · Kilo and prepare again after changing the connection.", "Kilo usa tus modelos compartidos guardados en un perfil Muse separado. Tu cuenta de Meta conserva su sesión y catálogo propios. Ambas usan el ejecutable Muse elegido en Ajustes. Cierra T3 Code · Kilo y prepara de nuevo tras cambiar la conexión.")
+			if !s.MuseKiloSupported {
+				help += " " + u.tr("This T3 build cannot use the Kilo Muse connection.", "Esta compilación de T3 no admite la conexión Kilo de Muse.")
+			}
+			rows = append(rows, u.uxsRow(u.tr("Muse connection", "Conexión de Muse"), "", controls, nil, u.note(help)))
+			if nativeT3MuseUsesKilo(p) && nativeT3CodePreferencesEqual(p, u.agentsState().T3Code.Info.Preferences) {
+				models := []string{}
+				for _, model := range u.agentsState().T3Code.Info.EffectiveMuseModels {
+					label := model.ID
+					if model.Name != "" {
+						label = model.Name + " · " + model.ID
+					}
+					models = append(models, label)
+				}
+				if len(models) > 0 {
+					rows = append(rows, u.uxsRow(u.tr("Muse Kilo models", "Modelos de Muse Kilo"), "", u.note(strings.Join(models, "\n")), nil, nil))
+				}
+			}
+		}
 		if id == "opencode" {
 			connection := nativeT3OpenCodeConnection(p)
 			choices := []nativeChoice{{Value: "native", Label: u.tr("Own OpenCode account", "Cuenta propia de OpenCode")}, {Value: "kilo", Label: u.tr("Kilo Proxy · shared models", "Kilo Proxy · modelos compartidos")}}

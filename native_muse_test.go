@@ -11,7 +11,9 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,6 +22,14 @@ import (
 	"gioui.org/op"
 	"gioui.org/unit"
 )
+
+func postNativeMuseMode(t *testing.T, u *nativeUI, mode string) {
+	t.Helper()
+	w := adminRequest(u.owner, "clients/muse/preferences", `{"version":1,"connection":"`+mode+`"}`)
+	if w.Code != 200 {
+		t.Fatalf("Muse mode: %d %s", w.Code, w.Body.String())
+	}
+}
 
 func nativeMuseTestUI(t *testing.T, language string) (*nativeUI, *nativeLaunchRecorder, string) {
 	t.Helper()
@@ -50,10 +60,14 @@ func nativeMuseTestUI(t *testing.T, language string) (*nativeUI, *nativeLaunchRe
 			return nil
 		},
 	}
+	postNativeMuseMode(t, u, "native")
 	u.client, u.page = "muse", "clients"
 	u.detectLaunchers()
 	u.refreshCLIPreferencesAfter(nil)
-	nativeTestWait(t, u, func() bool { return u.clientState().LaunchChecked && u.cliPreferencesReady() })
+	u.refreshMusePreferencesAfter(nil)
+	nativeTestWait(t, u, func() bool {
+		return u.clientState().LaunchChecked && u.cliPreferencesReady() && u.musePreferencesReady()
+	})
 	return u, r, binary
 }
 
@@ -387,5 +401,203 @@ func TestNativeT3MuseOnlyRejectsChangesDuringPreparation(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestNativeMuseKiloReadinessSnapshotsAndNativeRecovery(t *testing.T) {
+	for _, language := range []string{"en", "es"} {
+		t.Run(language, func(t *testing.T) {
+			u, recorder, binary := nativeMuseTestUI(t, language)
+			c := u.clientState()
+			prefs := nativeMusePreferences{Version: 1, Connection: "kilo"}
+			c.Muse = nativeMuseState{Preferences: prefs, Requested: true, Loaded: true, ProfileRequested: true, ProfileLoaded: true, Info: nativeMuseInfo{Preferences: prefs, KiloSupported: true, ResolvedExecutable: binary}}
+			if state := u.uxhLaunchState("muse"); state.canOpen || !strings.Contains(state.reason, u.tr("Connect Kilo or ChatGPT", "Conecta Kilo o ChatGPT")) {
+				t.Fatalf("Muse Kilo bypassed connection: %+v", state)
+			}
+			u.owner.mu.Lock()
+			u.owner.apiKey, u.owner.config.OrgID = "synthetic-kilo-key", "synthetic-org"
+			u.owner.mu.Unlock()
+			if state := u.uxhLaunchState("muse"); state.canOpen || !strings.Contains(state.reason, u.tr("save shared models", "guarda modelos compartidos")) {
+				t.Fatalf("Muse Kilo bypassed saved Models: %+v", state)
+			}
+			model := modelInfo{ID: "vendor/exact", Name: "Exact shared model"}
+			u.models = []modelInfo{model}
+			nativeSeedSharedForTest(t, u, model)
+			if state := u.uxhLaunchState("muse"); !state.canOpen {
+				t.Fatalf("confirmed Muse Kilo remained blocked: %+v", state)
+			}
+			c.Launching = "muse"
+			if reason := u.museReadinessReason(); reason != "" {
+				t.Fatal("Muse blocked its own preparation", reason)
+			}
+			u.busy["POST/api/config"] = true
+			if reason := u.museReadinessReason(); reason == "" {
+				t.Fatal("Muse ignored a concurrent connection change during preparation")
+			}
+			delete(u.busy, "POST/api/config")
+			c.Launching = "t3-code"
+			if reason := u.museReadinessReason(); reason == "" {
+				t.Fatal("Muse ignored another active launcher")
+			}
+			c.Launching = ""
+			c.Muse.Info.Library = func() *modelLibrary { value := u.modelLibraryValue(); return &value }()
+			c.Muse.Info.EffectiveModels = []nativeT3CodeModelSummary{{ID: model.ID, Name: model.Name}}
+			initial := u.launchSettingsFingerprint("muse", "")
+			c.Muse.Pending = &nativeMusePreferences{Version: 1, Connection: "native"}
+			if u.uxhLaunchState("muse").canOpen || initial == u.launchSettingsFingerprint("muse", "") {
+				t.Fatal("pending connection did not invalidate Kilo opening")
+			}
+			c.Muse.Pending = nil
+			c.Muse.Info.KiloSupported = false
+			if state := u.uxhLaunchState("muse"); state.canOpen || state.reason == "" {
+				t.Fatal("missing Kilo capability was launchable")
+			}
+			c.Muse.Info.KiloSupported = true
+			for _, size := range []image.Point{{1180, 1500}, {780, 1000}} {
+				h := &nativePointerHarness{t: t, u: u, size: size, now: time.Now()}
+				h.frame()
+				if !nativeUpdateHasText(h, "Kilo Proxy · Muse Code") {
+					t.Fatal("Kilo account label absent")
+				}
+				nativeGridCapture(t, h, "muse-kilo-"+fmtSize(size)+"-"+language)
+				if size.X == 780 {
+					h.reveal(u.tr("Detect again", "Volver a detectar"), semantic.Button)
+					nativeGridCapture(t, h, "muse-kilo-details-"+fmtSize(size)+"-"+language)
+				}
+			}
+			c.Muse.Preferences = nativeMusePreferences{Version: 1, Connection: "native"}
+			c.Muse.Info.Preferences = c.Muse.Preferences
+			u.owner.mu.Lock()
+			u.owner.apiKey, u.owner.config.OrgID = "", ""
+			u.owner.mu.Unlock()
+			nativeSeedSharedForTest(t, u)
+			if !u.museNative() || !u.uxhLaunchState("muse").canOpen {
+				t.Fatal("Meta recovery retained Kilo connection/library gate")
+			}
+			if initial == u.launchSettingsFingerprint("muse", "") {
+				t.Fatal("mode transition retained Kilo fingerprint")
+			}
+			if recorder.count() != 0 {
+				t.Fatal("readiness/layout spawned a Muse process")
+			}
+		})
+	}
+}
+
+func nativeMuseKiloTestUI(t *testing.T, language string) (*nativeUI, *nativeLaunchRecorder, string, *atomic.Int32) {
+	t.Helper()
+	u, recorder, binary := nativeMuseTestUI(t, language)
+	u.owner.mu.Lock()
+	u.owner.apiKey, u.owner.config.OrgID = "synthetic-kilo-personal-key", "e2e-team"
+	u.owner.mu.Unlock()
+	probes := &atomic.Int32{}
+	u.owner.museVersionProbe = func(path string) (string, error) {
+		probes.Add(1)
+		if path != binary {
+			t.Error("Muse preparation replaced the selected executable", path)
+		}
+		return "1.4.6-R6000.1", nil
+	}
+	model := modelInfo{ID: "vendor/one", Name: "Exact shared model", ContextWindow: 64000, MaxOutputTokens: 4000}
+	u.models = []modelInfo{model}
+	nativeSeedSharedForTest(t, u, model)
+	u.saveMusePreferences(nativeMusePreferences{Version: 1, Connection: "kilo"})
+	nativeTestWait(t, u, func() bool {
+		return u.musePreferencesReady() && u.clientState().Muse.ProfileLoaded && !u.busy["GET"+nativeMuseEndpoint]
+	})
+	if reason := u.museReadinessReason(); reason != "" {
+		t.Fatal("Kilo fixture did not reach confirmed readiness", reason)
+	}
+	if probes.Load() != 0 {
+		t.Fatal("reading Muse readiness executed a version probe")
+	}
+	return u, recorder, binary, probes
+}
+
+func TestNativeMuseKiloLaunchPreparesExactSelectionAndExecutable(t *testing.T) {
+	for _, language := range []string{"en", "es"} {
+		t.Run(language, func(t *testing.T) {
+			u, recorder, binary, probes := nativeMuseKiloTestUI(t, language)
+			project := t.TempDir()
+			if err := u.uxhUseGlobalFolder(project); err != nil {
+				t.Fatal(err)
+			}
+			before := u.owner.modelLibrary.snapshot()
+			u.launchAgent("muse")
+			nativeTestWait(t, u, func() bool { return u.clientState().Launching == "" && recorder.count() == 1 })
+			recorder.mu.Lock()
+			plan := recorder.plans[0]
+			recorder.mu.Unlock()
+			if plan.Client != "muse" || plan.Executable != binary || plan.Directory != project || !reflect.DeepEqual(plan.Env, museKiloEnvironment(museTerminalHome(u.owner.dir))) {
+				t.Fatal("Muse Kilo launch lost its selected executable, project or private profile", plan)
+			}
+			if probes.Load() != 1 || !u.clientState().Muse.Info.Prepared || !reflect.DeepEqual(*u.clientState().Muse.Info.Library, before.Library) {
+				t.Fatal("native launch did not confirm the exact prepared Kilo selection", probes.Load(), u.clientState().Muse.Info)
+			}
+			if after := u.owner.modelLibrary.snapshot(); after.Revision != before.Revision || !reflect.DeepEqual(after.Library, before.Library) {
+				t.Fatal("launch rewrote the shared Models selection")
+			}
+			u.owner.mu.Lock()
+			started := u.owner.proxyServer != nil
+			u.owner.mu.Unlock()
+			if !started || u.agentsState().Preferences.LastOpened["muse"] == 0 {
+				t.Fatal("Kilo Muse did not start its own gateway or remember successful opening")
+			}
+		})
+	}
+}
+
+func TestNativeMuseKiloRejectsExternalModeChangeDuringPreparation(t *testing.T) {
+	for _, language := range []string{"en", "es"} {
+		t.Run(language, func(t *testing.T) {
+			u, recorder, _, probes := nativeMuseKiloTestUI(t, language)
+			upstream, _ := url.Parse("http://" + u.owner.adminHost)
+			proxy := httputil.NewSingleHostReverseProxy(upstream)
+			gate, entered := make(chan struct{}), make(chan struct{}, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodPost && r.URL.Path == nativeMuseEndpoint {
+					select {
+					case entered <- struct{}{}:
+					default:
+					}
+					select {
+					case <-gate:
+					case <-r.Context().Done():
+						return
+					}
+				}
+				proxy.ServeHTTP(w, r)
+			}))
+			t.Cleanup(func() {
+				select {
+				case <-gate:
+				default:
+					close(gate)
+				}
+				server.Close()
+			})
+			u.owner.adminHost = strings.TrimPrefix(server.URL, "http://")
+			u.launchAgent("muse")
+			nativeTestWait(t, u, func() bool {
+				select {
+				case <-entered:
+					return true
+				default:
+					return false
+				}
+			})
+			postNativeMuseMode(t, u, "native")
+			close(gate)
+			nativeTestWait(t, u, func() bool { return u.clientState().Launching == "" })
+			if recorder.count() != 0 || probes.Load() != 0 || u.notice != nativeMessage("The Muse Code connection changed. Reload its settings before preparing it.", language) {
+				t.Fatal("Muse launched a stale Kilo mode or probed it before checking the current connection", u.notice, probes.Load())
+			}
+			u.owner.mu.Lock()
+			started := u.owner.proxyServer != nil
+			u.owner.mu.Unlock()
+			if started {
+				t.Fatal("stale Muse preparation started the gateway")
+			}
+		})
 	}
 }

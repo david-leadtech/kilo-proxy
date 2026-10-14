@@ -38,6 +38,8 @@ type t3CodeProfileOptions struct {
 	Platform                                       string
 	OpenCodeKiloSupported                          bool
 	NormalOpenCodePaths                            []string
+	MuseKiloSupported                              bool
+	NormalMusePaths                                []string
 	ClaudeModelDefaults                            bool
 	NormalEnvironment                              map[string]string
 	Library                                        modelLibrary
@@ -142,6 +144,9 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 			instance["environment"] = env
 		}
 		if err := addT3CodeOpenCodeProfile(options, &result); err != nil {
+			return t3CodeProfiles{}, err
+		}
+		if err := addT3CodeMuseProfile(options, &result); err != nil {
 			return t3CodeProfiles{}, err
 		}
 		return result, nil
@@ -287,6 +292,9 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 	}
 	result.Providers = t3CodeProviderInstances(options, result, choices, selection)
 	if err := addT3CodeOpenCodeProfile(options, &result); err != nil {
+		return t3CodeProfiles{}, err
+	}
+	if err := addT3CodeMuseProfile(options, &result); err != nil {
 		return t3CodeProfiles{}, err
 	}
 	return result, nil

@@ -12,7 +12,7 @@ function fixture(t,api,extra={}) {
  return {helper,nodes,messages,input};
 }
 test('CLI operation guards target executable consumers and leave Codex Desktop and unrelated writes alone',()=>{
- for(const [path,client]of [['codex-cli/catalog','codex-cli'],['claude/profile','claude'],['clients/t3-code','t3-code'],['clients/synara','synara'],['open-design/profile','open-design'],['xcode/codex','xcode-codex'],['xcode/claude','xcode-claude']])assert.equal(cliPreferenceOperation(path,{},'POST'),client);
+ for(const [path,client]of [['codex-cli/catalog','codex-cli'],['claude/profile','claude'],['clients/muse','muse'],['clients/t3-code','t3-code'],['clients/synara','synara'],['open-design/profile','open-design'],['xcode/codex','xcode-codex'],['xcode/claude','xcode-claude']])assert.equal(cliPreferenceOperation(path,{},'POST'),client);
  assert.equal(cliPreferenceOperation('clients/launch',{client:'claude'},'POST'),'claude');
  assert.equal(cliPreferenceOperation('clients/launch',{client:'muse'},'POST'),'muse');
  for(const [path,body,method]of [['codex/catalog',{},'POST'],['clients/launch',{client:'codex'},'POST'],['clients/cli/preferences',{},'POST'],['clients/t3-code',undefined,'GET']])assert.equal(cliPreferenceOperation(path,body,method),'');
@@ -23,7 +23,7 @@ test('Muse path settings accept older version 1 responses and preserve existing 
  await tick();assert.equal(helper.blocked('muse'),false);assert.equal(nodes.get('cli-path-muse').value,'');
  input('muse','/custom/muse');assert.equal(helper.blocked('t3-code'),true);nodes.get('cli-path-save-muse').dispatch('click');await tick();
  assert.deepEqual(writes[0],{...initial(),codexExecutable:'/custom/codex',claudeExecutable:'/custom/claude',museExecutable:'/custom/muse'});assert.equal(helper.blocked('muse'),false);
- helper.render({language:'es',launchInfo:{clients:{muse:{path:'/custom/muse'}}}});assert.equal(nodes.get('cli-path-resolved-muse').textContent,'Ejecutable detectado: /custom/muse');assert.match(nodes.get('cli-preferences-muse-help').textContent,/inicio de sesión de Meta/);
+ helper.render({language:'es',launchInfo:{clients:{muse:{path:'/custom/muse'}}}});assert.equal(nodes.get('cli-path-resolved-muse').textContent,'Ejecutable detectado: /custom/muse');assert.match(nodes.get('cli-preferences-muse-help').textContent,/modelos compartidos de Kilo o tu cuenta de Meta/);
  nodes.get('cli-path-auto-muse').dispatch('click');await tick();assert.equal(prefs.museExecutable,'');assert.equal(prefs.codexExecutable,'/custom/codex');assert.equal(prefs.claudeExecutable,'/custom/claude');assert.equal(refreshes,2);
 });
 test('Muse drafts and external path changes invalidate T3 preparation and unacknowledged Muse saves stay pending',async t=>{
