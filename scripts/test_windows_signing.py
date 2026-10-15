@@ -48,7 +48,8 @@ class SigningIdentityTests(unittest.TestCase):
                 setup_windows_signing.prepare_identity(root / 'private', public)
 
 
-@unittest.skipUnless(os.name == 'nt', 'Real SignTool verification requires Windows')
+@unittest.skipUnless(os.name == 'nt' and os.environ.get('KILO_TEST_WINDOWS_SIGNING') == '1',
+                     'Real SignTool verification runs explicitly in the native Windows jobs')
 class WindowsAuthenticodeTests(unittest.TestCase):
     def test_sign_both_architectures_verify_archive_and_reject_tampering(self):
         # CI uses a disposable identity here, never the production release secrets.

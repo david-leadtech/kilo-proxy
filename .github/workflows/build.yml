@@ -136,6 +136,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Verify Windows signing with a disposable identity
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        env:
+          KILO_TEST_WINDOWS_SIGNING: '1'
+        run: python -m unittest discover -s scripts -p test_windows_signing.py -v
       - name: Probe Windows notification registration independently of Go
         if: runner.os == 'Windows'
         timeout-minutes: 2

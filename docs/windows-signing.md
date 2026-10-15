@@ -74,8 +74,11 @@ public certificate in the disposable runner user's root store for verification,
 then removes that trust if it added it. It does not install the private key into
 a persistent certificate store.
 
-Windows CI also exercises signing, ZIP extraction, missing-secret rejection and
-tamper rejection with a disposable identity, without production credentials.
+Both native Windows CI runners exercise signing, ZIP extraction, missing-secret
+and signer-mismatch rejection, and tamper rejection with a disposable identity,
+without production credentials. To run this check locally on Windows, set
+`$env:KILO_TEST_WINDOWS_SIGNING = '1'` and run
+`python -m unittest discover -s scripts -p test_windows_signing.py -v`.
 
 ## Backup and setup
 
