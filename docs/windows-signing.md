@@ -70,7 +70,7 @@ compares its bytes to the signed input, then runs the existing desktop archive
 smoke. Signing never recompiles the executable.
 
 The signing script removes its temporary PFX. It temporarily trusts only the
-public certificate in the disposable runner user's root store for verification,
+public certificate in the disposable runner's machine root store for verification,
 then removes that trust if it added it. It does not install the private key into
 a persistent certificate store.
 
@@ -102,7 +102,9 @@ Restore the original backup rather than deleting the certificate or generating
 a key on each run. There is no guarantee of keeping the identity forever: it has
 a fixed expiry, and a lost or compromised private key requires rotation.
 
-To verify an extracted release on a Windows machine with the Windows SDK:
+To verify an extracted release on a Windows machine with the Windows SDK, use an
+elevated PowerShell session (the script temporarily trusts its public certificate
+if the machine does not already trust it):
 
 ```powershell
 ./scripts/windows_sign.ps1 -VerifyOnly -Binary '.\Kilo Proxy.exe'

@@ -51,6 +51,13 @@ class SigningIdentityTests(unittest.TestCase):
 @unittest.skipUnless(os.name == 'nt' and os.environ.get('KILO_TEST_WINDOWS_SIGNING') == '1',
                      'Real SignTool verification runs explicitly in the native Windows jobs')
 class WindowsAuthenticodeTests(unittest.TestCase):
+    def run_signing(self, command, env):
+        try:
+            return subprocess.run(command, env=env, capture_output=True, text=True, timeout=90)
+        except subprocess.TimeoutExpired as error:
+            output = (error.stdout or b'') + (error.stderr or b'')
+            self.fail('Signing command timed out. Last output: ' + output.decode(errors='replace'))
+
     def test_sign_both_architectures_verify_archive_and_reject_tampering(self):
         # CI uses a disposable identity here, never the production release secrets.
         with tempfile.TemporaryDirectory(prefix='kilo signing test ') as temporary:
@@ -71,33 +78,30 @@ class WindowsAuthenticodeTests(unittest.TestCase):
                 # Exercise the same OpenSSL PFX format and leaf extensions as production.
                 pfx, password = setup_windows_signing.prepare_identity(root / 'private', root / 'fixture.cer')
             else:
-                subprocess.run(['pwsh', '-NoProfile', '-Command', fixture], env=env, check=True,
+                subprocess.run(['pwsh', '-NoProfile', '-NonInteractive', '-Command', fixture], env=env, check=True,
                                capture_output=True, text=True)
                 pfx, password = root / 'fixture.pfx', 'disposable-fixture-password'
             env.update(KILO_WINDOWS_SIGNING_PFX=base64.b64encode(pfx.read_bytes()).decode(),
                        KILO_WINDOWS_SIGNING_PASSWORD=password)
             source = root / 'main.go'
             source.write_text('package main\nfunc main() {}\n')
-            command = ['pwsh', '-NoProfile', '-File', str(ROOT / 'scripts/windows_sign.ps1'),
-                       '-Certificate', str(root / 'fixture.cer')]
+            script_command = ['pwsh', '-NoProfile', '-NonInteractive', '-File', str(ROOT / 'scripts/windows_sign.ps1')]
+            command = [*script_command, '-Certificate', str(root / 'fixture.cer')]
             for arch in ('amd64', 'arm64'):
                 binary = root / f'fixture-{arch}.exe'
                 subprocess.run(['go', 'build', '-o', str(binary), str(source)],
                                env=dict(env, GOOS='windows', GOARCH=arch, CGO_ENABLED='0'), check=True,
                                capture_output=True, text=True)
                 missing = dict(env, KILO_WINDOWS_SIGNING_PFX='', KILO_WINDOWS_SIGNING_PASSWORD='')
-                result = subprocess.run([*command, '-Binary', str(binary)], env=missing,
-                                        capture_output=True, text=True)
+                result = self.run_signing([*command, '-Binary', str(binary)], missing)
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn('Release signing requires', result.stdout + result.stderr)
-                wrong_identity = [*command[:4], '-Certificate', str(setup_windows_signing.PUBLIC_CERTIFICATE)]
-                result = subprocess.run([*wrong_identity, '-Binary', str(binary)], env=env,
-                                        capture_output=True, text=True)
+                wrong_identity = [*script_command, '-Certificate', str(setup_windows_signing.PUBLIC_CERTIFICATE)]
+                result = self.run_signing([*wrong_identity, '-Binary', str(binary)], env)
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn('PFX does not match', result.stdout + result.stderr)
                 for arguments in ([], ['-VerifyOnly']):
-                    result = subprocess.run([*command, '-Binary', str(binary), *arguments], env=env,
-                                            capture_output=True, text=True, timeout=180)
+                    result = self.run_signing([*command, '-Binary', str(binary), *arguments], env)
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 # Verify the copy that a ZIP consumer actually extracts.
                 import zipfile
@@ -108,8 +112,7 @@ class WindowsAuthenticodeTests(unittest.TestCase):
                     output.extractall(root / arch)
                 extracted = root / arch / 'Kilo Proxy.exe'
                 self.assertEqual(extracted.read_bytes(), binary.read_bytes())
-                result = subprocess.run([*command, '-VerifyOnly', '-Binary', str(extracted)], env=missing,
-                                        capture_output=True, text=True)
+                result = self.run_signing([*command, '-VerifyOnly', '-Binary', str(extracted)], missing)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 data = bytearray(extracted.read_bytes())
                 pe = struct.unpack_from('<I', data, 60)[0]
@@ -118,8 +121,7 @@ class WindowsAuthenticodeTests(unittest.TestCase):
                 text_offset = struct.unpack_from('<I', data, section + 20)[0]
                 data[text_offset + 32] ^= 1
                 extracted.write_bytes(data)
-                result = subprocess.run([*command, '-VerifyOnly', '-Binary', str(extracted)], env=missing,
-                                        capture_output=True, text=True)
+                result = self.run_signing([*command, '-VerifyOnly', '-Binary', str(extracted)], missing)
                 self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn('verification failed', result.stdout + result.stderr)
 

@@ -26,7 +26,7 @@ if (-not $signTool) { throw 'SignTool is missing; install the Windows SDK.' }
 
 $temporaryPfx = $null
 $addedRoot = $false
-$rootPath = "Cert:\CurrentUser\Root\$($expected.Thumbprint)"
+$rootPath = "Cert:\LocalMachine\Root\$($expected.Thumbprint)"
 try {
     if (-not $VerifyOnly) {
         if (-not $env:KILO_WINDOWS_SIGNING_PFX -or -not $env:KILO_WINDOWS_SIGNING_PASSWORD) {
@@ -44,16 +44,21 @@ try {
         } finally {
             $privateCertificate.Dispose()
         }
+        Write-Host 'Signing executable and requesting its RFC 3161 timestamp.'
         & $signTool sign /f $temporaryPfx /p $env:KILO_WINDOWS_SIGNING_PASSWORD /sha1 $expected.Thumbprint /fd SHA256 `
             /tr http://timestamp.digicert.com /td SHA256 /d 'Kilo Proxy' $binaryPath
         if ($LASTEXITCODE -ne 0) { throw "Signing or timestamp failed (exit $LASTEXITCODE)." }
     }
 
-    # Trust the public self-signed leaf only for this verification, never install its private key.
+    # The user root store can display a native consent dialog, even in CI.
+    # Hosted runners are administrators: use their machine store and remove our addition.
+    # Only the public leaf is imported; never install its private key.
     if (-not (Test-Path $rootPath)) {
-        $null = Import-Certificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\Root
+        Write-Host 'Temporarily trusting the public certificate for Authenticode verification.'
+        $null = Import-Certificate -FilePath $certificatePath -CertStoreLocation Cert:\LocalMachine\Root
         $addedRoot = $true
     }
+    Write-Host 'Verifying the timestamped Authenticode signature.'
     & $signTool verify /pa /all /tw $binaryPath
     if ($LASTEXITCODE -ne 0) { throw "Authenticode verification failed (exit $LASTEXITCODE)." }
     $signature = Get-AuthenticodeSignature -LiteralPath $binaryPath
