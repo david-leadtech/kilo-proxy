@@ -43,17 +43,74 @@ class RuntimePolicyTests(unittest.TestCase):
         self.old_credential_pid = runtime._CREDENTIAL_PID
         runtime._CREDENTIAL_PID = None
         self.old_temp = tempfile.tempdir
+        self.portable_socket_cleanups = []
+        # _stop_owned is exercised with fake processes even on Windows.
+        kill_signal = patch.object(runtime.signal, "SIGKILL", getattr(runtime.signal, "SIGKILL", 9), create=True)
+        kill_signal.start(); self.addCleanup(kill_signal.stop)
+
+    def portable_posix_fixture(self, *, force=False):
+        # Credential/supervisor unit tests do not require a real POSIX host.
+        # Keep the real ownership/filesystem integration on POSIX; elsewhere
+        # emulate only this test's private root and lock boundaries.
+        if os.name == "posix" and not force or getattr(self, "_portable_posix_active", False):
+            return
+        self._portable_posix_active = True
+        roots = {}
+        def create(d):
+            self.assertIs(d, self.d)
+            path = Path(tempfile.mkdtemp(prefix="synthetic-posix-", dir=self.root))
+            owner = {"version": 1, "root": d["root"], "fingerprint": d["fingerprint"], "creatorPID": os.getpid()}
+            marker = path / ".kilo-omnigent-owner.json"
+            marker.write_bytes(json.dumps(owner).encode("utf-8"))
+            identity = {"path": str(path), "markerHash": runtime.hashlib.sha256(marker.read_bytes()).hexdigest()}
+            roots[str(path)] = (owner, identity)
+            return path, identity
+        def open_root(d, path):
+            path = Path(path); owner, identity = roots[str(path)]
+            self.assertEqual(path.parent, self.root)
+            self.assertFalse(path.is_symlink())
+            marker = path / ".kilo-omnigent-owner.json"
+            self.assertFalse(marker.is_symlink())
+            self.assertEqual(owner["root"], d["root"])
+            self.assertEqual(owner["fingerprint"], d["fingerprint"])
+            self.assertEqual(json.loads(marker.read_bytes()), owner)
+            self.assertEqual(runtime.hashlib.sha256(marker.read_bytes()).hexdigest(), identity["markerHash"])
+            return os.open(marker, os.O_RDONLY), dict(identity)
+        def cleanup(d, identity):
+            path = Path(identity["path"])
+            self.assertEqual(identity, roots[str(path)][1])
+            fd, observed = open_root(d, path); os.close(fd)
+            self.assertEqual(observed, identity)
+            shutil.rmtree(path)
+            return True
+        lock = types.ModuleType("fcntl")
+        lock.LOCK_EX, lock.LOCK_NB, lock.LOCK_UN = 2, 4, 8
+        def flock(file, operation):
+            self.assertFalse(file.closed)
+            self.assertIn(operation, (lock.LOCK_EX | lock.LOCK_NB, lock.LOCK_UN))
+        lock.flock = flock
+        for change in (patch.object(runtime, "_create_owned_socket_root", side_effect=create),
+                       patch.object(runtime, "_open_owned_socket_root", side_effect=open_root),
+                       patch.object(runtime, "_cleanup_owned_socket_root", side_effect=cleanup),
+                       patch.dict(sys.modules, {"fcntl": lock})):
+            change.start(); self.addCleanup(change.stop)
 
     def tearDown(self):
         runtime._KILO_TOKENS = self.old_tokens
         runtime._NATIVE_ENV = self.old_native
         runtime._CREDENTIAL_PID = self.old_credential_pid
         tempfile.tempdir = self.old_temp
+        for identity in self.portable_socket_cleanups:
+            self.assertTrue(runtime._cleanup_owned_socket_root(self.d, identity))
         self.tmp.cleanup()
 
     def owned_socket_fixture(self):
+        self.portable_posix_fixture()
         owned, identity = runtime._create_owned_socket_root(self.d)
-        self.addCleanup(lambda: self.assertTrue(runtime._cleanup_owned_socket_root(self.d, identity)))
+        if getattr(self, "_portable_posix_active", False):
+            self.portable_socket_cleanups.append(identity)
+        else:
+            self.addCleanup(lambda: self.assertTrue(runtime._cleanup_owned_socket_root(self.d, identity)))
         return str(owned)
 
     def test_exact_ids_defaults_and_empty_reasoning(self):
@@ -769,7 +826,7 @@ class RuntimePolicyTests(unittest.TestCase):
                         "                    return await callback(\"a\", settings)\n"
                         "                return (harness, model)\n"
                         "    return dispatch\n")
-        source.write_text(text)
+        source.write_bytes(text.encode("utf-8"))
         self.d.update(sourceRoot=str(source.parent.parent), sourceHashes={"runner/app.py": runtime.hashlib.sha256(source.read_bytes()).hexdigest()})
         original_path = list(sys.meta_path)
         self.addCleanup(lambda: sys.meta_path.__setitem__(slice(None), original_path))
@@ -825,7 +882,7 @@ class RuntimePolicyTests(unittest.TestCase):
             loader = finder.find_spec(name).loader
         for text, update_hash in (("def changed(): pass\n", False), ("def missing(): pass\n", True), (source.read_text() + source.read_text().replace("admit", "admit_again"), True)):
             with self.subTest(update_hash=update_hash, length=len(text)):
-                source.write_text(text)
+                source.write_bytes(text.encode("utf-8"))
                 if update_hash:
                     self.d["sourceHashes"]["runner/app.py"] = runtime.hashlib.sha256(source.read_bytes()).hexdigest()
                 with self.assertRaisesRegex(ValueError, "contract changed"):
@@ -896,7 +953,7 @@ class RuntimePolicyTests(unittest.TestCase):
         extra = original[original.index("def native_dispatch_fixture"):].replace("native_dispatch_fixture", "native_dispatch_again", 1)
         for text in (original.replace('if harness == "codex-native":', 'if harness == "other-native":', 1), original + extra):
             with self.subTest(unique_native_reset=False):
-                source.write_text(text)
+                source.write_bytes(text.encode("utf-8"))
                 self.d["sourceHashes"]["runner/app.py"] = runtime.hashlib.sha256(source.read_bytes()).hexdigest()
                 with self.assertRaisesRegex(ValueError, "contract changed"):
                     loader.get_code(name)
@@ -1479,7 +1536,7 @@ class RuntimePolicyTests(unittest.TestCase):
             calls.append((pid, sig, now[0]))
             self.assertEqual(pid, Process.pid)
             if sig == 0 and now[0] >= 0.25: raise ProcessLookupError()
-        with patch.object(runtime.os, "killpg", side_effect=killpg), patch.object(runtime.time, "monotonic", side_effect=lambda: now[0]), patch.object(runtime.time, "sleep", side_effect=lambda delay: now.__setitem__(0, now[0] + delay)):
+        with patch.object(runtime.os, "killpg", side_effect=killpg, create=True), patch.object(runtime.time, "monotonic", side_effect=lambda: now[0]), patch.object(runtime.time, "sleep", side_effect=lambda delay: now.__setitem__(0, now[0] + delay)):
             self.assertTrue(runtime._stop_owned([Process()]))
         self.assertEqual(calls[0][:2], (Process.pid, runtime.signal.SIGTERM))
         self.assertGreaterEqual(now[0], 0.25)
@@ -1503,7 +1560,7 @@ class RuntimePolicyTests(unittest.TestCase):
                     calls.append((pid, sig, now[0]))
                     self.assertEqual(pid, Process.pid)
                     if permission: raise PermissionError("synthetic owned group probe denied")
-                with patch.object(runtime.os, "killpg", side_effect=killpg), patch.object(runtime.time, "monotonic", side_effect=lambda: now[0]), patch.object(runtime.time, "sleep", side_effect=lambda delay: now.__setitem__(0, now[0] + delay)):
+                with patch.object(runtime.os, "killpg", side_effect=killpg, create=True), patch.object(runtime.time, "monotonic", side_effect=lambda: now[0]), patch.object(runtime.time, "sleep", side_effect=lambda delay: now.__setitem__(0, now[0] + delay)):
                     self.assertFalse(runtime._stop_owned([Process()]))
                 self.assertEqual(calls[0][:2], (Process.pid, runtime.signal.SIGTERM))
                 self.assertEqual([sig for _, sig, _ in calls].count(runtime.signal.SIGKILL), 1)
@@ -1518,7 +1575,7 @@ class RuntimePolicyTests(unittest.TestCase):
             pid = 41003
             def poll(self): return 0
             def wait(self, timeout): return 0
-        with patch.object(runtime.os, "killpg", side_effect=ProcessLookupError()) as kill:
+        with patch.object(runtime.os, "killpg", side_effect=ProcessLookupError(), create=True) as kill:
             self.assertTrue(runtime._stop_owned([Process()]))
             self.assertEqual(kill.call_args_list, [unittest.mock.call(Process.pid, runtime.signal.SIGTERM), unittest.mock.call(Process.pid, 0)])
             kill.reset_mock()
@@ -1526,6 +1583,7 @@ class RuntimePolicyTests(unittest.TestCase):
             kill.assert_not_called()
 
     def test_supervisor_keeps_owned_socket_root_when_group_exit_is_unconfirmed(self):
+        self.portable_posix_fixture()
         (self.root / "runtime").mkdir()
         self.d["serverPort"] = 0
         signals = {}; processes = []; owned = []
@@ -1563,6 +1621,7 @@ class RuntimePolicyTests(unittest.TestCase):
         self.assertTrue(runtime._cleanup_owned_socket_root(self.d, identity))
 
     def test_supervisor_records_before_children_and_opens_only_own_ready_host(self):
+        self.portable_posix_fixture()
         for foreign in (False,True):
             with self.subTest(foreign=foreign):
                 (self.root/"runtime").mkdir(exist_ok=True)
@@ -1786,7 +1845,7 @@ class RuntimeShutdownOrderTests(unittest.TestCase):
             "        await server_client.aclose()\n"
             "    return _stop_pm\n"
         )
-        self.source.write_text(self.original)
+        self.source.write_bytes(self.original.encode("utf-8"))
         self.d = {"sourceRoot": str(self.root), "sourceHashes": {"runner/_entry.py": runtime.hashlib.sha256(self.source.read_bytes()).hexdigest()}}
         self.old_path = list(sys.meta_path)
 
@@ -1846,11 +1905,11 @@ class RuntimeShutdownOrderTests(unittest.TestCase):
         loader = self.loader()
         for text, repin in (("def changed(): pass\n", False), (self.original.replace("await pm.shutdown()", "await pm.other()"), True), (self.original + self.original.replace("fixture", "fixture_again"), True)):
             with self.subTest(repin=repin):
-                self.source.write_text(text)
+                self.source.write_bytes(text.encode("utf-8"))
                 if repin: self.d["sourceHashes"]["runner/_entry.py"] = runtime.hashlib.sha256(self.source.read_bytes()).hexdigest()
                 with self.assertRaisesRegex(ValueError, "contract changed"):
                     loader.get_code(name)
-        self.source.write_text(self.original)
+        self.source.write_bytes(self.original.encode("utf-8"))
         for origin, implementation in ((str(self.source.parent / "other.py"), SourceFileLoader(name, str(self.source))), (str(self.source), object())):
             with self.subTest(origin=origin):
                 spec = ModuleSpec(name, implementation, origin=origin)
@@ -1863,6 +1922,10 @@ class RuntimeShutdownOrderTests(unittest.TestCase):
 
 
 class RuntimeDarwinStopTests(unittest.TestCase):
+    def setUp(self):
+        kill_signal = patch.object(runtime.signal, "SIGKILL", getattr(runtime.signal, "SIGKILL", 9), create=True)
+        kill_signal.start(); self.addCleanup(kill_signal.stop)
+
     def stop_fixture(self, platform, plan, poll_values=(0,), wait_timeout=False):
         now = [0.0]; calls = []; waits = []; polls = []
         class Process:
@@ -1890,7 +1953,7 @@ class RuntimeDarwinStopTests(unittest.TestCase):
             if action == "unknown": raise PermissionError("synthetic unknown permission error")
             if action == "eio": raise OSError(runtime.errno.EIO, "synthetic I/O error")
             self.assertEqual(action, "ok")
-        with patch.object(runtime.sys, "platform", platform), patch.object(runtime.os, "killpg", side_effect=killpg), patch.object(runtime.time, "monotonic", side_effect=lambda: now[0]), patch.object(runtime.time, "sleep", side_effect=lambda delay: now.__setitem__(0, now[0] + delay)):
+        with patch.object(runtime.sys, "platform", platform), patch.object(runtime.os, "killpg", side_effect=killpg, create=True), patch.object(runtime.time, "monotonic", side_effect=lambda: now[0]), patch.object(runtime.time, "sleep", side_effect=lambda delay: now.__setitem__(0, now[0] + delay)):
             result = runtime._stop_owned([Process()])
         return result, now[0], calls, polls, waits
 
