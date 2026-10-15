@@ -65,7 +65,8 @@ func TestNativeOpenMausBotWideCardAfterDesktopApps(t *testing.T) {
 				a := u.agentsState()
 				return u.cliPreferencesReady() &&
 					a.Synara.PreferencesState.Loaded && !u.busy["GET"+nativeSynaraPreferencesEndpoint] &&
-					a.T3Code.PreferencesState.Loaded && !u.busy["GET"+nativeT3CodePreferencesEndpoint]
+					a.T3Code.PreferencesState.Loaded && !u.busy["GET"+nativeT3CodePreferencesEndpoint] &&
+					a.Omnigent.PreferencesState.Loaded && !u.busy["GET"+nativeOmnigentPreferencesEndpoint]
 			})
 			h.frame()
 			codex := h.target(u.tr("Open Codex", "Abrir Codex"), semantic.Button).Desc.Bounds

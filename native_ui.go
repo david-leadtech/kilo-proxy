@@ -130,7 +130,10 @@ func newNativeUI(owner *app, invalidate func()) *nativeUI {
 			case <-owner.quit:
 				return
 			case <-ticker.C:
-				u.enqueue(func() { u.refreshState() })
+				u.enqueue(func() {
+					u.refreshState()
+					u.pollOmnigentLaunchStatus(time.Now())
+				})
 			}
 		}
 	}()

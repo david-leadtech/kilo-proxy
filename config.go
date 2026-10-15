@@ -37,6 +37,8 @@ type settings struct {
 	MuseCode                        musePreferences         `json:"museCode"`
 	Synara                          synaraPreferences       `json:"synara,omitempty"`
 	SynaraExecutable                string                  `json:"synaraExecutable,omitempty"`
+	Omnigent                        omnigentPreferences     `json:"omnigent,omitempty"`
+	OmnigentExecutable              string                  `json:"omnigentExecutable,omitempty"`
 	OpenCodeMajor                   int                     `json:"openCodeMajor,omitempty"`
 	OpenCode1Executable             string                  `json:"openCode1Executable,omitempty"`
 	OpenCode2Executable             string                  `json:"openCode2Executable,omitempty"`
@@ -56,7 +58,7 @@ type settings struct {
 }
 
 func readSettings(dir string) (settings, error) {
-	s := settings{MuseCode: normalizeMusePreferences(musePreferences{}), T3Code: normalizeT3CodePreferences(t3CodePreferences{}), Port: 8877, LocalKey: randomKey("kl_local_"), VaultID: randomKey("profile_"), TrayDisplay: trayDisplayIcon, ImageTransport: normalizeImageTransportSettings(imageTransportSettings{})}
+	s := settings{Omnigent: normalizeOmnigentPreferences(omnigentPreferences{}), MuseCode: normalizeMusePreferences(musePreferences{}), T3Code: normalizeT3CodePreferences(t3CodePreferences{}), Port: 8877, LocalKey: randomKey("kl_local_"), VaultID: randomKey("profile_"), TrayDisplay: trayDisplayIcon, ImageTransport: normalizeImageTransportSettings(imageTransportSettings{})}
 	b, err := os.ReadFile(filepath.Join(dir, "settings.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		s.Synara = defaultSynaraPreferences()
@@ -80,8 +82,18 @@ func readSettings(dir string) (settings, error) {
 	if validateSynaraExecutablePath(s.SynaraExecutable) != nil {
 		return s, errors.New("Invalid Synara executable preference.")
 	}
+	if validateCLIExecutable(s.OmnigentExecutable) != nil {
+		return s, errors.New("Invalid Omnigent executable preference.")
+	}
 	var members map[string]json.RawMessage
 	_ = json.Unmarshal(b, &members)
+	if raw, present := members["omnigent"]; present {
+		p, err := decodeOmnigentPreferences(raw)
+		if err != nil {
+			return s, errors.New("Invalid Omnigent settings; restore a valid configuration.")
+		}
+		s.Omnigent = p
+	}
 	if _, present := members["synara"]; !present && s.Synara.Version == 0 {
 		if _, legacyErr := os.Lstat(synaraPaths(dir).Settings); errors.Is(legacyErr, os.ErrNotExist) {
 			s.Synara = defaultSynaraPreferences()

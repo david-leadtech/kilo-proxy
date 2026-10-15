@@ -137,6 +137,8 @@ func nativeClientEndpoint(key string) string {
 		return "/api/clients/opencode2"
 	case "synara":
 		return "/api/clients/synara"
+	case "omnigent":
+		return "/api/clients/omnigent"
 	case "open-design":
 		return openDesignProfileEndpoint
 	case "codex", "codex-cli":
@@ -156,7 +158,7 @@ func nativeClientEndpoint(key string) string {
 }
 
 func nativeClientPayload(key string, s *nativeClientSelection) (any, error) {
-	if key == "openmausbot" || key == "t3-code" || key == "synara" || key == "opencode2" {
+	if key == "openmausbot" || key == "t3-code" || key == "synara" || key == "omnigent" || key == "opencode2" {
 		library := modelLibrary{SchemaVersion: 1, DefaultModel: s.Initial}
 		for _, m := range s.Models {
 			library.Models = append(library.Models, nativeLibraryItem(m))
@@ -1261,6 +1263,10 @@ func (u *nativeUI) prepareClientAfterCLIPathsChecked(key string, done func(error
 }
 
 func (u *nativeUI) prepareClientAfterPreferencesChecked(key string, done func(error)) {
+	if key == "omnigent" {
+		u.prepareOmnigentAfter(done)
+		return
+	}
 	if key == "opencode" || key == "opencode2" {
 		prefs := &u.clientState().OpenCodePreferences
 		if u.openCodePreferencesBusy() || prefs.Pending != nil {
@@ -1521,6 +1527,10 @@ func (u *nativeUI) clientPreparedNotice(key string) {
 	if key == "t3-code" {
 		u.setNotice(nativeToneSuccess, u.tr("Your saved accounts and models are prepared. Open T3 Code · Kilo to choose an account.", "Las cuentas y modelos guardados están preparados. Abre T3 Code · Kilo para elegir una cuenta."))
 	}
+	if key == "omnigent" {
+		u.setNotice(nativeToneSuccess, u.tr("Your saved Omnigent accounts and models are prepared.", "Las cuentas y modelos guardados de Omnigent están preparados."))
+		return
+	}
 	if key == "synara" {
 		u.setNotice(nativeToneSuccess, u.tr("Your saved accounts and models are prepared. Open Synara · Kilo to choose an account.", "Las cuentas y modelos guardados están preparados. Abre Synara · Kilo para elegir una cuenta."))
 	}
@@ -1778,6 +1788,8 @@ func (u *nativeUI) uxhClientDetail(key string, s *nativeClientSelection) uxhDeta
 		return u.t3CodeDetail(s)
 	case "synara":
 		return u.synaraDetail(s)
+	case "omnigent":
+		return u.omnigentDetail(s)
 	case "openmausbot":
 		return u.openMausBotDetail(s)
 	case "open-design":

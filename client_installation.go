@@ -4,6 +4,8 @@ package main
 // Discovery never runs installers, probes CLI versions, or prepares profiles.
 func launchClientInstallURL(id string) string {
 	switch id {
+	case "omnigent":
+		return "https://omnigent.ai/quickstart/install"
 	case "codex-cli":
 		return "https://developers.openai.com/codex/cli/"
 	case "claude":

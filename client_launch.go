@@ -44,10 +44,10 @@ type clientLaunchAvailability struct {
 	InstallURL string `json:"installURL,omitempty"`
 }
 
-var launchClients = []string{"codex", "claude-desktop", "codex-cli", "claude", "muse", "opencode", "opencode2", "omp", "open-design", "openmausbot", "t3-code", "synara", "zed", "xcode-chat", "xcode-codex", "xcode-claude"}
+var launchClients = []string{"codex", "claude-desktop", "codex-cli", "claude", "muse", "opencode", "opencode2", "omp", "open-design", "openmausbot", "t3-code", "synara", "omnigent", "zed", "xcode-chat", "xcode-codex", "xcode-claude"}
 
 func clientLaunchUsesProject(client string) bool {
-	return client != "codex" && client != "claude-desktop" && client != "open-design" && client != "openmausbot" && client != "t3-code" && client != "synara"
+	return client != "codex" && client != "claude-desktop" && client != "open-design" && client != "openmausbot" && client != "t3-code" && client != "synara" && client != "omnigent"
 }
 
 func launchClientIdentity(id string) (string, string) {
@@ -76,6 +76,8 @@ func launchClientIdentity(id string) (string, string) {
 		return "T3 Code · Kilo", "desktop"
 	case "synara":
 		return "Synara · Kilo", "desktop"
+	case "omnigent":
+		return "Omnigent · Kilo", "desktop"
 	case "zed":
 		return "Zed", "desktop"
 	case "xcode-chat", "xcode-codex", "xcode-claude":
@@ -96,6 +98,9 @@ func launchClientPlatformReason(id, platform string) string {
 	}
 	if id == "openmausbot" && platform != "macos" && platform != "windows" && platform != "linux" {
 		return "OpenMausBot desktop is supported on macOS, Windows and Linux."
+	}
+	if id == "omnigent" && platform != "macos" && platform != "linux" {
+		return "Omnigent · Kilo currently requires its Python CLI on macOS or Linux."
 	}
 	return ""
 }
@@ -125,6 +130,14 @@ func (a *app) launchRuntime() clientLaunchRuntime {
 	}
 	resolve := rt.resolve
 	rt.resolve = func(client, custom string) (string, error) {
+		if custom == "" && client == "omnigent" {
+			if path := a.cliExecutable(client); path != "" {
+				if err := a.validateSelectedClientExecutable(client, path); err != nil {
+					return "", err
+				}
+				return path, nil
+			}
+		}
 		if custom == "" && client == "synara" {
 			if path := a.cliExecutable(client); path != "" {
 				if err := a.validateSelectedSynaraExecutable(path, rt.platform); err != nil {
@@ -227,6 +240,12 @@ func (a *app) clientsLaunch(w http.ResponseWriter, r *http.Request) {
 						info.Reason = err.Error()
 					}
 				}
+				if id == "omnigent" {
+					if _, err := inspectOmnigentInstallation(path, rt.platform); err != nil {
+						info.Available = false
+						info.Reason = err.Error()
+					}
+				}
 			}
 			if kind == "terminal" && info.Available && !terminal {
 				info.Available = false
@@ -311,6 +330,12 @@ func (a *app) clientsLaunch(w http.ResponseWriter, r *http.Request) {
 		message = "Synara opened with your selected accounts in its separate Kilo workspace."
 		a.mu.Lock()
 		a.synaraLaunchUntil = time.Now().Add(30 * time.Second)
+		a.mu.Unlock()
+	}
+	if input.Client == "omnigent" {
+		message = "Omnigent is starting its private Kilo workspace. Its browser opens when the server and host are ready."
+		a.mu.Lock()
+		a.omnigentLaunchUntil = time.Now().Add(15 * time.Second)
 		a.mu.Unlock()
 	}
 	if strings.HasPrefix(input.Client, "xcode-") {
@@ -434,6 +459,8 @@ func (a *app) planClientLaunch(input clientLaunchRequest, rt clientLaunchRuntime
 			err = prefsErr
 			p.skipProxy = !synaraUsesKilo(prefs)
 		}
+	} else if input.Client == "omnigent" {
+		err = a.applyOmnigentLaunch(&p, rt)
 	} else {
 		err = a.launchProfile(&p, rt.home)
 	}
@@ -495,7 +522,7 @@ func (a *app) planClientLaunch(input clientLaunchRequest, rt clientLaunchRuntime
 			}
 			p.Executable = binary
 		}
-	} else if input.Client == "open-design" || input.Client == "openmausbot" || input.Client == "t3-code" || input.Client == "synara" {
+	} else if input.Client == "open-design" || input.Client == "openmausbot" || input.Client == "t3-code" || input.Client == "synara" || input.Client == "omnigent" {
 		// These clients already selected their isolated native executable.
 	} else if kind == "desktop" {
 		if rt.platform == "macos" && strings.HasSuffix(p.Executable, ".app") {

@@ -16,6 +16,7 @@ func TestClientInstallationURLsOnlySupportedCLIs(t *testing.T) {
 	want := map[string]string{
 		"t3-code":     "https://github.com/pingdotgg/t3code/releases/tag/v0.0.45",
 		"synara":      "https://github.com/Emanuele-web04/synara/releases",
+		"omnigent":    "https://omnigent.ai/quickstart/install",
 		"codex-cli":   "https://developers.openai.com/codex/cli/",
 		"claude":      "https://code.claude.com/docs/en/setup#install-claude-code",
 		"opencode":    "https://opencode.ai/docs/#install",
