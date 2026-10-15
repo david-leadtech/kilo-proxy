@@ -3,14 +3,18 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -64,6 +68,41 @@ func newNativeAgentInstallationFixture(t *testing.T, key, language string, size 
 		t.Fatal(err)
 	}
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
+	// This fixture exercises CLI installation and terminal recovery. Its generic
+	// fake desktop executable is intentionally not a real Omnigent package; keep
+	// that unrelated row available without changing production source contracts.
+	// Every target CLI result and discovery/preparation counter stays real.
+	proxy.ModifyResponse = func(response *http.Response) error {
+		if response.Request.Method != http.MethodGet || response.Request.URL.Path != nativeLaunchEndpoint || response.StatusCode != http.StatusOK {
+			return nil
+		}
+		data, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
+		_ = response.Body.Close()
+		if err != nil {
+			return err
+		}
+		if len(data) > 1<<20 {
+			return errors.New("synthetic launcher response too large")
+		}
+		var info nativeLaunchInfo
+		if err = json.Unmarshal(data, &info); err != nil {
+			return err
+		}
+		omni, exists := info.Clients["omnigent"]
+		if !exists {
+			return errors.New("synthetic Omnigent launcher row missing")
+		}
+		omni.Available, omni.Installed, omni.Reason = true, true, ""
+		info.Clients["omnigent"] = omni
+		data, err = json.Marshal(info)
+		if err != nil {
+			return err
+		}
+		response.Body = io.NopCloser(bytes.NewReader(data))
+		response.ContentLength = int64(len(data))
+		response.Header.Set("Content-Length", strconv.Itoa(len(data)))
+		return nil
+	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/claude/info" {
 			if !secureEqual(r.Header.Get("Authorization"), "Bearer "+u.owner.adminToken) {

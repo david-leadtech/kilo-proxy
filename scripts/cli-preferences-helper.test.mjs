@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCLIPreferencesHelper,cliPreferenceOperation} from '../ui/cli-preferences-helper.mjs';
-const initial=()=>({version:1,codexExecutable:'',claudeExecutable:'',museExecutable:'',synaraExecutable:''});
+const initial=()=>({version:1,codexExecutable:'',claudeExecutable:'',museExecutable:'',synaraExecutable:'',omnigentExecutable:''});
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function fixture(t,api,extra={}) {
  const old=globalThis.document,nodes=new Map(),messages=[];
@@ -44,7 +44,7 @@ test('CLI paths explicitly save one tool, preserve the other, reject relative pa
  await tick();input('codex-cli','relative/codex');assert.equal(helper.blocked(),true);nodes.get('cli-path-save-codex-cli').dispatch('click');assert.equal(writes.length,0);assert.match(nodes.get('cli-preferences-status').textContent,/absolute path/);
  input('codex-cli','/custom/codex');nodes.get('cli-path-save-codex-cli').dispatch('click');await tick();assert.deepEqual(writes[0],{...initial(),codexExecutable:'/custom/codex',claudeExecutable:'/old/claude'});assert.equal(helper.blocked(),false);
  nodes.get('cli-path-auto-claude').dispatch('click');await tick();assert.equal(prefs.codexExecutable,'/custom/codex');assert.equal(prefs.claudeExecutable,'');assert.equal(refreshes,2);
- helper.render({language:'es',launchInfo:{clients:{'codex-cli':{path:'/custom/codex'}}}});assert.match(nodes.get('cli-preferences-help').textContent,/T3 Code, Synara y Open Design/);assert.equal(nodes.get('cli-path-resolved-codex-cli').textContent,'Ejecutable detectado: /custom/codex');
+ helper.render({language:'es',launchInfo:{clients:{'codex-cli':{path:'/custom/codex'}}}});assert.match(nodes.get('cli-preferences-help').textContent,/T3 Code, Synara, Omnigent y Open Design/);assert.equal(nodes.get('cli-path-resolved-codex-cli').textContent,'Ejecutable detectado: /custom/codex');
 });
 test('failed and unacknowledged saves keep an exact pending snapshot and block every affected operation until retry succeeds',async t=>{
  let prefs=initial(),fail=true,release;const gate=new Promise(resolve=>release=resolve),writes=[];
@@ -193,4 +193,27 @@ test('Synara draft, unconfirmed save and external selection cannot prepare or op
 });
 test('a malformed Synara path response cannot make executable preferences ready',async t=>{
  const {helper,nodes}=fixture(t,async()=>({...initial(),synaraExecutable:42}));await tick();assert.equal(helper.blocked('synara'),true);assert.match(nodes.get('cli-preferences-status').textContent,/Could not read/);
+});
+
+test('Omnigent optional v1 path preserves CLI choices and confirms both save and automatic reset',async t=>{
+ let prefs={version:1,codexExecutable:'/cli/codex',claudeExecutable:'/cli/claude',museExecutable:'/cli/muse'};const writes=[];
+ const {helper,nodes,input}=fixture(t,async(path,body)=>{if(body){writes.push({...body});prefs={...body}}return {...prefs}});await tick();
+ assert.equal(nodes.get('cli-path-omnigent').value,'');assert.equal(helper.blocked('omnigent'),false);
+ input('omnigent','/home/test/.venv/bin/omnigent');assert.equal(helper.blocked('omnigent'),true);nodes.get('cli-path-save-omnigent').dispatch('click');await tick();
+ assert.deepEqual(writes[0],{...initial(),...prefs});assert.equal(prefs.omnigentExecutable,'/home/test/.venv/bin/omnigent');
+ helper.render({language:'es',launchInfo:{clients:{omnigent:{path:prefs.omnigentExecutable,installed:true,available:false}}}});
+ assert.equal(nodes.get('cli-preferences-title').textContent,'Instalaciones de aplicaciones y CLI');assert.match(nodes.get('cli-path-resolved-omnigent').textContent,/Ejecutable detectado:/);assert.match(nodes.get('cli-preferences-omnigent-help').textContent,/servidor y runner/);assert.match(nodes.get('cli-preferences-omnigent-help').textContent,/0\.18\.0/);
+ nodes.get('cli-path-auto-omnigent').dispatch('click');await tick();assert.equal(prefs.omnigentExecutable,'');assert.equal(prefs.codexExecutable,'/cli/codex');assert.equal(prefs.claudeExecutable,'/cli/claude');assert.equal(prefs.museExecutable,'/cli/muse');
+});
+test('Omnigent draft, unconfirmed save and external selection cannot prepare or open a stale binary',async t=>{
+ let prefs=initial(),omit=false;const {helper,nodes,input}=fixture(t,async(path,body)=>{if(body){prefs={...body};if(omit){const reply={...prefs};delete reply.omnigentExecutable;return reply}}return {...prefs}});await tick();
+ await helper.guardOperation('omnigent',async()=>({prepared:true}));assert.equal(helper.prepared('omnigent'),true);
+ input('omnigent','/persistent/omnigent');await assert.rejects(helper.guardOperation('omnigent',async()=>assert.fail('draft was prepared')),/settings changed/);
+ omit=true;nodes.get('cli-path-save-omnigent').dispatch('click');await tick();assert.equal(helper.blocked('omnigent'),true);assert.equal(nodes.get('cli-preferences-retry').hidden,false);
+ omit=false;nodes.get('cli-preferences-retry').dispatch('click');await tick();assert.equal(helper.prepared('omnigent'),false);
+ await helper.guardOperation('omnigent',async()=>({prepared:true}));prefs.omnigentExecutable='/different/omnigent';
+ await assert.rejects(helper.guardOperation('omnigent',async()=>assert.fail('changed Omnigent opened'),{preparation:false}),/settings changed/);assert.equal(helper.prepared('omnigent'),false);assert.equal(nodes.get('cli-path-omnigent').value,'/different/omnigent');
+});
+test('a malformed Omnigent path response cannot make executable preferences ready',async t=>{
+ const {helper,nodes}=fixture(t,async()=>({...initial(),omnigentExecutable:42}));await tick();assert.equal(helper.blocked('omnigent'),true);assert.match(nodes.get('cli-preferences-status').textContent,/Could not read/);
 });

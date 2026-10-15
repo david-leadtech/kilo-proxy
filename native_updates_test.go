@@ -101,6 +101,24 @@ func newNativeUpdateFixture(t *testing.T, language string, size image.Point) *na
 				return
 			}
 			jsonResponse(w, 200, map[string]any{"started": true, "message": "synthetic terminal"})
+		case nativeOmnigentPreferencesEndpoint:
+			f.mu.Unlock()
+			if r.Method != http.MethodGet {
+				t.Errorf("update fixture attempted to change Omnigent preferences: %s", r.Method)
+				jsonError(w, 405, "read-only fixture")
+				return
+			}
+			jsonResponse(w, 200, map[string]any{"preferences": normalizeOmnigentPreferences(omnigentPreferences{})})
+		case "/api/clients/omnigent":
+			f.mu.Unlock()
+			if r.Method != http.MethodGet {
+				t.Errorf("update fixture attempted to prepare Omnigent: %s", r.Method)
+				jsonError(w, 405, "read-only fixture")
+				return
+			}
+			// This isolated update fixture has no Omnigent installation.
+			// Describe readiness without resolving, probing or opening an app.
+			jsonResponse(w, 200, map[string]any{"prepared": false, "running": false, "library": emptyModelLibrary(), "preferences": normalizeOmnigentPreferences(omnigentPreferences{}), "effectiveCodexModels": []any{}, "effectiveClaudeModels": []any{}})
 		case nativeT3CodePreferencesEndpoint:
 			f.mu.Unlock()
 			if r.Method != http.MethodGet {

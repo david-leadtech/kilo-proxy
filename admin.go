@@ -70,7 +70,7 @@ func (a *app) adminHandler() http.Handler {
 			files.ServeHTTP(w, r)
 			return
 		}
-		if (r.URL.Path == "/t3-code-helper.mjs" || r.URL.Path == "/muse-helper.mjs") && r.Method == http.MethodGet {
+		if (r.URL.Path == "/t3-code-helper.mjs" || r.URL.Path == "/muse-helper.mjs" || r.URL.Path == "/omnigent-helper.mjs") && r.Method == http.MethodGet {
 			files.ServeHTTP(w, r)
 			return
 		}
@@ -120,6 +120,18 @@ func (a *app) adminHandler() http.Handler {
 		}
 		if r.URL.Path == synaraProfileEndpoint {
 			a.synaraProfileAPI(w, r)
+			return
+		}
+		if r.URL.Path == omnigentProfileEndpoint {
+			a.omnigentProfileAPI(w, r)
+			return
+		}
+		if r.URL.Path == omnigentPreferencesEndpoint {
+			a.omnigentPreferencesAPI(w, r)
+			return
+		}
+		if r.URL.Path == "/api/clients/omnigent/stop" {
+			a.omnigentStopAPI(w, r)
 			return
 		}
 		if r.URL.Path == "/api/clients/opencode/preferences" {

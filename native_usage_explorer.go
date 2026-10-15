@@ -87,6 +87,10 @@ func (u *nativeUI) retrieveUsageHistory() {
 }
 
 func writeUsageCSVFile(dir string, result *usageQueryResult) (string, error) {
+	return writeUsageCSVFileAt(dir, result, time.Now())
+}
+
+func writeUsageCSVFileAt(dir string, result *usageQueryResult, now time.Time) (string, error) {
 	if !filepath.IsAbs(dir) {
 		return "", errors.New("Choose an existing CSV destination folder with an absolute path.")
 	}
@@ -98,13 +102,13 @@ func writeUsageCSVFile(dir string, result *usageQueryResult) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// A unique name and exclusive creation preserve existing exports.
-	name := strings.TrimSuffix(usageQueryFilename(result.Query), ".csv") + "-" + time.Now().UTC().Format("20060102T150405.000000000") + ".csv"
-	path := filepath.Join(dir, name)
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	// Exclusive randomized creation also preserves exports made in the same clock tick.
+	pattern := strings.TrimSuffix(usageQueryFilename(result.Query), ".csv") + "-" + now.UTC().Format("20060102T150405.000000000") + "-*.csv"
+	file, err := os.CreateTemp(dir, pattern)
 	if err != nil {
 		return "", err
 	}
+	path := file.Name()
 	_, writeErr := file.Write(data)
 	closeErr := file.Close()
 	if err = errors.Join(writeErr, closeErr); err != nil {

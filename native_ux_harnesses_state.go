@@ -90,6 +90,9 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 	if key == "t3-code" && !a.T3Code.PreferencesState.Requested {
 		u.refreshT3CodePreferences()
 	}
+	if key == "omnigent" && !a.Omnigent.PreferencesState.Requested {
+		u.refreshOmnigentPreferencesAfter(nil)
+	}
 	if key == "synara" && !a.Synara.PreferencesState.Requested {
 		u.refreshSynaraPreferences()
 	}
@@ -106,7 +109,7 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 	_, validation := nativeClientPayload(key, s)
 	libraryStatus, libraryReady := u.libraryStatus()
 	connectionReady := u.agentConnectionReady() && !u.connectionWorking() && !u.setupConnectionNeeded()
-	nativeAccounts := key == "t3-code" && u.t3CodeNativeOnly() || key == "synara" && u.synaraNativeOnly()
+	nativeAccounts := key == "t3-code" && u.t3CodeNativeOnly() || key == "synara" && u.synaraNativeOnly() || key == "omnigent" && u.omnigentNativeOnly()
 	if nativeAccounts {
 		packIssue, validation, libraryReady, connectionReady = nil, nil, true, true
 	}
@@ -195,6 +198,17 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 					l.reason, l.local = nativeMessage(err.Error(), u.language), true
 				}
 			}
+		}
+	}
+	if key == "omnigent" {
+		preferences := &a.Omnigent.PreferencesState
+		if preferences.Loaded && !preferences.Preferences.Codex && !preferences.Preferences.Claude {
+			l.canOpen = false
+			l.reason, l.local = u.tr("Enable Codex or Claude before preparing Omnigent.", "Activa Codex o Claude antes de preparar Omnigent."), true
+		}
+		if !preferences.Loaded || preferences.Pending != nil || u.omnigentPreferencesBusy() || u.busy["GET"+nativeOmnigentPreferencesEndpoint] {
+			l.canOpen = false
+			l.reason, l.local = u.tr("Load or finish saving Omnigent settings before opening.", "Carga o termina de guardar los ajustes de Omnigent antes de abrir."), true
 		}
 	}
 	if key == "synara" && available {

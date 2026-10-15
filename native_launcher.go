@@ -78,6 +78,8 @@ func (u *nativeUI) detectLaunchers() {
 
 // A saved account policy can change availability while an older detection is
 // still in flight. Discard that response and refresh after it completes.
+func (u *nativeUI) refreshOmnigentLaunchDiscovery() { u.refreshSynaraLaunchDiscovery() }
+
 func (u *nativeUI) refreshSynaraLaunchDiscovery() {
 	c := u.clientState()
 	c.LaunchChecked = false
@@ -198,7 +200,7 @@ func (u *nativeUI) launchSettingsFingerprintWithPreferences(key, directoryField 
 		values := []any{u.uxhLaunchDirectory(key, directoryField), u.clientState().LaunchInfo.Directory, u.clientState().LaunchInfo.Clients[key].Path}
 		if includePreferences {
 			prefs := &u.clientState().CLIPreferences
-			values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation, u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")), u.value(nativeCLIPathField("muse")), u.value(nativeCLIPathField("synara")))
+			values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation, u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")), u.value(nativeCLIPathField("muse")), u.value(nativeCLIPathField("synara")), u.value(nativeCLIPathField("omnigent")))
 			muse := &u.clientState().Muse
 			values = append(values, muse.Loaded, muse.Preferences, muse.Pending, muse.Generation)
 			if !u.museNative() {
@@ -207,6 +209,11 @@ func (u *nativeUI) launchSettingsFingerprintWithPreferences(key, directoryField 
 			}
 		}
 		data, _ := json.Marshal(values)
+		return sha256.Sum256(data)
+	}
+	if key == "omnigent" && includePreferences && u.omnigentNativeOnly() {
+		paths, prefs := &u.clientState().CLIPreferences, &u.agentsState().Omnigent.PreferencesState
+		data, _ := json.Marshal([]any{paths.Loaded, paths.Preferences, paths.Pending, paths.Generation, u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")), u.value(nativeCLIPathField("omnigent")), u.clientState().LaunchInfo.Clients[key].Path, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation})
 		return sha256.Sum256(data)
 	}
 	if key == "t3-code" && includePreferences && u.t3CodeNativeOnly() {
@@ -243,7 +250,7 @@ func (u *nativeUI) launchSettingsFingerprintWithPreferences(key, directoryField 
 	values := []any{nativeSelectionFingerprint(key, s, base, local, u.clientCaps(key)), u.modelLibraryValue(), limits, u.uxhLaunchDirectory(key, directoryField), appPath, u.launchConnectionFingerprint()}
 	if nativeCLIPathClient(key) && includePreferences {
 		prefs := &u.clientState().CLIPreferences
-		values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation, u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")), u.value(nativeCLIPathField("muse")), u.value(nativeCLIPathField("synara")))
+		values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, prefs.Generation, u.value(nativeCLIPathField("codex-cli")), u.value(nativeCLIPathField("claude")), u.value(nativeCLIPathField("muse")), u.value(nativeCLIPathField("synara")), u.value(nativeCLIPathField("omnigent")))
 	}
 	if (key == "t3-code" || key == "synara") && includePreferences {
 		paths := &u.clientState().OpenCodePreferences
@@ -252,6 +259,10 @@ func (u *nativeUI) launchSettingsFingerprintWithPreferences(key, directoryField 
 	if key == "t3-code" && includePreferences {
 		prefs := &u.agentsState().T3Code.PreferencesState
 		values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending)
+	}
+	if key == "omnigent" && includePreferences {
+		prefs := &u.agentsState().Omnigent.PreferencesState
+		values = append(values, prefs.Loaded, prefs.Preferences, prefs.Pending, u.clientState().LaunchInfo.Clients[key].Path)
 	}
 	if key == "synara" && includePreferences {
 		prefs := &u.agentsState().Synara.PreferencesState
@@ -282,7 +293,7 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 	if c.Launching != "" || key == "claude-desktop" && u.busy["POST/api/claude-desktop/options"] {
 		return
 	}
-	if key == "synara" && c.LaunchChecked && !u.nativeLaunchAvailable(key) {
+	if (key == "synara" || key == "omnigent") && c.LaunchChecked && !u.nativeLaunchAvailable(key) {
 		reason := nativeMessage(c.LaunchInfo.Clients[key].Reason, u.language)
 		if reason == "" {
 			reason = u.tr("Refresh installed apps before opening this tool.", "Actualiza las aplicaciones instaladas antes de abrir esta herramienta.")
@@ -363,6 +374,30 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 			return
 		}
 	}
+	if key == "omnigent" {
+		prefs := &a.Omnigent.PreferencesState
+		if u.omnigentPreferencesBusy() || prefs.Pending != nil || u.busy["GET"+nativeOmnigentPreferencesEndpoint] {
+			u.setNotice(nativeToneWarning, u.tr("Load or finish saving Omnigent settings before opening.", "Carga o termina de guardar los ajustes de Omnigent antes de abrir."))
+			return
+		}
+		if !prefs.Loaded {
+			before := u.launchSettingsFingerprintWithPreferences(key, directoryField, false)
+			c.Launching, a.Phase = key, u.tr("Loading Omnigent settings…", "Cargando ajustes de Omnigent…")
+			u.refreshOmnigentPreferencesAfter(func(err error) {
+				c.Launching, a.Phase = "", ""
+				if err != nil {
+					u.noticeError(err)
+					return
+				}
+				if before != u.launchSettingsFingerprintWithPreferences(key, directoryField, false) {
+					u.noticeError(errors.New(u.launchSettingsChangedMessage()))
+					return
+				}
+				u.launchClientFrom(key, directoryField)
+			})
+			return
+		}
+	}
 	if key == "t3-code" {
 		prefs := &a.T3Code.PreferencesState
 		if u.t3CodePreferencesBusy() || prefs.Pending != nil || u.busy["GET"+nativeT3CodePreferencesEndpoint] {
@@ -427,7 +462,7 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 			return
 		}
 	}
-	nativeAccounts := key == "t3-code" && u.t3CodeNativeOnly() || key == "synara" && u.synaraNativeOnly()
+	nativeAccounts := key == "t3-code" && u.t3CodeNativeOnly() || key == "synara" && u.synaraNativeOnly() || key == "omnigent" && u.omnigentNativeOnly()
 	if err := u.packReadinessError(key); !nativeAccounts && err != nil {
 		u.noticeError(err)
 		return
@@ -544,6 +579,9 @@ func (u *nativeUI) launchClientFrom(key, directoryField string) {
 			u.setNotice(nativeToneWarning, result.Message)
 			if u.notice == "" {
 				u.setNotice(nativeToneSuccess, u.tr("Editor launched.", "Editor abierto."))
+			}
+			if key == "omnigent" {
+				u.omnigentLaunchConfirmed()
 			}
 			u.refreshState()
 		})
