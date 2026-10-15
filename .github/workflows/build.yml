@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
   workflow_call:
+    secrets:
+      KILO_WINDOWS_SIGNING_PFX:
+        required: false
+      KILO_WINDOWS_SIGNING_PASSWORD:
+        required: false
 
 permissions:
   contents: read
@@ -131,6 +136,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Verify Windows signing with a disposable identity
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        env:
+          KILO_TEST_WINDOWS_SIGNING: '1'
+        run: python -m unittest discover -s scripts -p test_windows_signing.py -v
       - name: Probe Windows notification registration independently of Go
         if: runner.os == 'Windows'
         timeout-minutes: 2
@@ -341,11 +352,40 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwayland-client0 libwayland-cursor0 libwayland-egl1 libx11-6 libx11-xcb1 libxkbcommon-x11-0 libxcursor1 libxfixes3 libegl1 libgles2 mesa-vulkan-drivers libgl1-mesa-dri xvfb dbus-x11
+      - name: Sign the tested Windows release executable
+        if: runner.os == 'Windows' && github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          KILO_WINDOWS_SIGNING_PFX: ${{ secrets.KILO_WINDOWS_SIGNING_PFX }}
+          KILO_WINDOWS_SIGNING_PASSWORD: ${{ secrets.KILO_WINDOWS_SIGNING_PASSWORD }}
+          KILO_ARCH: ${{ matrix.arch }}
+        run: ./scripts/windows_sign.ps1 -Binary "dist/binaries/kilo-proxy-windows-$env:KILO_ARCH.exe"
       - name: Package the exact tested executable
         env:
           KILO_TARGET: ${{ matrix.system }}/${{ matrix.arch }}
         shell: bash
         run: python scripts/package.py --binaries-directory dist/binaries --target "$KILO_TARGET"
+      - name: Verify the extracted Windows release signature and exact signed bytes
+        if: runner.os == 'Windows' && github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          KILO_ARCH: ${{ matrix.arch }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content VERSION -Raw).Trim()
+          $name = "kilo-proxy-$version-windows-$env:KILO_ARCH"
+          $extracted = Join-Path $env:RUNNER_TEMP "signed-archive-$env:KILO_ARCH"
+          try {
+            Expand-Archive -LiteralPath "dist/$name.zip" -DestinationPath $extracted
+            $binary = Join-Path $extracted "$name/Kilo Proxy.exe"
+            ./scripts/windows_sign.ps1 -VerifyOnly -Binary $binary
+            $inputHash = (Get-FileHash "dist/binaries/kilo-proxy-windows-$env:KILO_ARCH.exe" -Algorithm SHA256).Hash
+            if ((Get-FileHash $binary -Algorithm SHA256).Hash -ne $inputHash) {
+              throw 'Packaged Windows executable differs from the signed input.'
+            }
+          } finally {
+            Remove-Item -LiteralPath $extracted -Recurse -Force -ErrorAction SilentlyContinue
+          }
       - name: Verify macOS app signature after ZIP extraction
         if: runner.os == 'macOS'
         env:
