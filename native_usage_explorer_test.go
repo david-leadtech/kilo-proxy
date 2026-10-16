@@ -123,6 +123,7 @@ func TestNativeUsageExplorerQueriesAndExportsExactCSV(t *testing.T) {
 	}
 	u.owner.mu.Lock()
 	u.owner.config.OrgID = "other-team"
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	u.saveUsageHistoryCSV()
 	files, _ = os.ReadDir(dir)

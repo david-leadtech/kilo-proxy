@@ -87,6 +87,7 @@ func (a *app) beginLogin(w http.ResponseWriter, r *http.Request) {
 	session := &loginSession{Status: "starting", cancel: cancel}
 	a.catalogRevision++
 	a.login = session
+	a.publishUIProjectionLocked()
 	a.mu.Unlock()
 	var data struct {
 		Code            string `json:"code"`
@@ -116,6 +117,7 @@ func (a *app) beginLogin(w http.ResponseWriter, r *http.Request) {
 	session.ExpiresAt = time.Now().Add(time.Duration(data.ExpiresIn) * time.Second)
 	// Copy values while locked. The poller may update the session immediately.
 	response := *session
+	a.publishUIProjectionLocked()
 	a.mu.Unlock()
 	go a.pollLogin(ctx, session, data.Code, response.ExpiresAt)
 	jsonResponse(w, 200, response)
@@ -123,6 +125,7 @@ func (a *app) beginLogin(w http.ResponseWriter, r *http.Request) {
 func (a *app) finishLogin(session *loginSession, status, message string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	defer a.publishUIProjectionLocked()
 	if a.login != session || !a.authPending() {
 		return
 	}
@@ -135,6 +138,7 @@ func (a *app) finishLogin(session *loginSession, status, message string) {
 func (a *app) cancelLogin() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	defer a.publishUIProjectionLocked()
 	if a.authPending() {
 		a.login.Status = "cancelled"
 		a.login.Code = ""
@@ -225,6 +229,7 @@ func (a *app) pollLogin(ctx context.Context, session *loginSession, code string,
 				session.Message = "Sesión conectada. Kilo no devuelve ninguna organización para esta cuenta."
 			}
 			session.cancel()
+			a.publishUIProjectionLocked()
 			a.mu.Unlock()
 			return
 		}
@@ -277,6 +282,7 @@ func (a *app) loadOrganizations(w http.ResponseWriter, r *http.Request) {
 		a.connectionNeedsSave = true
 		a.catalogRevision++
 	}
+	a.publishUIProjectionLocked()
 	a.mu.Unlock()
 	a.state(w)
 }

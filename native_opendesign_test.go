@@ -130,6 +130,7 @@ func TestNativeOpenDesignLaunchGates(t *testing.T) {
 			case "credentials":
 				u.owner.mu.Lock()
 				u.owner.apiKey = ""
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 			case "installation":
 				info := u.clientState().LaunchInfo.Clients["open-design"]
@@ -144,6 +145,7 @@ func TestNativeOpenDesignLaunchGates(t *testing.T) {
 			case "unsaved-connection":
 				u.owner.mu.Lock()
 				u.owner.connectionNeedsSave = true
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 			case "busy-connection":
 				u.busy["POST/api/config"] = true
@@ -155,6 +157,7 @@ func TestNativeOpenDesignLaunchGates(t *testing.T) {
 				t.Cleanup(func() { listener.Close() })
 				u.owner.mu.Lock()
 				u.owner.config.Port = listener.Addr().(*net.TCPAddr).Port
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 			}
 			nativeTestFrame(t, u)

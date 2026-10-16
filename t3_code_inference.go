@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
 )
 
 type t3CodeRequestContextKey struct{}
@@ -58,11 +59,48 @@ func (a *app) prepareT3CodeRequest(r *http.Request) (*http.Request, error) {
 		return r, errors.New("Choose a model in the prepared T3 Code selection.")
 	}
 	a.mu.Lock()
-	rt := a.launchRuntime()
-	binary, resolveErr := rt.resolve("t3-code", "")
-	saved, readErr := a.readT3CodePrepared()
-	ready := resolveErr == nil && readErr == nil && a.t3CodeReady(saved, binary, rt)
+	input, rt := a.t3CodeValidationInputLocked(), a.launchRuntime()
 	a.mu.Unlock()
+
+	// A validation uses one coherent set of resolved routes even when several
+	// profile planners ask for the same executable. Re-resolve every observed
+	// route before accepting the result so a concurrent selection is stale.
+	type routeKey struct{ client, custom string }
+	type routeResult struct {
+		path string
+		err  error
+	}
+	routes := map[routeKey]routeResult{}
+	resolve := rt.resolve
+	rt.resolve = func(client, custom string) (string, error) {
+		key := routeKey{client, custom}
+		result, ok := routes[key]
+		if !ok {
+			result.path, result.err = resolve(client, custom)
+			routes[key] = result
+		}
+		return result.path, result.err
+	}
+	binary, resolveErr := rt.resolve("t3-code", "")
+	saved, readErr := readT3CodePreparedAt(input.Dir)
+	ready := resolveErr == nil && readErr == nil
+	if ready {
+		installation, inspectErr := inspectT3CodeInstallation(binary, rt.platform)
+		ready = inspectErr == nil && t3CodeReadyFrom(input, saved, binary, installation, readNativeCatalogCache(input.Dir, input.CatalogScope), rt)
+	}
+	if ready {
+		for key, previous := range routes {
+			path, err := resolve(key.client, key.custom)
+			if path != previous.path || (err == nil) != (previous.err == nil) || err != nil && err.Error() != previous.err.Error() {
+				ready = false
+				break
+			}
+		}
+	}
+	a.mu.Lock()
+	current := a.t3CodeValidationInputLocked()
+	a.mu.Unlock()
+	ready = ready && reflect.DeepEqual(input, current)
 	if !ready {
 		return r, errors.New("Prepare T3 Code again before using its managed models.")
 	}

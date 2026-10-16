@@ -10,3 +10,5 @@ func (d *nativeDesktop) windowVisible() bool {
 	defer d.mu.Unlock()
 	return d.window != nil
 }
+
+func (d *nativeDesktop) raiseNewWindow(desktopWindowReady) {}

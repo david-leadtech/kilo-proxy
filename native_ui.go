@@ -70,6 +70,8 @@ type nativeUI struct {
 	chatGPTRevision             uint64
 	chatGPTLoginRequested       bool
 
+	dir                            string
+	bridge                         desktopBridge
 	owner                          *app
 	invalidate                     func()
 	theme                          *material.Theme
@@ -108,16 +110,28 @@ func newNativeUI(owner *app, invalidate func()) *nativeUI {
 	t.Bg, t.Fg = nativeBg, nativeText
 	t.ContrastBg, t.ContrastFg = nativeInk, nativeSurface
 	u := &nativeUI{owner: owner, invalidate: invalidate, theme: t, updates: make(chan func(), 128), editors: map[string]*widget.Editor{}, buttons: map[string]*widget.Clickable{}, checks: map[string]*widget.Bool{}, lists: map[string]*widget.List{}, expanded: map[string]bool{}, busy: map[string]bool{}, state: map[string]any{}, client: "codex", page: "agents", traceStage: "request"}
+	// Startup may seed configuration before attaching the native window.
+	// Publish once here; no frame or queued completion acquires app.mu.
 	owner.mu.Lock()
-	u.language = owner.config.Language
-	u.setValue("connection.org", owner.config.OrgID)
-	u.setValue("connection.port", strconv.Itoa(owner.config.Port))
-	catalog := readNativeCachedCatalog(owner.dir, owner.catalogScopeLocked())
+	owner.publishUIProjectionLocked()
+	u.dir, u.bridge = owner.dir, owner.desktop
+	owner.mu.Unlock()
+	if owner.chatgpt != nil {
+		owner.chatgpt.mu.Lock()
+		owner.chatgpt.publishUIProjectionLocked()
+		owner.chatgpt.mu.Unlock()
+	}
+	projection := owner.readUIProjection()
+	u.language = projection.Language
+	u.setValue("connection.org", projection.OrgID)
+	u.setValue("connection.port", strconv.Itoa(projection.Port))
+	catalog := readNativeCachedCatalog(u.dir, owner.uiCatalogScope())
 	u.models, u.catalogFetchedAt = catalog.Models, catalog.FetchedAt
 	u.catalogCached = len(u.models) > 0
-	u.setChecked("connection.remember", nativeRememberDefault(owner.config.Remember, owner.apiKey != ""))
-	owner.mu.Unlock()
+	u.setChecked("connection.remember", nativeRememberDefault(projection.Remember, projection.HasKey))
 	u.initModelLibrary()
+	u.agentsState()
+	u.packsState()
 	if u.setupNeeded() {
 		u.beginSetup()
 	}
@@ -530,9 +544,7 @@ func (u *nativeUI) code(id, value string) layout.Widget {
 	}
 }
 func (u *nativeUI) copy(value string) {
-	u.owner.mu.Lock()
-	d := u.owner.desktop
-	u.owner.mu.Unlock()
+	d := u.bridge
 	if d == nil {
 		u.setNotice(nativeToneWarning, u.tr("Clipboard unavailable", "Portapapeles no disponible"))
 		return
@@ -549,9 +561,7 @@ func (u *nativeUI) open(address string) {
 		u.noticeError(err)
 		return
 	}
-	u.owner.mu.Lock()
-	bridge := u.owner.desktop
-	u.owner.mu.Unlock()
+	bridge := u.bridge
 	go func() {
 		open := openBrowser
 		if bridge != nil {
@@ -784,9 +794,7 @@ func (u *nativeUI) applyModels(raw json.RawMessage, requestedRevision float64, f
 		u.refreshState()
 		return false
 	}
-	u.owner.mu.Lock()
-	currentRevision, org := u.owner.catalogRevision, u.owner.catalogScopeLocked()
-	u.owner.mu.Unlock()
+	currentRevision, org := u.owner.readUIProjection().CatalogRevision, u.owner.uiCatalogScope()
 	if response.Revision != float64(currentRevision) {
 		u.modelsPending = true
 		u.refreshState()

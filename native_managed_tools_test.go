@@ -43,6 +43,7 @@ func newNativeManagedToolsFixture(t *testing.T, key, language string, size image
 	u.language, u.page, u.client = language, "clients", key
 	u.owner.mu.Lock()
 	u.owner.apiKey, u.owner.config.OrgID = "", ""
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	if u.agentConnectionReady() {
 		t.Fatal("installation fixture must have no provider connection")

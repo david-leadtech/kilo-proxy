@@ -430,6 +430,7 @@ func TestNativeLaunchLibrarySaveWaitPreservesRequestedSettings(t *testing.T) {
 			case "connection":
 				u.owner.mu.Lock()
 				u.owner.config.OrgID = "new-team"
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 			case "raw-limit":
 				u.setValue(nativeClientField(sharedModelKey, "vendor/one", "output"), "not a number")

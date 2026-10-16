@@ -182,10 +182,7 @@ func (u *nativeUI) uxhLaunchDirectory(key, directoryField string) string {
 // Include the saved connection as well as displayed state: a connection save
 // may finish before the next UI state refresh arrives.
 func (u *nativeUI) launchConnectionFingerprint() [32]byte {
-	u.owner.mu.Lock()
-	data, _ := json.Marshal([]any{u.owner.config.Port, u.owner.config.OrgID, u.owner.config.LocalKey, u.owner.apiKey})
-	u.owner.mu.Unlock()
-	return sha256.Sum256(data)
+	return u.owner.readUIProjection().Fingerprint
 }
 
 // A save is part of the launch transaction. Snapshot the actual draft as well

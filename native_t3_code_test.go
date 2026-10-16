@@ -48,6 +48,7 @@ func TestNativeT3CodeWideCardAndIntegrationSettings(t *testing.T) {
 			u.page, u.language = "agents", lang
 			u.owner.mu.Lock()
 			u.owner.config.Language = lang
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			u.setValue(agentProjectField("t3-code"), "/does-not-exist/ignored")
 			h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 1900), now: time.Now()}
@@ -117,6 +118,7 @@ func TestNativeT3CodePreparationFailureAndEditsNeverLaunch(t *testing.T) {
 			case "connection":
 				u.owner.mu.Lock()
 				u.owner.config.OrgID = "changed-team"
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 			}
 			recorder.unblock()

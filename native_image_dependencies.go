@@ -34,9 +34,7 @@ func (u *nativeUI) acceptImageDependencyState(state map[string]any) {
 
 func (u *nativeUI) imageDependencyNoticeVisible() bool {
 	dependency := u.imageDependency()
-	u.owner.mu.Lock()
-	required := normalizeImageTransportSettings(u.owner.config.ImageTransport).Mode == "cloudflare"
-	u.owner.mu.Unlock()
+	required := u.owner.readUIProjection().ImageTransport.Mode == "cloudflare"
 	// A state request already in flight when the preference was saved may
 	// still describe the old mode. Never warn over an explicit alternative.
 	return required && dependency.Required && !dependency.Installed && !u.imageDependencyDismissed

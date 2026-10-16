@@ -36,7 +36,7 @@ const uxhGlobalFolderBusy = "agents:folder"
 
 func (u *nativeUI) agentsState() *nativeAgents {
 	if u.agents == nil {
-		prefs, err := readAgentPreferences(u.owner.dir)
+		prefs, err := readAgentPreferences(u.dir)
 		u.agents = &nativeAgents{Preferences: prefs, chooseFolder: chooseNativeFolder, chooseApplication: chooseNativeApplication, now: time.Now}
 		if err != nil {
 			u.agents.Error = u.tr("Could not load remembered project folders.", "No se pudieron cargar las carpetas recordadas.")
@@ -107,7 +107,7 @@ func (u *nativeUI) agentProject(key string) string {
 func (u *nativeUI) uxhSavePreferences() {
 	a := u.agentsState()
 	a.Preferences.CodexAppPath = strings.TrimSpace(u.value("clients-launch-app-path"))
-	if err := writeAgentPreferences(u.owner.dir, a.Preferences); err != nil {
+	if err := writeAgentPreferences(u.dir, a.Preferences); err != nil {
 		a.Error = u.tr("The project folder could not be remembered. You can still open the harness.", "No se pudo recordar la carpeta. Puedes abrir el harness igualmente.")
 		return
 	}
@@ -227,9 +227,8 @@ func (u *nativeUI) agentConnectionReady() bool {
 	if u.chatGPTReady() {
 		return true
 	}
-	u.owner.mu.Lock()
-	defer u.owner.mu.Unlock()
-	return strings.TrimSpace(u.owner.apiKey) != "" && strings.TrimSpace(u.owner.config.OrgID) != ""
+	p := u.owner.readUIProjection()
+	return p.HasKey && p.HasOrg
 }
 
 func (u *nativeUI) detectAgentCapabilities() {

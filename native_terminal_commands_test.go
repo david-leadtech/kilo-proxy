@@ -54,6 +54,7 @@ func TestNativeTerminalCommandsPointerInstallAndUpdate(t *testing.T) {
 				u.language = lang
 				u.owner.mu.Lock()
 				u.owner.config.Language = lang
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 				h := &nativePointerHarness{t: t, u: u, size: size, now: time.Now()}
 				h.frame()
@@ -116,6 +117,7 @@ func TestNativeTerminalCommandsCopyWithAndWithoutPATH(t *testing.T) {
 				u.language = lang
 				u.owner.mu.Lock()
 				u.owner.config.Language = lang
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 				directory := filepath.Join(u.owner.editorTestRoot, "tools ' and spaces")
 				s := u.terminalCommandsState()
@@ -163,6 +165,7 @@ func TestNativeTerminalCommandsPowerShellInstallUpdateAndCopy(t *testing.T) {
 			u.language = lang
 			u.owner.mu.Lock()
 			u.owner.config.Language = lang
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			const original = "# Existing PowerShell preferences\r\n$global:UserPreference = 'keep'\r\n"
 			for _, profile := range u.owner.terminalCommandsProfiles {
@@ -420,6 +423,7 @@ func TestNativeTerminalManualPointerClipboardAndPreview(t *testing.T) {
 					u.language = lang
 					u.owner.mu.Lock()
 					u.owner.config.Language = lang
+					u.owner.publishUIProjectionLocked()
 					u.owner.mu.Unlock()
 					before := nativeTerminalHomeSnapshot(t, u.owner.editorTestRoot)
 					h := &nativePointerHarness{t: t, u: u, size: size, now: time.Now()}

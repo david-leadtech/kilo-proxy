@@ -34,9 +34,7 @@ func (u *nativeUI) setupConnectionNeeded() bool {
 	if u.chatGPTReady() {
 		return false
 	}
-	u.owner.mu.Lock()
-	defer u.owner.mu.Unlock()
-	return !u.owner.connectionReadyLocked()
+	return !u.owner.uiConnectionReady()
 }
 
 func (u *nativeUI) setSetupStep(step int) {
@@ -60,9 +58,7 @@ func (u *nativeUI) beginSetup() {
 }
 
 func (u *nativeUI) connectionHasKey() bool {
-	u.owner.mu.Lock()
-	defer u.owner.mu.Unlock()
-	return strings.TrimSpace(u.owner.apiKey) != ""
+	return u.owner.readUIProjection().HasKey
 }
 
 func (u *nativeUI) connectionWorking() bool {
