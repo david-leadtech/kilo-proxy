@@ -571,6 +571,9 @@ func t3CodeProviderInstances(options t3CodeProfileOptions, profiles t3CodeProfil
 // Synara shares provider construction but owns its separate secure-storage
 // descriptor. Apply this environment only to profiles planned for T3 itself.
 func t3CodeNativeClaudeAuthEnvironment(options t3CodeProfileOptions, instances map[string]any) {
+	if options.Preferences != nil && !normalizeT3CodePreferences(*options.Preferences).Claude {
+		return
+	}
 	instance := instances[t3CodeClaudeNormalID].(map[string]any)
 	for _, name := range []string{"CLAUDE_CONFIG_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR"} {
 		if value, exists := options.NormalEnvironment[name]; exists {
