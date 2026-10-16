@@ -27,6 +27,7 @@ func nativeFreshOnboarding(t *testing.T) *nativeUI {
 	u.owner.apiKey, u.owner.config.OrgID = "", ""
 	u.owner.keySaved, u.owner.config.Remember = false, false
 	u.owner.organizations, u.owner.accountEmail = nil, ""
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	u.refreshState()
 	nativeTestWait(t, u, func() bool { return !u.busy["GET/api/state"] && nativeString(u.state, "orgId") == "" })
@@ -402,6 +403,7 @@ func TestNativeOnboardingFailedStartKeepsReadyStepAndVisibleError(t *testing.T) 
 	port := occupied.Addr().(*net.TCPAddr).Port
 	u.owner.mu.Lock()
 	u.owner.config.Port = port
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	u.setValue("connection.port", strconv.Itoa(port))
 	u.refreshState()
@@ -449,6 +451,7 @@ func TestNativeOnboardingAgentsProxyPointerControls(t *testing.T) {
 				nativeGridCapture(t, h, "onboarding-agents-stopped-"+fmtSize(size)+"-"+lang)
 				u.owner.mu.Lock()
 				u.owner.apiKey = ""
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 				h.frame()
 				h.click(u.tr("Connect an account", "Conectar una cuenta"), semantic.Button)
@@ -699,6 +702,7 @@ func TestNativeOnboardingVisualSnapshots(t *testing.T) {
 				capture("welcome")
 				u.owner.mu.Lock()
 				u.owner.apiKey = "synthetic-kilo-personal-key"
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 				u.call("POST", "/api/auth/organizations", map[string]any{}, u.acceptState)
 				nativeTestWait(t, u, func() bool { return len(nativeArray(u.state, "organizations")) == 2 })

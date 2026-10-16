@@ -39,6 +39,7 @@ func TestNativeProxyStartShowsOccupiedPortSystemDiagnostic(t *testing.T) {
 				mu.Unlock()
 				return listener, bindError
 			}
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			// App/CLI discovery is unrelated to the global proxy control.
 			clients := u.clientState()

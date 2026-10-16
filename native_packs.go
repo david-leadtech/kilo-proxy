@@ -22,7 +22,7 @@ type nativePackUI struct {
 
 func (u *nativeUI) packsState() *nativePackUI {
 	if u.packs == nil {
-		store := newModelPacksStore(u.owner.dir)
+		store := newModelPacksStore(u.dir)
 		u.packs = &nativePackUI{store: store, file: cloneModelPacksFile(store.value), tab: "library", selected: modelLibraryStartRecommended}
 	}
 	return u.packs
@@ -283,7 +283,7 @@ func (u *nativeUI) packStoreNotice() []layout.Widget {
 	}
 	if p.saveError != nil {
 		return []layout.Widget{u.card(u.message(nativeToneError, p.saveError.Error()), u.button("packs.reload", u.tr("Reload saved packs", "Recargar packs guardados"), func() {
-			p.store = newModelPacksStore(u.owner.dir)
+			p.store = newModelPacksStore(u.dir)
 			p.file = cloneModelPacksFile(p.store.value)
 			p.saveError = nil
 		}))}

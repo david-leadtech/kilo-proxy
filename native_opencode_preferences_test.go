@@ -159,6 +159,7 @@ func TestNativeOpenCodeVersionExternalChoiceBlocksPreparation(t *testing.T) {
 	u, recorder := nativeLaunchTestUI(t, "opencode", false, false)
 	u.owner.mu.Lock()
 	u.owner.config.OpenCodeMajor = 2 // A different settings window confirmed this choice.
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	before := u.sharedClientSelection("opencode").Path
 	finished := false

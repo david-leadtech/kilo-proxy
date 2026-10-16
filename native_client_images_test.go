@@ -316,6 +316,7 @@ func TestNativeSaveImageSettingsWithoutCodexProfile(t *testing.T) {
 	u := nativeTestUI(t)
 	u.owner.mu.Lock()
 	u.owner.apiKey, u.owner.config.OrgID = "", ""
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	gui, cli := u.clientState().selection("codex"), u.clientState().selection("codex-cli")
 	u.seedClientImages("codex", gui)

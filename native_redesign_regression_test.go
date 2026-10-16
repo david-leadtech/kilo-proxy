@@ -105,6 +105,7 @@ func TestNativeCatalogCallbackRejectsChangedBackendTeam(t *testing.T) {
 	u.owner.mu.Lock()
 	u.owner.config.OrgID = "new-team"
 	u.owner.catalogRevision++
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	data, _ := json.Marshal(map[string]any{"revision": 0, "models": []modelInfo{{ID: "old-team/private-model", Name: "Old catalog"}}})
 	if u.applyModels(data, 0, "models") {

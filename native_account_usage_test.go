@@ -59,6 +59,7 @@ func TestNativeAccountUsageLayoutAndDailyDetails(t *testing.T) {
 					},
 				}
 				u.owner.usageHistory.mu.Unlock()
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 				u.refreshState()
 				nativeTestWait(t, u, func() bool {

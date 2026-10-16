@@ -88,6 +88,7 @@ func TestNativeAgentLaunchRejectsProjectAndConnectionChangesDuringPrepare(t *tes
 			} else {
 				u.owner.mu.Lock()
 				u.owner.config.OrgID = "new-team"
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 			}
 			r.unblock()

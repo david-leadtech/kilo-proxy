@@ -247,6 +247,7 @@ func TestNativeCatalogFreshnessPartialRefreshRetriesRecoveredProvider(t *testing
 	u.owner.chatgpt.creds = chatGPTCredentials{Access: "synthetic-access", Refresh: "synthetic-refresh", Account: "synthetic-catalog-account", Expires: time.Now().Add(time.Hour).Unix()}
 	u.owner.chatgpt.state = chatGPTState{Status: "idle"}
 	u.owner.chatgpt.backendURL = subscription.URL
+	u.owner.chatgpt.publishUIProjectionLocked()
 	u.owner.chatgpt.mu.Unlock()
 	u.owner.chatGPTLastIdentity = "synthetic-catalog-account"
 	scope := u.owner.catalogScopeLocked()

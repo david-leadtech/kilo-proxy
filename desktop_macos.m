@@ -37,3 +37,21 @@ void kiloInstallLifecycle(uintptr_t view) {
     class_addMethod(delegateClass, @selector(applicationShouldTerminate:), (IMP)kiloShouldTerminate, protocol_getMethodDescription(@protocol(NSApplicationDelegate), @selector(applicationShouldTerminate:), NO, YES).types);
     class_addMethod(delegateClass, @selector(applicationShouldHandleReopen:hasVisibleWindows:), (IMP)kiloShouldReopen, protocol_getMethodDescription(@protocol(NSApplicationDelegate), @selector(applicationShouldHandleReopen:hasVisibleWindows:), NO, YES).types);
 }
+
+
+// A native Close orders this window out on the same Cocoa thread. Never undo
+// that Close while handling delayed activation of a newly-created window.
+int kiloRaiseVisibleWindow(uintptr_t view) {
+    @autoreleasepool {
+        NSWindow *window = [(__bridge NSView *)(void *)view window];
+        if (window == nil || !window.visible) {
+            return 0;
+        }
+        NSRunningApplication *currentApp = [NSRunningApplication currentApplication];
+        if (![currentApp isActive]) {
+            [currentApp activateWithOptions:(NSApplicationActivateAllWindows | NSApplicationActivateIgnoringOtherApps)];
+        }
+        [window makeKeyAndOrderFront:nil];
+        return 1;
+    }
+}

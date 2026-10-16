@@ -459,6 +459,7 @@ func TestNativeSynaraOpenCodeConnectionCompatibilityAndGatewayGate(t *testing.T)
 			}
 			u.owner.mu.Lock()
 			u.owner.apiKey = ""
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			nativeSeedSharedForTest(t, u, u.models[0])
 			if launch := u.uxhLaunchState("synara"); launch.canOpen || !strings.Contains(launch.reason, u.tr("Connect Kilo or ChatGPT", "Conecta Kilo o ChatGPT")) {
@@ -586,6 +587,7 @@ func TestNativeSynaraNativeAccountsWithoutKiloAndTransition(t *testing.T) {
 			p.Claude, p.KiloCodex, p.KiloClaude = false, false, false
 			u.owner.config.Synara = p
 			u.owner.apiKey, u.owner.config.OrgID, u.owner.config.Language = "", "", language
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			u.authenticated, u.language, u.models = false, language, nil
 			nativeSeedSharedForTest(t, u)
@@ -623,6 +625,7 @@ func TestNativeSynaraNativeAccountsWithoutKiloAndTransition(t *testing.T) {
 			}
 			u.owner.mu.Lock()
 			u.owner.config.Synara.KiloCodex = true
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			u.refreshSynaraPreferences()
 			nativeTestWait(t, u, func() bool {

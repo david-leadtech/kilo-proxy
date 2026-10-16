@@ -291,7 +291,6 @@ func (a *app) adminHandler() http.Handler {
 func (a *app) state(w http.ResponseWriter) {
 	imageDependency := a.imageTransportDependencySnapshot()
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	// The preference may have changed during static executable discovery.
 	imageDependency.Required = normalizeImageTransportSettings(a.config.ImageTransport).Mode == "cloudflare"
 	a.ensureBillingRefreshLocked(false)
@@ -304,7 +303,12 @@ func (a *app) state(w http.ResponseWriter) {
 	if a.proxyServer != nil {
 		uptime = int64(time.Since(a.started).Seconds())
 	}
-	jsonResponse(w, 200, map[string]any{
+	var login *loginSession
+	if a.login != nil {
+		copied := *a.login
+		login = &copied
+	}
+	snapshot := map[string]any{
 		"connectionReady": a.connectionReadyLocked(), "kiloReady": a.kiloReadyLocked(), "chatgptReady": a.chatGPTReadyLocked(), "chatgpt": a.chatgpt.snapshot(),
 		"claudeDesktopExperimentalModels": a.claudeDesktopExperimentalLocked(),
 		"imageTransport":                  a.config.ImageTransport,
@@ -313,7 +317,7 @@ func (a *app) state(w http.ResponseWriter) {
 		"imageGeneration":                 a.config.ImageGeneration,
 		"trayDisplay":                     normalizeTrayDisplay(a.config.TrayDisplay),
 		"language":                        a.config.Language, "catalogRevision": a.catalogRevision,
-		"auth": a.login, "organizations": a.organizations, "accountEmail": a.accountEmail, "keySaved": a.keySaved,
+		"auth": login, "organizations": append([]organization(nil), a.organizations...), "accountEmail": a.accountEmail, "keySaved": a.keySaved,
 		"version": version, "desktop": a.desktop != nil, "port": a.config.Port, "orgId": a.config.OrgID, "orgName": a.orgNameLocked(a.config.OrgID),
 		"update":   a.updateSnapshot(),
 		"localKey": a.config.LocalKey, "hasKey": a.apiKey != "", "remember": a.config.Remember,
@@ -327,8 +331,11 @@ func (a *app) state(w http.ResponseWriter) {
 		"billing":             a.billingSnapshotLocked(),
 		"usageAccountScope":   usageAccountID(a.apiKey, a.config.OrgID),
 		"captureEnabled":      a.captureEnabled, "activityEpoch": a.activityEpoch,
-		"events": a.events, "warning": a.vaultWarning,
-	})
+		"events": append([]event(nil), a.events...), "warning": a.vaultWarning,
+	}
+	a.publishUIProjectionLocked()
+	a.mu.Unlock()
+	jsonResponse(w, 200, snapshot)
 }
 
 // Language is independent of connection settings and can change while running.
@@ -345,6 +352,7 @@ func (a *app) saveLanguage(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	defer a.publishUIProjectionLocked()
 	cfg := a.config
 	cfg.Language = input.Language
 	if err := writeSettings(a.dir, cfg); err != nil {
@@ -381,6 +389,7 @@ func (a *app) saveConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	defer a.publishUIProjectionLocked()
 	if a.proxyServer != nil || a.authPending() {
 		jsonError(w, 409, "Detén el proxy o cancela el login antes de cambiar la conexión.")
 		return
@@ -446,6 +455,7 @@ func (a *app) saveConfig(w http.ResponseWriter, r *http.Request) {
 func (a *app) forget(w http.ResponseWriter) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	defer a.publishUIProjectionLocked()
 	if a.proxyServer != nil || a.authPending() {
 		jsonError(w, 409, "Detén el proxy o cancela el login antes de olvidar la clave.")
 		return

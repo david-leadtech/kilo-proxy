@@ -387,7 +387,7 @@ func (u *nativeUI) useManagedToolCopy(key string) {
 	}
 	prefs := a.Preferences
 	prefs.CodexAppPath = ""
-	if err := writeAgentPreferences(u.owner.dir, prefs); err != nil {
+	if err := writeAgentPreferences(u.dir, prefs); err != nil {
 		u.managedToolsState().requestError = u.tr("Could not change the selected app. Your custom application path is kept.", "No se pudo cambiar la app seleccionada. Se conserva tu ruta de aplicación personalizada.")
 		return
 	}

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -117,6 +118,7 @@ type app struct {
 	accountEmail              string
 	keySaved                  bool
 	connectionNeedsSave       bool // Device login and auto-selected teams still need an explicit config save.
+	uiProjection              atomic.Pointer[appUIProjection]
 	mu                        sync.Mutex
 	dir                       string
 	config                    settings
@@ -175,6 +177,7 @@ func newApp(dir string, vault credentialVault) (*app, error) {
 			a.keySaved = true
 		}
 	}
+	a.publishUIProjectionLocked()
 	return a, nil
 }
 

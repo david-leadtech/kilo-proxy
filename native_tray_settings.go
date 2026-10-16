@@ -10,9 +10,7 @@ import (
 )
 
 func (u *nativeUI) loadTraySettings() {
-	u.owner.mu.Lock()
-	display := normalizeTrayDisplay(u.owner.config.TrayDisplay)
-	u.owner.mu.Unlock()
+	display := u.owner.readUIProjection().TrayDisplay
 	u.setValue("appearance.tray", display)
 }
 

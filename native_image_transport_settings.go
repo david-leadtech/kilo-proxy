@@ -41,9 +41,7 @@ var uxsImageMethods = []uxsImageMethod{
 // Change opens the six methods and the chosen method's details.
 func (u *nativeUI) imageTransportPanel() layout.Widget {
 	saving := u.busy["PUT/api/image-transport-settings"]
-	u.owner.mu.Lock()
-	settings := normalizeImageTransportSettings(u.owner.config.ImageTransport)
-	u.owner.mu.Unlock()
+	settings := u.owner.readUIProjection().ImageTransport
 	current := uxsImageMethods[0]
 	modeChoices := []nativeChoice{}
 	for _, method := range uxsImageMethods {

@@ -503,6 +503,7 @@ func TestNativeT3OpenCodeConnectionCompatibilityAndGatewayGate(t *testing.T) {
 			}
 			u.owner.mu.Lock()
 			u.owner.apiKey = ""
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			nativeSeedSharedForTest(t, u, u.models[0])
 			if launch := u.uxhLaunchState("t3-code"); launch.canOpen || !strings.Contains(launch.reason, u.tr("Connect Kilo or ChatGPT", "Conecta Kilo o ChatGPT")) {

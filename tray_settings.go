@@ -42,6 +42,7 @@ func (a *app) traySettings(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	defer a.publishUIProjectionLocked()
 	cfg := a.config
 	cfg.TrayDisplay = input.Display
 	if err := writeSettings(a.dir, cfg); err != nil {

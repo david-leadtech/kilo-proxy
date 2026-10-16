@@ -56,6 +56,7 @@ func TestNativeSynaraWideCardAndIntegrationSettings(t *testing.T) {
 			u.page, u.language = "agents", lang
 			u.owner.mu.Lock()
 			u.owner.config.Language = lang
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			u.setValue(agentProjectField("synara"), "/does-not-exist/ignored")
 			h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 2200), now: time.Now()}
@@ -127,6 +128,7 @@ func TestNativeSynaraPreparationFailureAndEditsNeverLaunch(t *testing.T) {
 			case "connection":
 				u.owner.mu.Lock()
 				u.owner.config.OrgID = "changed-team"
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 			}
 			recorder.unblock()

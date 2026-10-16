@@ -76,9 +76,7 @@ func (u *nativeUI) retrieveUsageHistory() {
 			return
 		}
 		current := u.usageExplorerState()
-		u.owner.mu.Lock()
-		scope := usageAccountID(u.owner.apiKey, u.owner.config.OrgID)
-		u.owner.mu.Unlock()
+		scope := u.owner.readUIProjection().UsageScope
 		if result.Scope != scope || result.Scope != current.scope {
 			return
 		}
@@ -123,9 +121,7 @@ func (u *nativeUI) saveUsageHistoryCSV() {
 	if s.result == nil {
 		return
 	}
-	u.owner.mu.Lock()
-	scope := usageAccountID(u.owner.apiKey, u.owner.config.OrgID)
-	u.owner.mu.Unlock()
+	scope := u.owner.readUIProjection().UsageScope
 	if s.result.Scope != scope {
 		s.result = nil
 		return

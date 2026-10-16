@@ -84,6 +84,7 @@ func newNativeChatGPTFixture(t *testing.T, language string, size image.Point) *n
 	u.owner.mu.Lock()
 	u.owner.apiKey = ""
 	u.owner.config.OrgID = ""
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	u.language = language
 	u.page = "setup"
@@ -335,6 +336,7 @@ func TestNativeDisconnectedIntegrationHintsOfferBothAccounts(t *testing.T) {
 				u.owner.mu.Lock()
 				u.owner.apiKey = ""
 				u.owner.config.OrgID = ""
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 				u.state["chatgptReady"], u.state["chatgpt"] = false, map[string]any{"connected": false, "status": "idle"}
 				u.language = language

@@ -8,9 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 type t3CodeInstallation struct {
@@ -148,7 +150,43 @@ var t3CodePackagedClaudeSlug = regexp.MustCompile(`["'](claude-[A-Za-z0-9][A-Za-
 // Accept release channels by identity and the installed settings contract, not
 // by a version, commit or digest allowlist. These source checks are an early
 // compatibility guard; they cannot guarantee arbitrary future upstream changes.
+// Only contract analysis is cached. The package index, metadata and every
+// inspected source are read and hashed before this cache can be consulted.
+// One entry bounds memory, and the independent mutex shares analysis across
+// simultaneous requests without holding app.mu.
+type t3CodeInspectionCache struct {
+	mu     sync.Mutex
+	digest string
+	result t3CodeInstallation
+	valid  bool
+}
+
+var t3CodeInstalledAnalysis t3CodeInspectionCache
+
+func cloneT3CodeInstallation(value t3CodeInstallation) t3CodeInstallation {
+	value.ClaudeBuiltins = slices.Clone(value.ClaudeBuiltins)
+	value.SupportedProviders = slices.Clone(value.SupportedProviders)
+	return value
+}
+
+func (c *t3CodeInspectionCache) get(digest string, analyze func() (t3CodeInstallation, error)) (t3CodeInstallation, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.valid && c.digest == digest {
+		return cloneT3CodeInstallation(c.result), nil
+	}
+	result, err := analyze()
+	if err == nil {
+		c.digest, c.result, c.valid = digest, cloneT3CodeInstallation(result), true
+	}
+	return cloneT3CodeInstallation(result), err
+}
+
 func inspectT3CodeInstallation(executable, platform string) (t3CodeInstallation, error) {
+	return inspectT3CodeInstallationWithCache(executable, platform, &t3CodeInstalledAnalysis)
+}
+
+func inspectT3CodeInstallationWithCache(executable, platform string, cache *t3CodeInspectionCache) (t3CodeInstallation, error) {
 	var result t3CodeInstallation
 	archive, err := t3CodeOpenPackage(executable, platform)
 	if err != nil {
@@ -173,6 +211,18 @@ func inspectT3CodeInstallation(executable, platform string) (t3CodeInstallation,
 	if err != nil {
 		return result, incompatible
 	}
+	// Include the index, metadata and both source sets: an in-place update
+	// with the same version, size and timestamps must invalidate analysis.
+	data, _ := json.Marshal([]any{string(archive.header), metadata, openDesignHash(main), openDesignHash(desktop), openDesignHash(server)})
+	digest := openDesignHash(data)
+	return cache.get(digest, func() (t3CodeInstallation, error) {
+		return analyzeT3CodeInstallation(metadata, desktop, server, digest)
+	})
+}
+
+func analyzeT3CodeInstallation(metadata t3CodePackageMetadata, desktop, server []byte, digest string) (t3CodeInstallation, error) {
+	result := t3CodeInstallation{Version: metadata.Version}
+	incompatible := errors.New("This T3 Code installation has an incompatible private-workspace or provider settings contract. Update T3 Code or Kilo Proxy and prepare again; no private settings were changed.")
 	contains := func(data []byte, tokens ...string) bool {
 		source := string(data)
 		for _, token := range tokens {
@@ -207,10 +257,7 @@ func inspectT3CodeInstallation(executable, platform string) (t3CodeInstallation,
 		}
 	}
 	sort.Strings(result.ClaudeBuiltins)
-	// Include the index, metadata and both source sets: an in-place update with
-	// an unchanged version must also invalidate a prepared workspace.
-	data, _ := json.Marshal([]any{string(archive.header), metadata, openDesignHash(main), openDesignHash(desktop), openDesignHash(server)})
-	result.SourceDigest = openDesignHash(data)
+	result.SourceDigest = digest
 	return result, nil
 }
 

@@ -95,6 +95,7 @@ func TestUXActivitySummaryKPIsChartModelsAndErrorsLink(t *testing.T) {
 			u.language = lang
 			u.owner.mu.Lock()
 			u.owner.config.Language = lang
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			u.page = "activity"
 			uxaSeedActivityForTest(t, u, true)
@@ -167,6 +168,7 @@ func TestUXActivityUnavailableKiloFallsBackToLocalHistory(t *testing.T) {
 		Days:      []usageHistoryDay{{Date: now.Format("2006-01-02"), usageSummary: usageSummary{Requests: 5, Priced: 5, CostUSD: "0.345678000", costNanos: 345678000, Input: 1000, Cached: 600}}},
 	}
 	u.owner.usageHistory.mu.Unlock()
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	u.refreshState()
 	nativeTestWait(t, u, func() bool {
