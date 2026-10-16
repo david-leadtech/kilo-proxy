@@ -34,10 +34,13 @@ func TestT3CodeLiteralClaudeHomesRejectPrivateAliases(t *testing.T) {
 				t3CodeLiteralSymlink(t, filepath.Join(private, "child"), alias)
 				sep := string(filepath.Separator)
 				literal := alias + sep + ".."
-				expected := private
+				expected, err := filepath.EvalSymlinks(private)
+				if err != nil {
+					t.Fatal(err)
+				}
 				if kind != "existing" {
 					literal += sep + "missing"
-					expected = filepath.Join(private, "missing")
+					expected = filepath.Join(expected, "missing")
 				}
 				if kind == "dangling-relative" {
 					outer := filepath.Join(options.NormalHome, "dangling")
@@ -74,9 +77,13 @@ func TestT3CodeLiteralClaudeHomesRetainNormalizedProtection(t *testing.T) {
 	if err != nil || normalized != private {
 		t.Fatal("historical normalized-home fixture changed", normalized, private, err)
 	}
+	expectedOutside, err := filepath.EvalSymlinks(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
 	raw, err := t3CodeCanonicalPath(literal)
-	if err != nil || raw != outside {
-		t.Fatal("literal fixture did not leave private directory", raw, outside, err)
+	if err != nil || raw != expectedOutside {
+		t.Fatal("literal fixture did not leave private directory", raw, expectedOutside, err)
 	}
 	if _, err := planT3CodeProfiles(options); err == nil {
 		t.Fatal("normalized private overlap protection was removed")
