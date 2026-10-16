@@ -67,6 +67,7 @@ type nativeUI struct {
 	packageUpdateStarted        bool
 	packageUpdateFailed         bool
 	proxyRevision               uint64
+	kiloAuthRevision            uint64
 	chatGPTRevision             uint64
 	chatGPTLoginRequested       bool
 
@@ -629,6 +630,10 @@ func (u *nativeUI) call(method, path string, payload any, done func(json.RawMess
 	if changesChatGPT {
 		u.chatGPTRevision++
 	}
+	changesKiloAuth := method == "POST" && (path == "/api/auth/start" || path == "/api/auth/cancel")
+	if changesKiloAuth {
+		u.kiloAuthRevision++
+	}
 	changesProxy := method == "POST" && (path == "/api/start" || path == "/api/stop")
 	if changesProxy {
 		u.proxyRevision++
@@ -637,6 +642,9 @@ func (u *nativeUI) call(method, path string, payload any, done func(json.RawMess
 		raw, err := nativeRequest(u.owner, method, path, payload)
 		u.enqueue(func() {
 			delete(u.busy, key)
+			if changesKiloAuth {
+				u.kiloAuthRevision++
+			}
 			if changesChatGPT {
 				u.chatGPTRevision++
 			}
@@ -658,6 +666,7 @@ func (u *nativeUI) call(method, path string, payload any, done func(json.RawMess
 }
 func (u *nativeUI) refreshState() {
 	revision, saving := u.languageRevision, u.languageTarget != ""
+	kiloAuthRevision, kiloAuthSaving := u.kiloAuthRevision, u.busy["POST/api/auth/start"] || u.busy["POST/api/auth/cancel"]
 	chatGPTRevision, chatGPTSaving := u.chatGPTRevision, u.chatGPTRequestBusy()
 	proxyRevision, proxySaving := u.proxyRevision, u.busy["POST/api/start"] || u.busy["POST/api/stop"]
 	updateRevision, updateSaving := u.updateRevision, u.busy["POST/api/updates"] || u.busy["POST/api/updates/install"]
@@ -668,6 +677,11 @@ func (u *nativeUI) refreshState() {
 		// operation. Discard it before applying any state-derived effects;
 		// the next poll will fetch a coherent snapshot, including after errors.
 		if proxySaving || proxyRevision != u.proxyRevision || u.busy["POST/api/start"] || u.busy["POST/api/stop"] {
+			return
+		}
+		// A Kilo login poll must not restore an earlier login or cancellation.
+		// Only in-flight mutations fence polling; pending approval still refreshes.
+		if kiloAuthSaving || kiloAuthRevision != u.kiloAuthRevision || u.busy["POST/api/auth/start"] || u.busy["POST/api/auth/cancel"] {
 			return
 		}
 		if chatGPTSaving || chatGPTRevision != u.chatGPTRevision || u.chatGPTRequestBusy() {
