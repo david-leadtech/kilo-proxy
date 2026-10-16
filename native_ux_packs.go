@@ -114,7 +114,7 @@ func (u *nativeUI) uxmUseMenuItems(id string) func() []layout.Widget {
 		p := u.packsState()
 		name := u.packName(id)
 		canAssign := u.uxmPackCanAssign(id)
-		items := []layout.Widget{u.uxmMenuTitle(u.tr("Which harness uses this pack?", "¿Qué harness usa este pack?"))}
+		items := []layout.Widget{u.uxmMenuTitle(u.tr("Which app uses this pack?", "¿Qué app usa este pack?"))}
 		for _, agent := range uxmPackAgents {
 			agent := agent
 			assigned := p.file.Assignments[agent.key]
@@ -150,7 +150,7 @@ func (u *nativeUI) uxmUseMenuItems(id string) func() []layout.Widget {
 				}
 			}))
 		}
-		items = append(items, u.uxmMenuNote(u.tr("Applies the next time you open the harness. Being in the catalog does not prove protocol compatibility.", "Se aplica la próxima vez que abras el harness. Estar en el catálogo no prueba la compatibilidad del protocolo.")))
+		items = append(items, u.uxmMenuNote(u.tr("Applies the next time you open the app.", "Se aplica la próxima vez que abras la app.")))
 		return items
 	}
 }
@@ -169,7 +169,7 @@ func (u *nativeUI) uxmPackFooter(id string, actions ...layout.Widget) layout.Wid
 		chips = append(chips, u.uxmHarnessChip(name))
 	}
 	if len(chips) == 0 {
-		chips = append(chips, u.uxmSubtle(13, u.tr("No harness yet · they use your models", "Ningún harness · usan tus modelos")))
+		chips = append(chips, u.uxmSubtle(13, u.tr("No app yet · they use your models", "Ninguna app todavía · usan tus modelos")))
 	}
 	left := uxmStack(u.eyebrow(u.tr("Used by", "Lo usan")), uxmGap(6), u.pills(chips...))
 	right := uxmHStack(12, actions...)

@@ -311,7 +311,7 @@ func (u *nativeUI) contextRemovalDialog() layout.Widget {
 		u.heading(label),
 		u.note(intro),
 		u.scroll("models.context.remove.list", unit.Dp(180), items...),
-		u.note(u.tr("Your Kilo account does not change. Already-open agents keep their current configuration until reopened.", "Tu cuenta de Kilo no cambia. Los agentes abiertos conservan su configuración hasta que los vuelvas a abrir.")),
+		u.note(u.tr("Your Kilo account does not change. Already-open apps keep their current configuration until reopened.", "Tu cuenta de Kilo no cambia. Las apps abiertas conservan su configuración hasta que las vuelvas a abrir.")),
 		u.actionRow(layout.Spacer{}.Layout,
 			u.button("models.context.remove.cancel", u.tr("Cancel", "Cancelar"), func() { u.contextRemovalIDs = nil }),
 			u.primaryButton("models.context.remove.confirm", u.tr("Remove from my library", "Quitar de mi biblioteca"), u.confirmContextRemoval),
@@ -462,7 +462,7 @@ func (u *nativeUI) sharedContextPanel() layout.Widget {
 			}
 		}))))
 	}
-	widgets = append(widgets, u.note(u.tr("Windows are capped to model capacity. Changes apply when you reopen an agent.", "Las ventanas se ajustan a la capacidad del modelo. Los cambios se aplican al volver a abrir un agente.")))
+	widgets = append(widgets, u.note(u.tr("Windows are capped to model capacity. Changes apply when you reopen an app.", "Las ventanas se ajustan a la capacidad del modelo. Los cambios se aplican al volver a abrir una app.")))
 	return u.section(u.tr("Context window", "Ventana de contexto"), u.tr("Apply to all saved models. New models start at Recommended; use Edit for a model override.", "Aplica a todos los modelos guardados. Los nuevos usan Recomendado; usa Editar para cambiar uno."), widgets...)
 }
 

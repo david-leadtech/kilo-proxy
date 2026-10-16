@@ -129,12 +129,12 @@ func TestNativeOnboardingShowsRecommendedModelsAfterConnection(t *testing.T) {
 	u.owner.mu.Unlock()
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 820), now: time.Now()}
 	h.frame()
-	h.click("Use an API key or team ID instead", semantic.Button)
+	h.click("Did your company give you a key? Use it here", semantic.Button)
 	h.click("Leave blank to keep the current key", semantic.Editor)
 	h.typeText("synthetic-kilo-personal-key")
 	h.click("org_…", semantic.Editor)
 	h.typeText("e2e-team")
-	h.click("Save & choose models", semantic.Button)
+	h.click("Continue", semantic.Button)
 	nativeTestWait(t, u, func() bool {
 		return u.setupStep == setupModels && !u.busy["GET/api/state"] && !u.busy["POST/api/models"] && len(u.models) == 2
 	})

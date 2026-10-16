@@ -48,7 +48,7 @@ func TestUxmSetupPackStartCopiesModelsWithoutAssigning(t *testing.T) {
 	}
 }
 
-// Packs whose models are missing from the catalog are greyed and cannot be chosen.
+// Packs whose models are missing from the catalog are not offered at all.
 func TestUxmSetupUnavailablePackCannotBeChosen(t *testing.T) {
 	u := nativeTestUI(t)
 	u.page, u.setupStep = "setup", setupModels
@@ -57,28 +57,18 @@ func TestUxmSetupUnavailablePackCannotBeChosen(t *testing.T) {
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 1600), now: time.Now()}
 	h.frame()
 	pack := builtinModelPacks()[0]
-	disabled := false
 	for _, n := range h.nodes() {
 		if n.Desc.Class == semantic.RadioButton && n.Desc.Label == pack.Name.EN {
-			disabled = n.Desc.Disabled
+			t.Fatal("a pack missing from the catalog is still offered")
 		}
 	}
-	if !disabled || !h.selected("Recommended", semantic.RadioButton) {
-		t.Fatal("a pack missing from the catalog is selectable, or recommended is not the default")
+	if !h.selected("Recommended", semantic.RadioButton) {
+		t.Fatal("recommended is not the default")
 	}
 	u.clickable("setup.models.option." + pack.ID).Click()
 	nativeTestFrame(t, u)
 	if u.uxmSetupStart() != modelLibraryStartRecommended {
 		t.Fatalf("an unavailable pack became the starting point: %q", u.uxmSetupStart())
-	}
-	found := false
-	for _, n := range h.nodes() {
-		if n.Desc.Label == "Not available in your catalog" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("unavailable packs do not explain why")
 	}
 }
 

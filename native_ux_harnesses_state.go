@@ -64,7 +64,7 @@ func (u *nativeUI) uxhMuseLaunchState() uxhLaunch {
 	case !u.cliPreferencesReady():
 		l.reason, l.local = u.tr("Load or finish saving CLI executable settings before opening.", "Carga o termina de guardar las rutas de las CLI antes de abrir."), true
 	case c.Launching != "" || u.busy["POST"+nativeLaunchEndpoint]:
-		l.reason = u.tr("Wait for the current harness operation to finish.", "Espera a que termine la operación actual del harness.")
+		l.reason = u.tr("Wait for the current app operation to finish.", "Espera a que termine la operación actual de la app.")
 	}
 	if l.reason == "" {
 		if reason := u.museReadinessReason(); reason != "" {
@@ -157,13 +157,13 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 	case len(s.Models) == 0 && key == "claude-desktop":
 		local(u.claudeDesktopModelSummary(s))
 	case len(s.Models) == 0 && !nativeAccounts:
-		l.reason = u.tr("Add at least one shared model before opening a harness.", "Añade al menos un modelo compartido antes de abrir un harness.")
+		l.reason = u.tr("Add at least one shared model before opening an app.", "Añade al menos un modelo compartido antes de abrir una app.")
 	case validation != nil:
 		local(nativeMessage(validation.Error(), u.language))
 	case (key == "codex" || key == "codex-cli") && !nativeClientImagesReady(s, u.models, u.state):
 		local(u.tr("Review image generation settings in Models before opening Codex.", "Revisa la generación de imágenes en Modelos antes de abrir Codex."))
 	case busy:
-		l.reason = u.tr("Wait for the current harness operation to finish.", "Espera a que termine la operación actual del harness.")
+		l.reason = u.tr("Wait for the current app operation to finish.", "Espera a que termine la operación actual de la app.")
 	}
 	if (key == "opencode" || key == "opencode2") && !u.openCodePreferencesReady() {
 		l.canOpen = false
@@ -251,11 +251,11 @@ func (u *nativeUI) uxhSharedReason() string {
 	u.initModelLibrary()
 	switch {
 	case !(u.agentConnectionReady() && !u.connectionWorking() && !u.setupConnectionNeeded()):
-		return u.tr("Connect Kilo or ChatGPT to use Kilo-backed harnesses.", "Conecta Kilo o ChatGPT para usar los harnesses conectados a Kilo.")
+		return u.tr("Connect Kilo or ChatGPT to use apps connected to Kilo.", "Conecta Kilo o ChatGPT para usar las apps conectadas a Kilo.")
 	case !libraryReady:
 		return libraryStatus
 	case len(u.library.selection.Models) == 0:
-		return u.tr("Add shared models for Kilo-backed harnesses.", "Añade modelos compartidos para los harnesses conectados a Kilo.")
+		return u.tr("Add shared models for apps connected to Kilo.", "Añade modelos compartidos para las apps conectadas a Kilo.")
 	}
 	return ""
 }

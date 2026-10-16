@@ -564,7 +564,7 @@ func (u *nativeUI) clientsPanel() layout.Widget {
 	modelWidgets := []layout.Widget{
 		u.actionRow(u.column(u.eyebrow(u.tr("Shared models", "Modelos compartidos")), u.label(u.uxhModelsSummary())), u.button("agents.models.edit", u.tr("Edit in Models", "Editar en Modelos"), func() { u.page = "models" })),
 	}
-	widgets = append(widgets, u.section(u.tr("Models", "Modelos"), u.tr("One shared library for this agent.", "Una biblioteca compartida para este agente."), modelWidgets...))
+	widgets = append(widgets, u.section(u.tr("Models", "Modelos"), u.tr("One shared library for this app.", "Una biblioteca compartida para esta app."), modelWidgets...))
 	if key == "generic" {
 		base, local, _ := u.clientBase()
 		id := s.Initial
@@ -621,9 +621,9 @@ func (u *nativeUI) claudeDesktopSelectionNote(s *nativeClientSelection) string {
 		text = u.tr("Experimental support for other providers is enabled. Model and tool compatibility, context and reasoning support may be limited. Preparing a configuration does not verify inference.", "El soporte experimental para otros proveedores está activado. La compatibilidad de modelos y herramientas, el contexto y el razonamiento pueden ser limitados. Preparar una configuración no verifica la inferencia.")
 	}
 	if omitted == 1 {
-		text += " " + u.tr("1 shared model omitted; it remains available to other agents.", "1 modelo compartido omitido; sigue disponible para otros agentes.")
+		text += " " + u.tr("1 shared model omitted; it remains available to other apps.", "1 modelo compartido omitido; sigue disponible para otras apps.")
 	} else if omitted > 1 {
-		text += " " + fmt.Sprintf(u.tr("%d shared models omitted; they remain available to other agents.", "%d modelos compartidos omitidos; siguen disponibles para otros agentes."), omitted)
+		text += " " + fmt.Sprintf(u.tr("%d shared models omitted; they remain available to other apps.", "%d modelos compartidos omitidos; siguen disponibles para otras apps."), omitted)
 	}
 	if s.Initial != "" && s.Initial != source.Initial {
 		if s.DesktopExperimentalModels {
@@ -1347,7 +1347,7 @@ func (u *nativeUI) prepareClientAfterPreferencesChecked(key string, done func(er
 		synaraPreferences.Providers = append([]string{}, synaraPreferences.Providers...)
 	}
 	if key == "claude-desktop" && u.busy["POST/api/claude-desktop/options"] {
-		done(errors.New(u.tr("Wait for the current agent operation to finish.", "Espera a que termine la operación actual del agente.")))
+		done(errors.New(u.tr("Wait for the current app operation to finish.", "Espera a que termine la operación actual de la app.")))
 		return
 	}
 	if key == "t3-code" && u.t3CodeNativeOnly() {

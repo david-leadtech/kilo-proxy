@@ -121,6 +121,9 @@ func TestNativeChatGPTLoginOnboardingAndQuota(t *testing.T) {
 				if nativeUpdateHasText(h, "Organization ID") || nativeUpdateHasText(h, "ID de organización") {
 					t.Fatal("ChatGPT onboarding requires Kilo organization")
 				}
+				option := u.tr("Have ChatGPT Plus or Pro? Connect it too (optional)", "¿Tienes ChatGPT Plus o Pro? Conéctalo también (opcional)")
+				h.reveal(option, semantic.Button)
+				h.click(option, semantic.Button)
 				h.reveal(login, semantic.Button)
 				h.click(login, semantic.Button)
 				nativeTestWait(t, u, func() bool {

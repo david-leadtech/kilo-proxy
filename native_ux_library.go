@@ -74,7 +74,7 @@ func (u *nativeUI) uxmLibraryNotices() []layout.Widget {
 		for _, m := range candidate.Models {
 			names = append(names, nativeCodexDisplayName(m))
 		}
-		widgets = append(widgets, u.card(u.heading(u.tr("Review imported models", "Revisar modelos importados")), u.note(strings.Join(names, " · ")), u.pills(u.button("models.import.accept", u.tr("Use this selection for all agents", "Usar esta selección para todos"), func() {
+		widgets = append(widgets, u.card(u.heading(u.tr("Review imported models", "Revisar modelos importados")), u.note(strings.Join(names, " · ")), u.pills(u.button("models.import.accept", u.tr("Use this selection for all apps", "Usar esta selección para todas"), func() {
 			u.library.selection = candidate
 			// An imported list no longer comes from the onboarding pack.
 			u.library.startingPack, u.library.roles, u.library.switchUndo = "", nil, nil
@@ -348,7 +348,7 @@ func (u *nativeUI) uxmSetDefault(id string) {
 	if choice := s.choice(id); choice != nil {
 		name = nativeCodexDisplayName(*choice)
 	}
-	u.setNotice(nativeToneSuccess, fmt.Sprintf(u.tr("✓ %s is now the default. It applies the next time you open each agent.", "✓ %s es ahora el predeterminado. Se aplica al volver a abrir cada agente."), name))
+	u.setNotice(nativeToneSuccess, fmt.Sprintf(u.tr("✓ %s is now the default. It applies the next time you open each app.", "✓ %s es ahora el predeterminado. Se aplica al volver a abrir cada app."), name))
 }
 
 // uxmEditSection opens the inline editor of a row on one section.
@@ -562,7 +562,7 @@ func (u *nativeUI) uxmMoreSection() layout.Widget {
 	widgets := []layout.Widget{
 		uxmGap(8), uxmHRule(nativeLineHeavy, nativeInk), uxmGap(4),
 		u.textStyle(20, u.tr("More", "Más"), nativeInk, font.Bold),
-		u.uxmOptionRow(u.tr("Import from an agent", "Importar desde un agente"), u.tr("Bring the list you already use in Codex, Claude Code, OpenCode…", "Trae la lista que ya usas en Codex, Claude Code, OpenCode…"), importButton),
+		u.uxmOptionRow(u.tr("Import from an app", "Importar desde una app"), u.tr("Bring the list you already use in Codex, Claude Code, OpenCode…", "Trae la lista que ya usas en Codex, Claude Code, OpenCode…"), importButton),
 		u.uxmOptionRow(u.tr("Image generation for Codex", "Generación de imágenes para Codex"), imageState, configure),
 	}
 	if u.expanded["models.images.toggle"] {
@@ -576,7 +576,7 @@ func (u *nativeUI) uxmEmptyLibrary() layout.Widget {
 	if recommended := u.recommendedModels(); len(recommended) > 0 {
 		return u.card(u.recommendedPanel(recommended))
 	}
-	return u.card(u.heading(u.tr("A model library for all your agents", "Una biblioteca para todos tus agentes")), u.note(u.tr("Add the models you use, give them short names and choose a default. Your selection stays here next time.", "Añade tus modelos, ponles nombres cortos y elige uno inicial. Tu selección seguirá aquí la próxima vez.")))
+	return u.card(u.heading(u.tr("A model library for all your apps", "Una biblioteca para todas tus apps")), u.note(u.tr("Add the models you use, give them short names and choose a default. Your selection stays here next time.", "Añade tus modelos, ponles nombres cortos y elige uno inicial. Tu selección seguirá aquí la próxima vez.")))
 }
 
 // uxmLibraryPage is the "Your models" tab, or the catalog while it is open.
@@ -604,7 +604,7 @@ func (u *nativeUI) uxmLibraryPage() layout.Widget {
 			}
 		}
 	}
-	widgets = append(widgets, u.uxmSubtle(13, u.tr("Changes apply the next time you open an agent. Already-open agents may need reopening.", "Los cambios se aplican al volver a abrir un agente. Los agentes abiertos pueden necesitar reiniciarse.")))
+	widgets = append(widgets, u.uxmSubtle(13, u.tr("Changes apply the next time you open an app. Already-open apps may need reopening.", "Los cambios se aplican al volver a abrir una app. Las apps abiertas pueden necesitar reiniciarse.")))
 	widgets = append(widgets, u.uxmMoreSection())
 	return func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, uxmSpaced(16, widgets)...)

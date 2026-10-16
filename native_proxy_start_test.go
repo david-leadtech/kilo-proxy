@@ -48,7 +48,7 @@ func TestNativeProxyStartShowsOccupiedPortSystemDiagnostic(t *testing.T) {
 			u.page = "agents"
 			h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 820), now: time.Now()}
 			h.frame()
-			h.click(u.tr("Start proxy", "Arrancar proxy"), semantic.Button)
+			h.click(u.tr("Turn on", "Activar"), semantic.Button)
 			nativeTestWait(t, u, func() bool { return !u.busy["POST/api/start"] && u.noticeTone == nativeToneError })
 			h.frame()
 			mu.Lock()
@@ -75,7 +75,7 @@ func TestNativeProxyStartShowsOccupiedPortSystemDiagnostic(t *testing.T) {
 			if !visible {
 				t.Fatal("diagnostic exists in state but is not rendered in the native window")
 			}
-			h.target(u.tr("Start proxy", "Arrancar proxy"), semantic.Button)
+			h.target(u.tr("Turn on", "Activar"), semantic.Button)
 		})
 	}
 }

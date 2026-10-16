@@ -187,9 +187,9 @@ func (u *nativeUI) terminalCommandsPanel() layout.Widget {
 		return u.uxsBlock(title, "", u.uxsRow(u.tr("Shortcuts", "Atajos"), names, u.uxsValue(u.uxsPlain(u.tr("Not available here", "No disponibles aquí")), u.tr("They are available on macOS, Windows and Linux.", "Están disponibles en macOS, Windows y Linux.")), nil, nil))
 	}
 	powerShell := s.powerShell()
-	explain := u.tr("Open an installed CLI from your terminal. Muse follows its harness connection choice; Kilo connections require the app open. They install to ~/.local/bin.", "Abre una CLI instalada desde tu terminal. Muse sigue la conexión elegida en su harness; las conexiones Kilo requieren la app abierta. Se instalan en ~/.local/bin.")
+	explain := u.tr("Open an installed CLI from your terminal. Muse follows the connection chosen in its app page; Kilo connections require the app open. They install to ~/.local/bin.", "Abre una CLI instalada desde tu terminal. Muse sigue la conexión elegida en su página de app; las conexiones Kilo requieren la app abierta. Se instalan en ~/.local/bin.")
 	if powerShell {
-		explain = u.tr("Open an installed CLI from PowerShell. Muse follows its harness connection choice; Kilo connections require the app open. They're added as functions to your PowerShell profile.", "Abre una CLI instalada desde PowerShell. Muse sigue la conexión elegida en su harness; las conexiones Kilo requieren la app abierta. Se añaden como funciones a tu perfil de PowerShell.")
+		explain = u.tr("Open an installed CLI from PowerShell. Muse follows the connection chosen in its app page; Kilo connections require the app open. They're added as functions to your PowerShell profile.", "Abre una CLI instalada desde PowerShell. Muse sigue la conexión elegida en su página de app; las conexiones Kilo requieren la app abierta. Se añaden como funciones a tu perfil de PowerShell.")
 	}
 	status, tone := u.tr("Not installed", "No instalados"), nativeToneNeutral
 	switch {
@@ -303,7 +303,7 @@ func (u *nativeUI) terminalManualWidgets() []layout.Widget {
 	children = append(children,
 		u.note(instructions),
 		u.note(u.tr("Kilo connections require Kilo Proxy open. Muse’s native Meta connection also works with Kilo Proxy closed. If you move the app or change its settings folder, refresh these functions and replace the copies in your shell file.", "Las conexiones Kilo requieren Kilo Proxy abierto. La conexión nativa de Meta de Muse también funciona con Kilo Proxy cerrado. Si mueves la aplicación o cambias su carpeta de configuración, actualiza estas funciones y sustituye las copias en el archivo de inicio del shell.")),
-		u.note(u.tr("kilo-muse follows the connection chosen in the Muse harness: Kilo shared models or your Meta account.", "kilo-muse sigue la conexión elegida en el harness Muse: modelos compartidos de Kilo o tu cuenta de Meta.")),
+		u.note(u.tr("kilo-muse follows the connection chosen in the Muse app page: Kilo shared models or your Meta account.", "kilo-muse sigue la conexión elegida en la página de la app Muse: modelos compartidos de Kilo o tu cuenta de Meta.")),
 	)
 	if s.powerShell() {
 		children = append(children, u.note(u.tr("Your execution policy must allow PowerShell profiles; Kilo Proxy does not change it.", "Tu política de ejecución debe permitir los perfiles de PowerShell; Kilo Proxy no la cambia.")))

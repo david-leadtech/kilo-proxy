@@ -220,7 +220,7 @@ func (u *nativeUI) uxaStatusText(e event) string {
 func (u *nativeUI) uxaRequestTable(events []event) layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		narrow := gtx.Constraints.Max.X < gtx.Dp(640)
-		columns := []uxaColumn{{title: u.tr("Time", "Hora"), width: 92}, {title: "Harness", weight: 1}, {title: u.tr("Model", "Modelo"), weight: 1.4}, {title: "Tokens", width: 120, end: true}, {title: u.tr("Cost", "Coste"), width: 86, end: true}, {title: u.tr("Status", "Estado"), weight: 1.3}}
+		columns := []uxaColumn{{title: u.tr("Time", "Hora"), width: 92}, {title: "App", weight: 1}, {title: u.tr("Model", "Modelo"), weight: 1.4}, {title: "Tokens", width: 120, end: true}, {title: u.tr("Cost", "Coste"), width: 86, end: true}, {title: u.tr("Status", "Estado"), weight: 1.3}}
 		if narrow {
 			columns = []uxaColumn{columns[0], columns[2], columns[4], columns[5]}
 		}
@@ -291,7 +291,7 @@ func (u *nativeUI) uxaRequestTable(events []event) layout.Widget {
 			}
 			all := map[string]layout.Widget{
 				columns[0].title:         u.uxaText(13, when, nativeText, font.Normal, true, text.Start),
-				"Harness":                u.uxaText(14, harness, nativeText, font.Normal, false, text.Start),
+				"App":                    u.uxaText(14, harness, nativeText, font.Normal, false, text.Start),
 				u.tr("Model", "Modelo"):  u.uxaText(14, model, nativeText, font.Normal, false, text.Start),
 				"Tokens":                 u.uxaText(14, tokens, nativeText, font.Normal, false, text.End),
 				u.tr("Cost", "Coste"):    u.uxaText(14, cost, nativeText, font.Medium, true, text.End),

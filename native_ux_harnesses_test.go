@@ -167,7 +167,7 @@ func TestNativeHarnessesPerHarnessFolderOverride(t *testing.T) {
 	if r.count() != 2 || uxhLastPlanDirectory(t, r) != general {
 		t.Fatalf("launch did not return to the general folder: %s", u.notice)
 	}
-	h.click("← Harnesses", semantic.Button)
+	h.click("← Apps", semantic.Button)
 	if u.page != "agents" {
 		t.Fatal("back link did not return to the Harnesses list")
 	}
@@ -187,7 +187,7 @@ func TestNativeHarnessesListGroupsAndMissingHarnesses(t *testing.T) {
 			u.agentsState().Preferences.noteOpened("codex", "", now.Add(-3*time.Hour))
 			h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 2400), now: time.Now()}
 			h.frame()
-			order := []string{u.tr("Desktop apps", "Apps de escritorio"), u.tr("Multi-agent", "Multiagente"), "Bots", u.tr("Coding harnesses", "Harnesses de código"), u.tr("Not installed · 1", "No instalados · 1")}
+			order := []string{u.tr("Desktop apps", "Apps de escritorio"), u.tr("Multi-agent", "Multiagente"), "Bots", u.tr("Coding apps", "Apps para programar"), u.tr("Not installed · 1", "No instalados · 1")}
 			previous := -1
 			for _, title := range order {
 				y := uxhLabelY(h, title)

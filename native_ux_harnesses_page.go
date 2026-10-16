@@ -97,7 +97,7 @@ func (u *nativeUI) uxhHarnessPage(key string, s *nativeClientSelection, d uxhDet
 	advanced = append(advanced, u.uxhCommandRows(key, s)...)
 	advanced = append(advanced, u.uxhExportRows(key, s)...)
 	if terminalClientSupported(key) {
-		advanced = append(advanced, u.uxhAdvancedRow(u.tr("Terminal commands", "Comandos de terminal"), u.tr("Open this harness by name from any terminal.", "Abre este harness por su nombre desde cualquier terminal."), nil,
+		advanced = append(advanced, u.uxhAdvancedRow(u.tr("Terminal commands", "Comandos de terminal"), u.tr("Open this app by name from any terminal.", "Abre esta app por su nombre desde cualquier terminal."), nil,
 			u.button("agent:"+key+":terminal-commands", u.tr("Open in Settings", "Abrir en Ajustes"), func() { u.page, u.settingsTab = "settings", "terminal" })))
 	}
 	widgets = append(widgets, u.uxhBlock(u.tr("Advanced", "Avanzado"), "", advanced...))

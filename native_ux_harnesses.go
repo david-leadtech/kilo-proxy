@@ -34,7 +34,7 @@ func (u *nativeUI) uxhGroups() []uxhGroup {
 		{"Desktop apps", "Apps de escritorio", "The official apps, with a separate Kilo profile", "Las apps oficiales, con un perfil de Kilo aparte", []string{"codex", "claude-desktop"}},
 		{"Multi-agent", "Multiagente", "Several Codex and Claude agents in one workspace", "Varios agentes Codex y Claude en un mismo espacio", []string{"synara", "t3-code", "omnigent"}},
 		{"Bots", "Bots", "Assistants that work on their own", "Asistentes que trabajan por su cuenta", []string{"openmausbot"}},
-		{"Coding harnesses", "Harnesses de código", "Terminal and editors · open in " + folder, "Terminal y editores · se abren en " + folder, []string{"claude", "codex-cli", "muse", "opencode", "zed", "open-design", "omp"}},
+		{"Coding apps", "Apps para programar", "Terminal and editors · open in " + folder, "Terminal y editores · se abren en " + folder, []string{"claude", "codex-cli", "muse", "opencode", "zed", "open-design", "omp"}},
 	}
 }
 

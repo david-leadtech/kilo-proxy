@@ -150,7 +150,7 @@ func (u *nativeUI) omnigentPreferencesPanel() layout.Widget {
 	}
 	checking, saving := u.busy["GET"+nativeOmnigentPreferencesEndpoint], u.omnigentPreferencesBusy()
 	ready := s.Loaded && !checking && !saving && s.Pending == nil && !u.agentsState().Omnigent.Info.Running && u.agentsState().Omnigent.WatchUntil.IsZero()
-	status := u.tr("Choose one connection for each enabled harness. Changes save automatically.", "Elige una conexión para cada harness activado. Los cambios se guardan solos.")
+	status := u.tr("Choose one connection for each enabled agent. Changes save automatically.", "Elige una conexión para cada agente activado. Los cambios se guardan solos.")
 	if checking || !s.Loaded {
 		status = u.tr("Loading Omnigent settings…", "Cargando ajustes de Omnigent…")
 	}
@@ -182,7 +182,7 @@ func (u *nativeUI) omnigentPreferencesPanel() layout.Widget {
 		if kind == "claude" {
 			label, enabled, connection, scope = "Claude", p.Claude, p.ClaudeConnection, p.ClaudeModels
 		}
-		rows = append(rows, u.uxsRow(label, "", u.disabled(ready, u.uxsToggle("omnigent-preferences:"+kind, label, u.tr("Enable this harness", "Activar este harness"), enabled, func(value bool) {
+		rows = append(rows, u.uxsRow(label, "", u.disabled(ready, u.uxsToggle("omnigent-preferences:"+kind, label, u.tr("Enable this agent", "Activar este agente"), enabled, func(value bool) {
 			next := p
 			if kind == "codex" {
 				next.Codex = value

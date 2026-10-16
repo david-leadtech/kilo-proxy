@@ -332,7 +332,7 @@ func (d *nativeDesktop) setupTray() {
 	systray.SetTitle("")
 	d.items = map[string]*systray.MenuItem{}
 	systray.AddMenuItem("Kilo Proxy · "+version, "").Disable()
-	for _, key := range []string{"status", "team", "address", "activity", "spend", "coverage", "balance"} {
+	for _, key := range []string{"status", "team", "activity", "spend", "coverage", "balance"} {
 		d.items[key] = systray.AddMenuItem(" ", "")
 		d.items[key].Disable()
 	}
@@ -388,7 +388,6 @@ func (d *nativeDesktop) updateTray() {
 	}
 	d.items["status"].SetTitle(s.status)
 	d.items["team"].SetTitle(s.team)
-	d.items["address"].SetTitle(s.labels.endpoint + s.address)
 	d.items["activity"].SetTitle(s.activity)
 	d.items["spend"].SetTitle(s.spend)
 	d.items["coverage"].SetTitle(s.coverage)

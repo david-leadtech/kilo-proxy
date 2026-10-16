@@ -105,7 +105,7 @@ func (u *nativeUI) uxmCuratedPackDetail() layout.Widget {
 		})
 	}
 	copyButton := u.disabled(len(pack.Models) > 0 && len(u.models) > 0 && len(u.missingPackModels(pack.ID)) == 0, u.button("packs.copy."+pack.ID, u.tr("Copy and edit", "Copiar y editar"), func() { u.createPersonalPack(pack.ID) }))
-	caption := u.tr("Candidate selection, not a ranking. Built-in packs update with the app; to change something, make your copy.", "Selección candidata, no un ranking. Los packs preparados se actualizan con la app; si quieres cambiar algo, haz tu copia.")
+	caption := u.tr("Updates with the app. To change it, make your own copy.", "Se actualiza con la app. Para cambiarlo, haz tu propia copia.")
 	if pack.ID == modelLibraryStartRecommended {
 		caption = u.tr("Follows the published recommendations and refreshes with your catalog; to change something, make your copy.", "Sigue las recomendaciones publicadas y se actualiza con tu catálogo; si quieres cambiar algo, haz tu copia.")
 	}

@@ -61,7 +61,7 @@ func (u *nativeUI) chatGPTAccountPanel() layout.Widget {
 	pending, connected := nativeString(account, "status") == "pending", nativeBool(account, "connected")
 	working := u.chatGPTRequestBusy()
 	editable := !working && !nativeBool(u.state, "running")
-	children := []layout.Widget{u.note(u.tr("Experimental direct ChatGPT subscription connection. Use it alongside Kilo in the same agents and shared model library. ChatGPT models use subscription quota; Kilo models use Kilo credit. Reopen agents after changing the selected models.", "Conexión directa experimental con tu suscripción de ChatGPT. Úsala junto a Kilo en los mismos agentes y biblioteca compartida. Los modelos de ChatGPT usan la cuota de suscripción; los modelos de Kilo usan su crédito. Vuelve a abrir los agentes al cambiar los modelos seleccionados."))}
+	children := []layout.Widget{u.note(u.tr("Experimental direct ChatGPT subscription connection. Use it alongside Kilo in the same apps and shared model library. ChatGPT models use subscription quota; Kilo models use Kilo credit. Reopen your apps after changing the selected models.", "Conexión directa experimental con tu suscripción de ChatGPT. Úsala junto a Kilo en las mismas apps y biblioteca compartida. Los modelos de ChatGPT usan la cuota de suscripción; los modelos de Kilo usan su crédito. Vuelve a abrir tus apps al cambiar los modelos seleccionados."))}
 	if connected {
 		children = append(children, u.statusBadge(nativeToneSuccess, u.tr("ChatGPT connected", "ChatGPT conectado")))
 		identity := strings.TrimSpace(nativeString(account, "email"))
@@ -96,7 +96,7 @@ func (u *nativeUI) chatGPTAccountPanel() layout.Widget {
 	if nativeString(account, "status") == "error" || nativeString(account, "error") != "" {
 		children = append(children, u.message(nativeToneWarning, u.tr("Could not connect to ChatGPT. Try signing in again.", "No se ha podido conectar con ChatGPT. Vuelve a iniciar sesión.")))
 	}
-	children = append(children, u.note(u.tr("Your subscription credentials stay on this computer. Agents use only the local proxy key.", "Las credenciales de tu suscripción se quedan en este equipo. Los agentes solo usan la clave local del proxy.")))
+	children = append(children, u.note(u.tr("Your subscription credentials stay on this computer. Your apps use only a local key.", "Las credenciales de tu suscripción se quedan en este equipo. Tus apps solo usan una clave local.")))
 	return u.section(u.tr("ChatGPT subscription", "Suscripción de ChatGPT"), "", children...)
 }
 
@@ -213,7 +213,7 @@ func (u *nativeUI) uxsChatGPTRow() layout.Widget {
 	}
 	var below layout.Widget
 	if connected && !failed && u.expanded["uxs.chatgpt"] {
-		below = u.column(append(u.chatGPTQuotaWidgets(), u.note(u.tr("Your subscription credentials stay on this computer. Harnesses use only the local proxy key.", "Las credenciales de tu suscripción se quedan en este equipo. Los harnesses solo usan la clave local del proxy.")))...)
+		below = u.column(append(u.chatGPTQuotaWidgets(), u.note(u.tr("Your subscription credentials stay on this computer. Your apps use only a local key.", "Las credenciales de tu suscripción se quedan en este equipo. Tus apps solo usan una clave local.")))...)
 	}
 	return u.uxsRow("ChatGPT", u.tr("Optional · uses your subscription", "Opcional · usa tu suscripción"), u.uxsValue(line, small...), u.uxsActions(actions...), below)
 }

@@ -265,9 +265,9 @@ func (u *nativeUI) cliPreferencesPanel() layout.Widget {
 			rows = append(rows, uxhCell(u.note(u.tr("Resolved executable: ", "Ejecutable detectado: ")+info.Path)))
 		}
 		if client == "muse" {
-			rows = append(rows, uxhCell(u.note(u.tr("Choose Kilo shared models or your Meta account in the Muse or T3 Code harness settings. Both use this selected executable, including custom versions.", "Elige los modelos compartidos de Kilo o tu cuenta de Meta en los ajustes del harness Muse o T3 Code. Ambas opciones usan este ejecutable seleccionado, incluidas las versiones personalizadas."))))
+			rows = append(rows, uxhCell(u.note(u.tr("Choose Kilo shared models or your Meta account in the Muse or T3 Code app settings. Both use this selected executable, including custom versions.", "Elige los modelos compartidos de Kilo o tu cuenta de Meta en los ajustes de la app Muse o T3 Code. Ambas opciones usan este ejecutable seleccionado, incluidas las versiones personalizadas."))))
 		}
-		if client == "synara" {
+		if client == "synara" && u.owner.launchRuntime().platform == "linux" {
 			rows = append(rows, uxhCell(u.note(u.tr("On Linux, select a persistent extracted Synara executable. A raw AppImage can be detected but is not ready to open: install a verified Kilo copy or select the extracted executable. Detection does not verify its source, version or channel. Ubuntu sandbox restrictions still apply.", "En Linux, selecciona un ejecutable de Synara extraído en una ubicación permanente. Un AppImage sin extraer puede detectarse, pero no está listo para abrir: instala una copia Kilo verificada o selecciona el ejecutable extraído. La detección no verifica su origen, versión ni canal. Se mantienen las restricciones del sandbox de Ubuntu."))))
 		}
 	}
@@ -278,7 +278,7 @@ func (u *nativeUI) cliPreferencesPanel() layout.Widget {
 	case !s.Loaded:
 		status = u.tr("Loading CLI paths…", "Cargando rutas de las CLI…")
 	case u.cliPathDirty():
-		status = u.tr("Save the executable paths before preparing or opening a harness.", "Guarda las rutas de los ejecutables antes de preparar o abrir un harness.")
+		status = u.tr("Save the executable paths before preparing or opening an app.", "Guarda las rutas de los ejecutables antes de preparar o abrir una app.")
 	case s.Changed:
 		status = u.tr("Paths saved. Close the affected Kilo workspace and prepare again. Chats are kept.", "Rutas guardadas. Cierra el espacio Kilo afectado y prepara de nuevo. Los chats se conservan.")
 	}

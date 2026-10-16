@@ -140,7 +140,7 @@ func (u *nativeUI) saveClientImages(s *nativeClientSelection) {
 		}
 		u.acceptClientImages(&response.Images)
 		u.state["imageGeneration"] = response.Images
-		u.notice, u.noticeTone = u.tr("Image settings saved. Reopen your agent to refresh its image tool.", "Ajustes de imágenes guardados. Vuelve a abrir el agente para actualizar su herramienta de imágenes."), nativeToneSuccess
+		u.notice, u.noticeTone = u.tr("Image settings saved. Reopen your app to refresh its image tool.", "Ajustes de imágenes guardados. Vuelve a abrir la app para actualizar su herramienta de imágenes."), nativeToneSuccess
 	})
 }
 

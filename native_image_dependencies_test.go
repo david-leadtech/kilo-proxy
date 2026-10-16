@@ -138,7 +138,7 @@ func TestNativeImageDependencyNoticeActionsAndRecheck(t *testing.T) {
 				if u.imageDependencyNoticeVisible() || nativeImageDependencyText(h, title, false) {
 					t.Fatal("background refresh restored a dismissed notice")
 				}
-				h.click(u.tr("Start proxy", "Arrancar proxy"), semantic.Button)
+				h.click(u.tr("Turn on", "Activar"), semantic.Button)
 				nativeTestWait(t, u, func() bool { return nativeBool(u.state, "running") && !u.busy["POST/api/start"] })
 				h.frame()
 				if !u.imageDependencyNoticeVisible() || !nativeImageDependencyText(h, title, true) {

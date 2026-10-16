@@ -278,7 +278,7 @@ func (u *nativeUI) uxmSwitchPanels() []layout.Widget {
 				u.primaryButton("models.switch.confirm", u.tr("Replace list", "Sustituir lista"), func() {
 					u.setValue("models.switch.pending", "")
 					if u.uxmApplyStartingPoint(pending, true) {
-						u.setNotice(nativeToneSuccess, fmt.Sprintf(u.tr("✓ Your list now comes from “%s”. Applies the next time you open each agent.", "✓ Tu lista ahora viene de “%s”. Se aplica al volver a abrir cada agente."), u.uxmStartingPackName(pending)))
+						u.setNotice(nativeToneSuccess, fmt.Sprintf(u.tr("✓ Your list now comes from “%s”. Applies the next time you open each app.", "✓ Tu lista ahora viene de “%s”. Se aplica al volver a abrir cada app."), u.uxmStartingPackName(pending)))
 					}
 				}),
 				u.button("models.switch.cancel", u.tr("Cancel", "Cancelar"), func() { u.setValue("models.switch.pending", "") }),

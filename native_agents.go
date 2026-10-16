@@ -108,7 +108,7 @@ func (u *nativeUI) uxhSavePreferences() {
 	a := u.agentsState()
 	a.Preferences.CodexAppPath = strings.TrimSpace(u.value("clients-launch-app-path"))
 	if err := writeAgentPreferences(u.dir, a.Preferences); err != nil {
-		a.Error = u.tr("The project folder could not be remembered. You can still open the harness.", "No se pudo recordar la carpeta. Puedes abrir el harness igualmente.")
+		a.Error = u.tr("The project folder could not be remembered. You can still open the app.", "No se pudo recordar la carpeta. Puedes abrir la app igualmente.")
 		return
 	}
 	a.Error = ""
@@ -270,11 +270,11 @@ func (u *nativeUI) agentCompatibility(key string) string {
 	case "openmausbot":
 		return u.tr("Uses the local OpenAI-compatible connection with your shared models, listing the default first. OpenMausBot shows exact model IDs instead of custom names. Kilo Proxy applies each model’s supported reasoning level saved in Models. Generation and tools depend on the model and provider.", "Usa la conexión local compatible con OpenAI con tus modelos compartidos, mostrando primero el predeterminado. OpenMausBot muestra los ID exactos en lugar de nombres personalizados. Kilo Proxy aplica el nivel de razonamiento compatible de cada modelo guardado en Modelos. La generación y las herramientas dependen del modelo y del proveedor.")
 	case "omnigent":
-		return u.tr("Opens a separate Omnigent workspace. Choose your own CLI account or Kilo models for each enabled Codex or Claude harness. Start a new chat after changing a connection.", "Abre un espacio Omnigent separado. Elige tu cuenta CLI propia o modelos Kilo para cada harness Codex o Claude activado. Inicia un chat nuevo tras cambiar de conexión.")
+		return u.tr("Opens a separate Omnigent workspace. Choose your own CLI account or Kilo models for each enabled Codex or Claude agent. Start a new chat after changing a connection.", "Abre un espacio Omnigent separado. Elige tu cuenta CLI propia o modelos Kilo para cada agente Codex o Claude activado. Inicia un chat nuevo tras cambiar de conexión.")
 	case "synara":
 		return u.tr("Opens a separate Synara workspace with four Codex and Claude agents. Normal agents use existing CLI sessions; Kilo agents use shared models through the proxy. Start a new chat to change accounts and select the prepared exact gateway model ID.", "Abre un espacio Synara separado con cuatro agentes Codex y Claude. Los agentes normales usan sesiones CLI existentes; los agentes Kilo usan modelos compartidos a través del proxy. Inicia un chat nuevo para cambiar de cuenta y elige el ID exacto de modelo del gateway preparado.")
 	case "t3-code":
-		return u.tr("Opens a separate T3 Code workspace with the accounts and model lists chosen on this harness page. Codex and Claude use existing CLI login; Kilo accounts use the proxy. Claude's official models use its native reasoning selector.", "Abre un espacio T3 Code separado con las cuentas y listas de modelos elegidas en esta página del harness. Codex y Claude usan su sesión CLI existente; las cuentas Kilo usan el proxy. Los modelos oficiales de Claude usan su selector nativo de razonamiento.")
+		return u.tr("Opens a separate T3 Code workspace with the accounts and model lists chosen on this app page. Codex and Claude use existing CLI login; Kilo accounts use the proxy. Claude's official models use its native reasoning selector.", "Abre un espacio T3 Code separado con las cuentas y listas de modelos elegidas en esta página de la app. Codex y Claude usan su sesión CLI existente; las cuentas Kilo usan el proxy. Los modelos oficiales de Claude usan su selector nativo de razonamiento.")
 	case "claude-desktop":
 		return u.tr("Opens a separate Kilo data profile. Regular Claude can stay open; use its usual icon to open it. Quit only the Kilo window before applying changes or opening it again. Other providers require the experimental option in these settings.", "Abre un perfil de datos Kilo separado. Claude normal puede seguir abierto; ábrelo desde su icono habitual. Cierra solo la ventana Kilo antes de aplicar cambios o volver a abrirla. Los demás proveedores requieren la opción experimental de estos ajustes.")
 	case "opencode":
