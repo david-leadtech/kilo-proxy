@@ -436,10 +436,22 @@ func TestT3CodeNormalCustomHomesAreCapturedAndInvalidateOldPreparation(t *testin
 	if err != nil || !a.t3CodeReady(saved, mustResolveT3CodeTest(t, a), a.launchRuntime()) {
 		t.Fatal("initial custom homes not ready", err)
 	}
-	for id, expected := range map[string]string{t3CodeCodexNormalID: codexHome, t3CodeClaudeNormalID: claudeHome} {
-		if saved.Providers[id].(map[string]any)["config"].(map[string]any)["homePath"] != expected {
-			t.Fatal("normal custom home ignored", id)
+	if saved.Providers[t3CodeCodexNormalID].(map[string]any)["config"].(map[string]any)["homePath"] != codexHome {
+		t.Fatal("normal Codex custom home ignored")
+	}
+	claude := saved.Providers[t3CodeClaudeNormalID].(map[string]any)
+	if claude["config"].(map[string]any)["homePath"] != "" {
+		t.Fatal("native Claude descriptor would resolve the literal custom home")
+	}
+	found := false
+	for _, raw := range claude["environment"].([]any) {
+		variable := raw.(map[string]any)
+		if variable["name"] == "CLAUDE_CONFIG_DIR" && variable["value"] == claudeHome {
+			found = true
 		}
+	}
+	if !found {
+		t.Fatal("normal Claude custom home ignored")
 	}
 	t.Setenv("CODEX_HOME", filepath.Join(a.launcher.home, "changed-codex-home"))
 	if a.t3CodeReady(saved, mustResolveT3CodeTest(t, a), a.launchRuntime()) {

@@ -142,7 +142,10 @@ func t3CodeNormalEnvironment(home string, parent []string, platform string) map[
 			continue
 		}
 		switch strings.ToUpper(key) {
-		case "USERPROFILE", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "CODEX_HOME", "CLAUDE_CONFIG_DIR":
+		case "CLAUDE_CONFIG_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR":
+			// Presence and the literal spelling are part of Claude's auth namespace.
+			result[strings.ToUpper(key)] = value
+		case "USERPROFILE", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR", "CODEX_HOME":
 			if value != "" {
 				result[strings.ToUpper(key)] = value
 			}

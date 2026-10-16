@@ -15,7 +15,7 @@ import (
 )
 
 const t3CodeProfileEndpoint = "/api/clients/t3-code"
-const t3CodeProfileRevision = 8
+const t3CodeProfileRevision = 9
 
 type t3CodeManagedPaths struct{ Root, Data, UIHome, Settings, ClientSettings, Secrets, Selection string }
 
@@ -107,6 +107,7 @@ func t3CodeFingerprintFrom(input t3CodeValidationInput, installation t3CodeInsta
 		}
 		if !prefs.Claude {
 			delete(normalEnvironment, "CLAUDE_CONFIG_DIR")
+			delete(normalEnvironment, "CLAUDE_SECURESTORAGE_CONFIG_DIR")
 		}
 	}
 	normalCodex, normalClaude, err := t3CodeNormalProviderHomes(t3CodeProfileOptions{NormalHome: rt.home, NormalEnvironment: normalEnvironment, Preferences: &prefs})
@@ -122,6 +123,26 @@ func t3CodeFingerprintFrom(input t3CodeValidationInput, installation t3CodeInsta
 	}
 	if prefs.KiloCodex || prefs.KiloClaude || prefs.Claude {
 		canonicalClaude, err = t3CodeCanonicalPath(normalClaude)
+		if err != nil {
+			return ""
+		}
+	}
+	canonicalClaudeLiteral := ""
+	if t3CodeNormalProviderEnabled(t3CodeProfileOptions{Preferences: &prefs}, 1) {
+		if literal := normalEnvironment["CLAUDE_CONFIG_DIR"]; literal != "" {
+			canonicalClaudeLiteral, err = t3CodeCanonicalPath(literal)
+			if err != nil {
+				return ""
+			}
+		}
+	}
+	secureHome, err := t3CodeNormalClaudeSecureStorageHome(t3CodeProfileOptions{NormalHome: rt.home, NormalEnvironment: normalEnvironment, Preferences: &prefs})
+	if err != nil {
+		return ""
+	}
+	canonicalSecure := ""
+	if secureHome != "" {
+		canonicalSecure, err = t3CodeCanonicalPath(secureHome)
 		if err != nil {
 			return ""
 		}
@@ -156,7 +177,7 @@ func t3CodeFingerprintFrom(input t3CodeValidationInput, installation t3CodeInsta
 	if !t3CodeUsesKilo(prefs) {
 		// Native providers own their catalog and login. An unrelated gateway,
 		// shared-model recovery or token rotation cannot stale their workspace.
-		data, _ := json.Marshal([]any{binary, version, installation.SourceDigest, codex, claude, prefs, additional, rt.home, normalEnvironment, canonicalCodex, canonicalClaude, t3CodeProfileRevision})
+		data, _ := json.Marshal([]any{binary, version, installation.SourceDigest, codex, claude, prefs, additional, rt.home, normalEnvironment, canonicalCodex, canonicalClaude, canonicalClaudeLiteral, canonicalSecure, t3CodeProfileRevision})
 		return openDesignHash(data)
 	}
 	var openCodeIdentities []string
@@ -182,7 +203,7 @@ func t3CodeFingerprintFrom(input t3CodeValidationInput, installation t3CodeInsta
 			return ""
 		}
 	}
-	data, _ := json.Marshal([]any{binary, version, installation.SourceDigest, codex, claude, library, prefs, policy, museIdentity, museIdentities, terminalLibraryChoices(policy.CodexLibrary, catalog), terminalLibraryChoices(policy.ClaudeLibrary, catalog), additional, openCodeIdentities, input.Port, input.LocalKey, input.OrgID, input.CatalogScope, input.Images, rt.home, normalEnvironment, canonicalCodex, canonicalClaude, t3CodeProfileRevision})
+	data, _ := json.Marshal([]any{binary, version, installation.SourceDigest, codex, claude, library, prefs, policy, museIdentity, museIdentities, terminalLibraryChoices(policy.CodexLibrary, catalog), terminalLibraryChoices(policy.ClaudeLibrary, catalog), additional, openCodeIdentities, input.Port, input.LocalKey, input.OrgID, input.CatalogScope, input.Images, rt.home, normalEnvironment, canonicalCodex, canonicalClaude, canonicalClaudeLiteral, canonicalSecure, t3CodeProfileRevision})
 	return openDesignHash(data)
 }
 

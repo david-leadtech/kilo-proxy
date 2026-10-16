@@ -173,7 +173,11 @@ func assertT3ProfileProviders(t *testing.T, options t3CodeProfileOptions, result
 		if id == t3CodeClaudeProxyID && baseURL != "http://127.0.0.1:18877" || id != t3CodeClaudeProxyID && baseURL != "" {
 			t.Fatalf("wrong direct Claude routing scope for %s: %q", id, baseURL)
 		}
-		if !isProxy && !strings.HasPrefix(config["homePath"].(string), options.NormalHome+string(filepath.Separator)) {
+		if id == t3CodeClaudeNormalID {
+			if config["homePath"] != "" {
+				t.Fatalf("default Claude login acquired an explicit config override: %#v", config)
+			}
+		} else if !isProxy && !strings.HasPrefix(config["homePath"].(string), options.NormalHome+string(filepath.Separator)) {
 			t.Fatalf("normal home redirected: %#v", config)
 		}
 	}
@@ -512,17 +516,30 @@ func TestT3CodeProfilesUseNormalCustomHomesWithoutCreatingThem(t *testing.T) {
 	}
 	for id, path := range map[string]string{t3CodeCodexNormalID: codexHome, t3CodeClaudeNormalID: claudeHome} {
 		provider := result.Providers[id].(map[string]any)
-		if provider["config"].(map[string]any)["homePath"] != path {
+		if id == t3CodeClaudeNormalID {
+			if provider["config"].(map[string]any)["homePath"] != "" {
+				t.Fatal("Claude descriptor would resolve the literal auth override")
+			}
+			found := false
+			for _, variable := range provider["environment"].([]map[string]any) {
+				if variable["name"] == "CLAUDE_CONFIG_DIR" && variable["value"] == path {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("normal Claude literal custom home missing")
+			}
+		} else if provider["config"].(map[string]any)["homePath"] != path {
 			t.Fatalf("normal custom provider home was redirected: %s", id)
 		}
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("normal custom home was created: %s (%v)", path, err)
 		}
 	}
-	for _, raw := range result.Providers {
+	for id, raw := range result.Providers {
 		for _, variable := range raw.(map[string]any)["environment"].([]map[string]any) {
-			if variable["name"] == "CODEX_HOME" || variable["name"] == "CLAUDE_CONFIG_DIR" {
-				t.Fatal("normal custom home leaked into the Kilo provider environment")
+			if variable["name"] == "CODEX_HOME" || variable["name"] == "CLAUDE_CONFIG_DIR" && id != t3CodeClaudeNormalID {
+				t.Fatal("normal custom home leaked into another provider environment")
 			}
 		}
 	}

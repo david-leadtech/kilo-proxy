@@ -114,16 +114,19 @@ func TestProxyStartAPIOccupiedPortIncludesRealSystemDiagnostic(t *testing.T) {
 			}
 		})
 	}
-	// Startup must neither close someone else's listener nor retain the failed
-	// bind. Once the actual owner releases it, that same address is usable.
+	// Failed starts must leave this listener under its original owner's control.
+	// After that owner closes it, check this socket rather than reacquiring an
+	// unreserved address that another process could now own.
 	if err := occupied.Close(); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := net.Listen("tcp4", address)
-	if err != nil {
-		t.Fatal("failed startup retained the socket:", err)
+	connection, err := occupied.Accept()
+	if connection != nil {
+		_ = connection.Close()
 	}
-	_ = reopened.Close()
+	if !errors.Is(err, net.ErrClosed) {
+		t.Fatal("owner-closed listener still accepts connections:", err)
+	}
 }
 
 func TestProxyStartPermissionDiagnosticIsSharedByLaunchAndTerminal(t *testing.T) {

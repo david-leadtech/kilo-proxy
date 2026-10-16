@@ -47,7 +47,7 @@ On the T3 Code settings page, **Advanced → Prepare without opening** performs 
 
 Your regular T3 Code workspace can remain open. Its preferences, projects and chat history are separate and are not imported. The normal agents in the Kilo workspace refer to the usual CLI homes so they use the existing CLI login; Kilo Proxy does not copy login data or sign you out.
 
-If the environment that starts Kilo Proxy sets an absolute `CODEX_HOME` or `CLAUDE_CONFIG_DIR`, the normal agent uses that home instead of `~/.codex` or `~/.claude`. These paths are recorded per agent; they are not applied to the Kilo agents. Changing them requires preparing again with the private T3 workspace closed.
+If the environment that starts Kilo Proxy sets an absolute `CODEX_HOME` or `CLAUDE_CONFIG_DIR`, the normal agent uses that home instead of `~/.codex` or `~/.claude`. These paths are recorded per agent; they are not applied to the Kilo agents. Changing them requires preparing again with the private T3 workspace closed. With no `CLAUDE_CONFIG_DIR` override, the native Claude agent leaves its config path unset so Claude Code retains its default login namespace. Explicit Claude config and `CLAUDE_SECURESTORAGE_CONFIG_DIR` overrides retain their original spelling, including an explicitly empty secure-storage override; they are not copied to the Kilo Claude profile. After updating from 0.67.0, close the private T3 workspace and prepare it again to migrate the managed native Claude entry.
 
 Close **T3 Code · Kilo** before changing shared models or the proxy connection, then open it again from Kilo Proxy. Only the private Kilo workspace must be closed. This prevents changing an agent configuration while a chat is using it.
 
