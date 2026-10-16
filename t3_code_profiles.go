@@ -112,6 +112,13 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 		privateHomes = append(privateHomes, result.ClaudeHome)
 	}
 	normalHomes := []string{normalCodex, normalClaude}
+	// The native Claude environment retains its literal path. Keep the
+	// historical normalized home check as well as the actual alias traversal.
+	if t3CodeNormalProviderEnabled(options, 1) {
+		if literal := options.NormalEnvironment["CLAUDE_CONFIG_DIR"]; literal != "" {
+			normalHomes = append(normalHomes, literal)
+		}
+	}
 	secure, err := t3CodeNormalClaudeSecureStorageHome(options)
 	if err != nil {
 		return result, err
@@ -347,25 +354,47 @@ func t3CodeCanonicalPath(path string) (string, error) {
 		if !errors.Is(err, os.ErrNotExist) {
 			return "", err
 		}
-		if info, statErr := os.Lstat(path); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
-			target, linkErr := os.Readlink(path)
+		parent, base := t3CodeLiteralPathParent(path)
+		if base == "" {
+			return "", err
+		}
+		if info, statErr := os.Lstat(parent + base); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+			target, linkErr := os.Readlink(parent + base)
 			if linkErr != nil {
 				return "", linkErr
 			}
 			if !filepath.IsAbs(target) {
-				target = filepath.Join(filepath.Dir(path), target)
+				target = parent + target
 			}
-			path = filepath.Clean(target)
+			path = target
 			continue
 		}
-		parent := filepath.Dir(path)
-		if parent == path {
+		if parent == "" || parent == path {
 			return "", err
 		}
-		tail = append(tail, filepath.Base(path))
+		tail = append(tail, base)
 		path = parent
 	}
 	return "", errors.New("Too many directory aliases in T3 Code provider homes.")
+}
+
+// Split only the final lexical component. filepath.Dir/Clean would collapse
+// a preceding symlink/.. before the filesystem has resolved that alias.
+func t3CodeLiteralPathParent(path string) (string, string) {
+	volume := len(filepath.VolumeName(path))
+	end := len(path)
+	for end > volume && os.IsPathSeparator(path[end-1]) {
+		end--
+	}
+	if end == volume {
+		return path, ""
+	}
+	for i := end - 1; i >= volume; i-- {
+		if os.IsPathSeparator(path[i]) {
+			return path[:i+1], path[i+1 : end]
+		}
+	}
+	return "", path[:end]
 }
 
 func t3CodeNormalProviderHomes(options t3CodeProfileOptions) (string, string, error) {
