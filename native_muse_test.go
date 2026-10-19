@@ -413,7 +413,7 @@ func TestNativeMuseKiloReadinessSnapshotsAndNativeRecovery(t *testing.T) {
 			u, recorder, binary := nativeMuseTestUI(t, language)
 			c := u.clientState()
 			prefs := nativeMusePreferences{Version: 1, Connection: "kilo"}
-			c.Muse = nativeMuseState{Preferences: prefs, Requested: true, Loaded: true, ProfileRequested: true, ProfileLoaded: true, Info: nativeMuseInfo{Preferences: prefs, KiloSupported: true, ResolvedExecutable: binary}}
+			c.Muse = nativeMuseState{Preferences: prefs, Requested: true, Loaded: true, ProfileRequested: true, ProfileLoaded: true, ProfilePath: binary, Info: nativeMuseInfo{Preferences: prefs, KiloSupported: true, ResolvedExecutable: binary}}
 			if state := u.uxhLaunchState("muse"); state.canOpen || !strings.Contains(state.reason, u.tr("Connect Kilo or ChatGPT", "Conecta Kilo o ChatGPT")) {
 				t.Fatalf("Muse Kilo bypassed connection: %+v", state)
 			}

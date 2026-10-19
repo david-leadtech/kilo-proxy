@@ -43,10 +43,11 @@ func (u *nativeUI) uxhMuseLaunchState() uxhLaunch {
 	if !c.Muse.Requested {
 		u.refreshMusePreferencesAfter(nil)
 	}
-	if c.Muse.ProfileLoaded && c.Muse.Info.ResolvedExecutable != c.LaunchInfo.Clients["muse"].Path {
+	if c.Muse.ProfileRequested && c.Muse.ProfilePath != c.LaunchInfo.Clients["muse"].Path {
 		c.Muse.ProfileRequested = false
 		c.Muse.ProfileLoaded = false
 		c.Muse.Info.Prepared = false
+		c.Muse.ProfileGeneration++
 	}
 	if c.Muse.Loaded && !c.Muse.ProfileRequested {
 		u.refreshMuseProfile()

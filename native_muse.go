@@ -37,6 +37,7 @@ type nativeMuseState struct {
 	Info                            nativeMuseInfo
 	ProfileRequested, ProfileLoaded bool
 	ProfileGeneration               uint64
+	ProfilePath                     string
 	Connection                      [32]byte
 	Error                           string
 }
@@ -157,8 +158,14 @@ func (u *nativeUI) refreshMuseProfile() {
 	s.ProfileGeneration++
 	generation, prefs := s.ProfileGeneration, s.Generation
 	connection, path := u.launchConnectionFingerprint(), u.clientState().LaunchInfo.Clients["muse"].Path
+	s.ProfilePath = path
 	u.clientRequest("GET", nativeMuseEndpoint, nil, func(data json.RawMessage, err error) {
-		if generation != s.ProfileGeneration || prefs != s.Generation || path != u.clientState().LaunchInfo.Clients["muse"].Path {
+		if generation != s.ProfileGeneration {
+			return
+		}
+		if prefs != s.Generation || path != u.clientState().LaunchInfo.Clients["muse"].Path {
+			s.ProfileRequested, s.ProfileLoaded = false, false
+			s.Info.Prepared = false
 			return
 		}
 		var info nativeMuseInfo
@@ -233,7 +240,7 @@ func (u *nativeUI) prepareMuseAfter(executable string, done func(error)) {
 			err = errors.New(u.launchSettingsChangedMessage())
 		}
 		if err == nil {
-			s.Info, s.ProfileLoaded, s.Connection = info, true, connection
+			s.Info, s.ProfileLoaded, s.Connection, s.ProfilePath = info, true, connection, executable
 		}
 		done(err)
 	})

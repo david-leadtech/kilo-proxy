@@ -87,6 +87,69 @@ if(ids()!=="codex,claudeAgent,grok")throw Error("wrong-driver account changed vi
 	}
 }
 
+const t3CodeRuntimeFixtureExplicitProviders = `function rowsFor(S){let V=[];for(let t of ["codex","claudeAgent","grok"]){let n=t,r=S.providerInstances?.[n],a=r!==undefined;(t==="codex"||t==="claudeAgent"||a||(r??{driver:t}).enabled!==false)&&V.push({instanceId:n,explicitInstance:r,driver:t,isDefault:!0,isDirty:a});for(let[n,r]of Object.entries(S.providerInstances??{})){if(n!==t&&r.driver===t)V.push({instanceId:n,explicitInstance:r,driver:r.driver,isDefault:!1})}}for(let[n,r]of Object.entries(S.providerInstances??{})){if(!["codex","claudeAgent","grok"].includes(r.driver))V.push({instanceId:n,explicitInstance:r,driver:r.driver,isDefault:!1})}return V}`
+
+func TestT3CodeRuntimeExplicitAccountsPreserveUndefinedAndCustomRows(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("Node is required for the JavaScript behavioral fixture")
+	}
+	source := t3CodeRuntimeFixtureExplicitProviders
+	patched, err := patchT3CodeProvidersAsset([]byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := "const original=(function(){" + source + ";return rowsFor;})();" + string(patched) + `
+const cases=[
+{name:"no configured defaults",settings:{},ids:"codex,claudeAgent,grok"},
+{name:"disabled unmanaged defaults",settings:{providerInstances:{codex:{driver:"codex",enabled:false},claudeAgent:{driver:"claudeAgent",enabled:false},grok:{driver:"grok",enabled:false}}},ids:"codex,claudeAgent,grok"},
+{name:"only disabled duplicates hidden",settings:{providerInstances:{codex:{driver:"codex",enabled:false},claudeAgent:{driver:"claudeAgent",enabled:false},grok:{driver:"grok",enabled:false},kilo_codex_normal:{driver:"codex",enabled:true},kilo_claude_normal:{driver:"claudeAgent",enabled:false},custom_codex:{driver:"codex",enabled:false,displayName:"My account"},kilo_codex_proxy:{driver:"codex",enabled:true},custom_other:{driver:"acpRegistry",enabled:false}}},ids:"kilo_codex_normal,custom_codex,kilo_codex_proxy,kilo_claude_normal,grok,custom_other"},
+{name:"enabled native account kept",settings:{providerInstances:{codex:{driver:"codex",enabled:true},claudeAgent:{driver:"claudeAgent",enabled:false},kilo_codex_normal:{driver:"codex",enabled:true},kilo_claude_normal:{driver:"claudeAgent",enabled:true}}},ids:"codex,kilo_codex_normal,kilo_claude_normal,grok"},
+{name:"wrong driver does not hide native",settings:{providerInstances:{codex:{driver:"codex",enabled:false},claudeAgent:{driver:"claudeAgent",enabled:false},kilo_codex_normal:{driver:"claudeAgent",enabled:true},kilo_claude_normal:{driver:"codex",enabled:true}}},ids:"codex,kilo_claude_normal,claudeAgent,kilo_codex_normal,grok"},
+{name:"undefined native slots kept beside managed accounts",settings:{providerInstances:{kilo_codex_normal:{driver:"codex",enabled:true},kilo_claude_normal:{driver:"claudeAgent",enabled:false}}},ids:"codex,kilo_codex_normal,claudeAgent,kilo_claude_normal,grok"},
+{name:"proxy account does not replace native slot",settings:{providerInstances:{codex:{driver:"codex",enabled:false},kilo_codex_proxy:{driver:"codex",enabled:true}}},ids:"codex,kilo_codex_proxy,claudeAgent,grok"}
+];
+for(const test of cases){
+ const before=JSON.stringify(test.settings),expectedRows=original(test.settings),rows=rowsFor(test.settings);
+ if(rows.map(row=>row.instanceId).join(",")!==test.ids)throw Error(test.name+": wrong visible account IDs");
+ if(JSON.stringify(test.settings)!==before)throw Error(test.name+": settings changed");
+ for(const row of rows){
+  const expected=expectedRows.find(candidate=>candidate.instanceId===row.instanceId);
+  if(!expected||row.explicitInstance!==expected.explicitInstance||JSON.stringify(row)!==JSON.stringify(expected))throw Error(test.name+": account identity or row changed");
+ }
+}
+`
+	command := exec.Command(node, "--input-type=module", "--eval", script)
+	command.Env = []string{"HOME=" + t.TempDir(), "PATH=" + filepath.Dir(node), "LANG=C"}
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("%v %s", err, output)
+	}
+}
+
+func TestT3CodeRuntimeExplicitAccountsRejectUnknownOrAmbiguousContracts(t *testing.T) {
+	source := t3CodeRuntimeFixtureExplicitProviders
+	legacy := strings.ReplaceAll(t3CodeRuntimeFixtureProviders(), "isDirty:r!==undefined", "isDirty:a")
+	cases := map[string]string{
+		"changed default flag":           strings.ReplaceAll(source, "isDefault:!0", "isDefault:!1"),
+		"unknown instance field":         strings.ReplaceAll(source, "explicitInstance:r", "explicitConfig:r"),
+		"uncorrelated optional instance": strings.ReplaceAll(source, "explicitInstance:r", "explicitInstance:other"),
+		"wrong lookup ID":                strings.ReplaceAll(source, "S.providerInstances?.[n]", "S.providerInstances?.[other]"),
+		"wrong settings field":           strings.ReplaceAll(source, "S.providerInstances?.[n]", "S.instances?.[n]"),
+		"lookalike binding suffix":       strings.ReplaceAll(source, "r=S.providerInstances?.[n]", "other=S.providerInstances?.[n]"),
+		"ambiguous lookup":               strings.ReplaceAll(source, "r=S.providerInstances?.[n]", "r=S.providerInstances?.[n],r=S.providerInstances?.[n]"),
+		"inline dirty expression":        strings.ReplaceAll(source, "isDirty:a", "isDirty:r!==undefined"),
+		"duplicate new shape":            source + source,
+		"mixed old and new shapes":       legacy + source,
+	}
+	for name, invalid := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := patchT3CodeProvidersAsset([]byte(invalid)); err == nil {
+				t.Fatal("changed or ambiguous explicit account-list contract accepted")
+			}
+		})
+	}
+}
+
 func TestT3CodeRuntimeIntegrityAndReadOnlyOriginal(t *testing.T) {
 	for _, platform := range []string{"macos", "linux", "windows"} {
 		t.Run(platform, func(t *testing.T) {
