@@ -153,7 +153,7 @@ class SmokeTemporaryDirectoryTests(unittest.TestCase):
                     (root / 'desktop-report.json').write_text('synthetic passed report')
 
                 def cleanup(directory):
-                    self.assertEqual(Path(directory.name), roots[0])
+                    self.assertEqual(Path(directory.name).resolve(), roots[0])
                     attempts.append(directory)
                     if len(attempts) == 1:
                         raise windows_error(32, roots[0] / 'Kilo Proxy.exe')
@@ -189,7 +189,7 @@ class SmokeTemporaryDirectoryTests(unittest.TestCase):
             raise failure
 
         def cleanup(directory):
-            self.assertEqual(Path(directory.name), roots[0])
+            self.assertEqual(Path(directory.name).resolve(), roots[0])
             attempts.append(directory)
             if len(attempts) == 1:
                 raise windows_error(32, roots[0] / 'Kilo Proxy.exe')
