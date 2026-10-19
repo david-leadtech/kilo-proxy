@@ -10,6 +10,7 @@ import subprocess
 import stat
 import tarfile
 import tempfile
+import time
 import zipfile
 
 REQUIRED = {
@@ -21,6 +22,34 @@ REQUIRED = {
     'shared-model-library-autosave', 'primary-navigation-preserves-shared-models',
     'model-edit-survives-window-close',
 }
+
+
+class SmokeTemporaryDirectory(tempfile.TemporaryDirectory):
+    """Remove only this smoke's files, allowing a brief Windows sharing lock."""
+
+    def cleanup(self):
+        # The smoke process has already exited. Windows can still report a
+        # sharing violation while deleting its extracted executable. Retry
+        # only that error on this same owned directory, for at most 2 seconds.
+        for attempt in range(21):
+            try:
+                super().cleanup()
+                return
+            except OSError as error:
+                if (platform.system() != 'Windows' or
+                        getattr(error, 'winerror', None) != 32 or attempt == 20):
+                    raise
+                time.sleep(0.1)
+
+    def __exit__(self, exc_type, exc, traceback):
+        try:
+            self.cleanup()
+        except OSError as cleanup_error:
+            if exc is not None:
+                # Keep the smoke failure authoritative and show the cleanup
+                # failure as its cause rather than replacing the smoke error.
+                raise exc.with_traceback(traceback) from cleanup_error
+            raise
 
 
 def windows_desktop_context():
@@ -144,7 +173,7 @@ def main():
     parser.add_argument('--version', default=(Path(__file__).resolve().parents[1] / 'VERSION').read_text().strip(),
                         help='Expected executable version (defaults to VERSION).')
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix='kilo-native-smoke-') as temporary:
+    with SmokeTemporaryDirectory(prefix='kilo-native-smoke-') as temporary:
         root = Path(temporary).resolve()
         binary = extract(args.archive.resolve(), root) if args.archive else args.binary
         smoke(binary, root, args.version)
