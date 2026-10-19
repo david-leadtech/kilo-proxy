@@ -45,10 +45,17 @@ type t3CodePrivateRuntime struct {
 
 var t3CodeRuntimeDefaultRow = regexp.MustCompile(`([A-Za-z_$][A-Za-z0-9_$]*)\.push\(\{instanceId:([A-Za-z_$][A-Za-z0-9_$]*),instance:([A-Za-z_$][A-Za-z0-9_$]*),driver:([A-Za-z_$][A-Za-z0-9_$]*),isDefault:!0,isDirty:([A-Za-z_$][A-Za-z0-9_$]*)\}\)`)
 
+var t3CodeRuntimeExplicitDefaultRow = regexp.MustCompile(`([A-Za-z_$][A-Za-z0-9_$]*)\.push\(\{instanceId:([A-Za-z_$][A-Za-z0-9_$]*),explicitInstance:([A-Za-z_$][A-Za-z0-9_$]*),driver:([A-Za-z_$][A-Za-z0-9_$]*),isDefault:!0,isDirty:([A-Za-z_$][A-Za-z0-9_$]*)\}\)`)
+
 func patchT3CodeProvidersAsset(source []byte) ([]byte, error) {
 	matches := t3CodeRuntimeDefaultRow.FindAllSubmatchIndex(source, -1)
-	if len(matches) != 1 {
+	explicitMatches := t3CodeRuntimeExplicitDefaultRow.FindAllSubmatchIndex(source, -1)
+	if len(matches)+len(explicitMatches) != 1 {
 		return nil, errors.New("This T3 Code Providers interface has an incompatible account-list contract.")
+	}
+	explicit := len(explicitMatches) == 1
+	if explicit {
+		matches = explicitMatches
 	}
 	m := matches[0]
 	id, instance, driver := string(source[m[4]:m[5]]), string(source[m[6]:m[7]]), string(source[m[8]:m[9]])
@@ -56,14 +63,24 @@ func patchT3CodeProvidersAsset(source []byte) ([]byte, error) {
 	if start < 0 {
 		start = 0
 	}
-	lookup := regexp.MustCompile(`([A-Za-z_$][A-Za-z0-9_$]*)\.providerInstances\?\.\[`+regexp.QuoteMeta(id)+`\]`).FindAllSubmatch(source[start:m[0]], -1)
+	lookupPattern := `([A-Za-z_$][A-Za-z0-9_$]*)\.providerInstances\?\.\[` + regexp.QuoteMeta(id) + `\]`
+	if explicit {
+		// Newer panels keep an absent default slot undefined until rendering.
+		// Bind that exact optional instance to its settings lookup before patching.
+		lookupPattern = `(?:^|[,;])` + regexp.QuoteMeta(instance) + `=` + lookupPattern
+	}
+	lookup := regexp.MustCompile(lookupPattern).FindAllSubmatch(source[start:m[0]], -1)
 	if len(lookup) != 1 {
 		return nil, errors.New("Cannot verify the private T3 Code account-list settings lookup.")
 	}
 	settings := string(lookup[0][1])
 	// Hide only the disabled synthesized native duplicate when the matching
 	// managed direct account still exists. Its legacy ID keeps old chats usable.
-	condition := fmt.Sprintf(`!((%s==="codex"||%s==="claudeAgent")&&%s.enabled===false&&%s.providerInstances?.[%s==="codex"?"%s":"%s"]?.driver===%s)&&`, driver, driver, instance, settings, driver, t3CodeCodexNormalID, t3CodeClaudeNormalID, driver)
+	enabled := instance + ".enabled"
+	if explicit {
+		enabled = instance + "?.enabled"
+	}
+	condition := fmt.Sprintf(`!((%s==="codex"||%s==="claudeAgent")&&%s===false&&%s.providerInstances?.[%s==="codex"?"%s":"%s"]?.driver===%s)&&`, driver, driver, enabled, settings, driver, t3CodeCodexNormalID, t3CodeClaudeNormalID, driver)
 	result := make([]byte, 0, len(source)+len(condition))
 	result = append(result, source[:m[0]]...)
 	result = append(result, condition...)
