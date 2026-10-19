@@ -36,29 +36,20 @@ func museExecutableIdentity(binary string) (museBinaryIdentity, error) {
 	return museBinaryIdentity{Path: filepath.Clean(binary), Size: st.Size(), Modified: st.ModTime().UnixNano()}, nil
 }
 
-func museKiloVersionSupported(release string) bool {
-	// These are the official binaries whose configuration and Responses
-	// contracts passed the isolated compatibility gate. Unknown releases keep
-	// native Meta available rather than silently assuming the same protocol.
-	return release == "1.4.6-R6000.1" || release == "1.4.7-R6101.1"
-}
-
 func (a *app) checkMuseKiloVersion(binary string) (string, error) {
 	before, identityErr := museExecutableIdentity(binary)
 	if identityErr != nil {
 		return "", identityErr
 	}
 	var release string
-	var err error
+	// Version discovery is optional metadata. A changed release or version-output
+	// format must not block the selected executable or its private Kilo profile.
 	if a.museVersionProbe != nil {
-		release, err = a.museVersionProbe(binary)
+		release, _ = a.museVersionProbe(binary)
 	} else {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		release, err = museManagedProbeVersion(ctx, binary)
-	}
-	if err != nil || !museKiloVersionSupported(release) {
-		return "", errors.New("This Muse Code release has not been verified for Kilo models. Choose Muse Code 1.4.6-R6000.1 or 1.4.7-R6101.1, or use its native Meta connection.")
+		release, _ = museManagedProbeVersion(ctx, binary)
 	}
 	after, identityErr := museExecutableIdentity(binary)
 	if identityErr != nil || after != before {
@@ -160,7 +151,7 @@ func (a *app) museTerminalPrepared(binary string, library modelLibrary) error {
 	}
 	data, err := readCatalogFile(filepath.Join(home, "kilo-profile.json"))
 	var saved musePreparedProfile
-	if err != nil || json.Unmarshal(data, &saved) != nil || saved.Version != 1 || !museKiloVersionSupported(saved.Release) {
+	if err != nil || json.Unmarshal(data, &saved) != nil || saved.Version != 1 {
 		return fail
 	}
 	identity, err := museExecutableIdentity(binary)

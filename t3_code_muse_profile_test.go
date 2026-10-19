@@ -208,12 +208,18 @@ func TestT3CodeMuseKiloSwitchRetainsNativeAccountChatsAndDisabledFiles(t *testin
 	}
 }
 
-func TestT3CodeMuseKiloRejectsVersionChangesAndUnsafeState(t *testing.T) {
+func TestT3CodeMuseKiloAllowsNewReleaseAndRejectsChangedBinaryAndUnsafeState(t *testing.T) {
 	a, binary, _ := t3CodeMuseKiloTestApp(t)
 	muse, _ := a.launcher.resolve("muse", "")
-	a.museVersionProbe = func(string) (string, error) { return "1.4.8-unknown", nil }
-	if response := adminRequest(a, "clients/t3-code", `{}`); response.Code != 409 {
-		t.Fatal("unverified Muse release accepted", response.Code, response.Body.String())
+	a.museVersionProbe = func(string) (string, error) { return "1.4.10-R6427.1", nil }
+	prepareT3CodeFixture(t, a)
+	newer := mustReadT3CodePrepared(t, a)
+	if newer.MuseRelease != "1.4.10-R6427.1" || !a.t3CodeReady(newer, binary, a.launchRuntime()) {
+		t.Fatal("new Muse release was blocked despite an unchanged private profile", newer)
+	}
+	// Force a fresh preparation so the next hook really exercises the race.
+	if err := os.Remove(t3CodePaths(a.dir).Selection); err != nil {
+		t.Fatal(err)
 	}
 	a.museVersionProbe = func(string) (string, error) {
 		if err := os.WriteFile(muse, []byte("changed while probing"), 0700); err != nil {
@@ -342,6 +348,30 @@ func TestT3CodeMuseKiloPinsFileStoreWithoutChangingNativeAccount(t *testing.T) {
 			}
 			if value := os.Getenv("TBH_CREDENTIAL_BACKEND"); value != ambient {
 				t.Fatal("preparation changed the parent account's store selection", value)
+			}
+		})
+	}
+}
+
+func TestT3CodeMuseKiloVersionMetadataIsOptional(t *testing.T) {
+	for _, tc := range []struct {
+		name, release string
+		err           error
+	}{
+		{name: "changed-format", release: "Muse future custom build"},
+		{name: "version-unavailable", err: errors.New("version command unavailable")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, binary, _ := t3CodeMuseKiloTestApp(t)
+			probes := 0
+			a.museVersionProbe = func(string) (string, error) { probes++; return tc.release, tc.err }
+			prepareT3CodeFixture(t, a)
+			saved := mustReadT3CodePrepared(t, a)
+			if saved.MuseRelease != tc.release || !a.t3CodeReady(saved, binary, a.launchRuntime()) {
+				t.Fatal("optional Muse metadata blocked its private T3 profile", saved)
+			}
+			if probes != 1 {
+				t.Fatal("readiness probed the Muse executable", probes)
 			}
 		})
 	}
