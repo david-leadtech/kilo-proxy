@@ -127,7 +127,7 @@ func validateT3CodeMuseManifest(saved t3CodePrepared, paths t3CodeManagedPaths) 
 			return errors.New("Prepare the selected T3 Muse Code account again.")
 		}
 	}
-	if enabled && (!museKiloVersionSupported(saved.MuseRelease) || saved.MuseBinary.Path == "") {
+	if enabled && saved.MuseBinary.Path == "" {
 		return errors.New("Prepare Muse Code again with a verified executable.")
 	}
 	if !enabled && (saved.MuseRelease != "" || saved.MuseBinary != (museBinaryIdentity{}) || len(saved.MuseLibrary.Models) != 0) {
