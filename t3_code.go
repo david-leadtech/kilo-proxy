@@ -769,6 +769,9 @@ func (a *app) t3CodeProfileAPI(w http.ResponseWriter, r *http.Request) {
 		if !fields.MuseConnection {
 			inputPreferences.MuseConnection = prefs.MuseConnection
 		}
+		if !fields.MuseModels {
+			inputPreferences.MuseModels = prefs.MuseModels
+		}
 		if !reflect.DeepEqual(normalizeT3CodePreferences(inputPreferences), prefs) {
 			jsonError(w, 409, "T3 Code settings changed. Reload them before preparing.")
 			return

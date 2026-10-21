@@ -111,6 +111,20 @@ func readSettings(dir string) (settings, error) {
 		return s, errors.New("invalid Muse Code connection settings; restore a valid configuration")
 	}
 	s.ImageTransport = normalizeImageTransportSettings(s.ImageTransport)
+	if raw, present := members["t3Code"]; present {
+		var fields map[string]json.RawMessage
+		_ = json.Unmarshal(raw, &fields)
+		if policy, present := fields["museModels"]; present {
+			var value string
+			if json.Unmarshal(policy, &value) != nil || (value != "official" && value != "shared") {
+				return s, errors.New("invalid T3 Code settings; restore a valid configuration")
+			}
+		} else {
+			// The seeded defaults above are for new accounts. A persisted
+			// pre-policy Kilo Muse account used every shared model.
+			s.T3Code.MuseModels = ""
+		}
+	}
 	s.T3Code = normalizeT3CodePreferences(s.T3Code)
 	if err := validateT3CodePreferences(s.T3Code); err != nil {
 		return s, errors.New("invalid T3 Code settings; restore a valid configuration")
