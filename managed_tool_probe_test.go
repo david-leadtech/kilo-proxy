@@ -168,6 +168,41 @@ func TestManagedToolDesktopVersionNeverStartsApplication(t *testing.T) {
 	}
 }
 
+func TestManagedT3CodeChannelUsesPackagedVersionNotBranding(t *testing.T) {
+	tests := []struct {
+		name, version, bundleName, releaseChannel string
+		valid                                     bool
+	}{
+		{"stable release branded Alpha", "0.0.45", "T3 Code (Alpha).app", "stable", true},
+		{"stable release branded Beta", "0.1.0", "T3 Code (Beta).app", "stable", true},
+		{"nightly release", t3CodeNightlyVersion, "T3 Code (Nightly).app", "nightly", true},
+		{"stable release cannot masquerade as nightly", "0.1.0", "T3 Code (Beta).app", "nightly", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			original := syntheticT3CodeVersionExecutable(t, t.TempDir(), "macos", tc.version)
+			bundle := filepath.Join(filepath.Dir(original), tc.bundleName)
+			if original != bundle {
+				if err := os.Rename(original, bundle); err != nil {
+					t.Fatal("rename fixture to release branding:", err)
+				}
+			}
+
+			version, channel, err := managedToolInstalledVersion(context.Background(), "t3-code", bundle, "macos", runtime.GOARCH)
+			if err != nil || version != tc.version || channel != managedToolReleaseChannel(tc.version) {
+				t.Fatalf("wrong packaged release identity: version=%q channel=%q err=%v", version, channel, err)
+			}
+
+			err = verifyManagedToolVersion(context.Background(), managedToolRelease{
+				Client: "t3-code", Version: tc.version, Channel: tc.releaseChannel,
+			}, bundle, "macos", runtime.GOARCH)
+			if (err == nil) != tc.valid {
+				t.Fatalf("verification validity = %t, want %t (err=%v)", err == nil, tc.valid, err)
+			}
+		})
+	}
+}
+
 func TestManagedToolVersionsRetainPrereleaseLabels(t *testing.T) {
 	for _, label := range []string{"1.0.4-beta.19", "0.0.46-nightly.20261003.2610", "2.0.0+build.12"} {
 		if got, err := managedToolVersionLabel(label); err != nil || got != label {
