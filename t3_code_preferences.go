@@ -26,6 +26,7 @@ type t3CodePreferences struct {
 	OpenCode2          bool     `json:"openCode2"`
 	OpenCodeConnection string   `json:"openCodeConnection"`
 	MuseConnection     string   `json:"museConnection"`
+	MuseModels         string   `json:"museModels"`
 }
 
 type t3CodeProviderSupport struct {
@@ -40,13 +41,21 @@ var t3CodeOptionalProviders = []t3CodeProviderSupport{
 
 func normalizeT3CodePreferences(p t3CodePreferences) t3CodePreferences {
 	if p.Version == 0 {
-		return t3CodePreferences{Version: 1, Codex: true, Claude: true, KiloCodex: true, KiloClaude: true, CodexModels: "official", ClaudeModels: "official", Providers: []string{}, OpenCodeConnection: "native", MuseConnection: "native"}
+		return t3CodePreferences{Version: 1, Codex: true, Claude: true, KiloCodex: true, KiloClaude: true, CodexModels: "official", ClaudeModels: "official", Providers: []string{}, OpenCodeConnection: "native", MuseConnection: "native", MuseModels: "official"}
 	}
 	if p.OpenCodeConnection == "" {
 		p.OpenCodeConnection = "native"
 	}
 	if p.MuseConnection == "" {
 		p.MuseConnection = "native"
+	}
+	if p.MuseModels == "" {
+		// Existing Kilo Muse accounts used the complete shared selection.
+		// Preserve that availability; new accounts choose Meta models.
+		p.MuseModels = "official"
+		if p.MuseConnection == "kilo" {
+			p.MuseModels = "shared"
+		}
 	}
 	if p.Providers == nil {
 		p.Providers = []string{}
@@ -66,6 +75,9 @@ func validateT3CodePreferences(p t3CodePreferences) error {
 	}
 	if p.MuseConnection != "" && p.MuseConnection != "native" && p.MuseConnection != "kilo" {
 		return errors.New("Choose the native Meta account or Kilo Proxy models for Muse Code.")
+	}
+	if p.MuseModels != "" && p.MuseModels != "official" && p.MuseModels != "shared" {
+		return errors.New("Choose Meta models or all shared models for Muse Code.")
 	}
 	seen := map[string]bool{}
 	for _, id := range p.Providers {
@@ -87,6 +99,7 @@ func validateT3CodePreferences(p t3CodePreferences) error {
 type t3CodePreferenceFields struct {
 	OpenCodeConnection bool
 	MuseConnection     bool
+	MuseModels         bool
 }
 
 func decodeT3CodePreferencesDocument(raw json.RawMessage) (t3CodePreferences, t3CodePreferenceFields, error) {
@@ -117,6 +130,12 @@ func decodeT3CodePreferencesDocument(raw json.RawMessage) (t3CodePreferences, t3
 			return prefs, present, errors.New("Invalid T3 Code preferences.")
 		}
 		switch name {
+		case "museModels":
+			var policy string
+			if json.Unmarshal(value, &policy) != nil || (policy != "official" && policy != "shared") {
+				return prefs, present, errors.New("Choose Meta models or all shared models for Muse Code.")
+			}
+			present.MuseModels = true
 		case "openCodeConnection", "museConnection":
 			if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 				return prefs, present, errors.New("Choose a native account or Kilo Proxy models for each provider.")
@@ -169,6 +188,9 @@ func (a *app) t3CodePreferencesAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		if !fields.MuseConnection {
 			input.MuseConnection = prefs.MuseConnection
+		}
+		if !fields.MuseModels {
+			input.MuseModels = prefs.MuseModels
 		}
 		input = normalizeT3CodePreferences(input)
 		if !reflect.DeepEqual(input, prefs) {

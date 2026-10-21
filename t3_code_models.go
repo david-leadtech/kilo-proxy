@@ -50,7 +50,25 @@ func deriveT3CodeModelPolicy(prefs t3CodePreferences, library modelLibrary, cata
 			return result, errors.New("Choose shared models before preparing Muse Code with Kilo Proxy.")
 		}
 		result.MuseLibrary = cloneModelLibrary(library)
-		for _, choice := range terminalLibraryChoices(library, catalog) {
+		if prefs.MuseModels == "official" {
+			result.MuseLibrary.Models = nil
+			for _, model := range library.Models {
+				// Match the original gateway publisher, never Muse's provider_id
+				// transport shim or a user-facing model name.
+				if !strings.HasPrefix(model.ID, "meta/") && !strings.HasPrefix(model.ID, "meta-llama/") {
+					continue
+				}
+				model.ReasoningLevels = append([]string(nil), model.ReasoningLevels...)
+				result.MuseLibrary.Models = append(result.MuseLibrary.Models, model)
+			}
+			result.MuseLibrary.DefaultModel = t3CodeEffectiveDefault(result.MuseLibrary, library.DefaultModel)
+			if len(result.MuseLibrary.Models) == 0 {
+				return result, errors.New("Select at least one Meta model in Models, choose all shared models, or disable Muse Code · Kilo.")
+			}
+			// Roles refer to the original shared selection, not this account.
+			result.MuseLibrary.Roles = nil
+		}
+		for _, choice := range terminalLibraryChoices(result.MuseLibrary, catalog) {
 			levels, initial := nativeReasoningFor(choice)
 			result.MuseReasoningLevels[choice.Model.ID] = append([]string{}, levels...)
 			result.MuseReasoningDefaults[choice.Model.ID] = initial
