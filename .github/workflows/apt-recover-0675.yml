@@ -1,0 +1,128 @@
+name: Recover Ubuntu APT 0.67.5
+
+on:
+  workflow_dispatch:
+    inputs:
+      approved-publisher-sha:
+        description: Externally approved current main commit, with the tested merge tree
+        required: true
+        type: string
+      ci-run-id:
+        description: Externally approved attempt-one CI run testing this recovery procedure
+        required: true
+        type: string
+      approval-json:
+        description: Externally frozen publisher CI30 pairs and merged PR identity
+        required: true
+        type: string
+      approval-sha256:
+        description: SHA256 of the exact approval-json UTF-8 bytes
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kilo-proxy-apt-publication
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    if: github.repository == 'rosseca/kilo-proxy' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate the external approval and the original failed release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVAL_JSON: ${{ inputs.approval-json }}
+          APPROVAL_SHA256: ${{ inputs.approval-sha256 }}
+          APPROVED_PUBLISHER_SHA: ${{ inputs.approved-publisher-sha }}
+          APPROVED_CI_RUN_ID: ${{ inputs.ci-run-id }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          raw = os.environ['APPROVAL_JSON'].encode('utf-8')
+          if len(raw) > 64 * 1024:
+              raise ValueError('Approval input exceeds the supported size')
+          path = Path(os.environ['RUNNER_TEMP']) / 'apt-recovery-0675-approval.json'
+          with path.open('xb') as output:
+              os.chmod(path, 0o600)
+              output.write(raw)
+          PY
+          python3 scripts/recover_apt_0675.py validate \
+            --approval-file "$RUNNER_TEMP/apt-recovery-0675-approval.json" \
+            --approval-sha256 "$APPROVAL_SHA256" \
+            --approved-publisher-sha "$APPROVED_PUBLISHER_SHA" \
+            --ci-run-id "$APPROVED_CI_RUN_ID" \
+            --packages dist/debian
+      - name: Sign the original packages and preserve authenticated history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APT_PRIVATE_KEY: ${{ secrets.KILO_APT_SIGNING_KEY }}
+          APPROVAL_SHA256: ${{ inputs.approval-sha256 }}
+          APPROVED_PUBLISHER_SHA: ${{ inputs.approved-publisher-sha }}
+          APPROVED_CI_RUN_ID: ${{ inputs.ci-run-id }}
+        run: |
+          export GNUPGHOME="$(mktemp -d "$RUNNER_TEMP/kilo-apt-recovery-0675.XXXXXX")"
+          chmod 700 "$GNUPGHOME"
+          trap 'gpgconf --homedir "$GNUPGHOME" --kill all; rm -rf "$GNUPGHOME"' EXIT
+          printf '%s' "$APT_PRIVATE_KEY" | gpg --no-options --homedir "$GNUPGHOME" --batch --import
+          unset APT_PRIVATE_KEY
+          python3 scripts/recover_apt_0675.py prepare-site \
+            --approval-file "$RUNNER_TEMP/apt-recovery-0675-approval.json" \
+            --approval-sha256 "$APPROVAL_SHA256" \
+            --approved-publisher-sha "$APPROVED_PUBLISHER_SHA" \
+            --ci-run-id "$APPROVED_CI_RUN_ID" \
+            --packages dist/debian --output dist/apt-site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/apt-site
+
+  deploy:
+    needs: sign
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Recheck the approved main commit immediately before deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVED_PUBLISHER_SHA: ${{ inputs.approved-publisher-sha }}
+        run: |
+          python3 - <<'PYCODE'
+          import json
+          import os
+          import subprocess
+          approved = os.environ['APPROVED_PUBLISHER_SHA']
+          if (approved != os.environ['GITHUB_SHA'] or os.environ['GITHUB_REF'] != 'refs/heads/main'
+                  or os.environ['GITHUB_EVENT_NAME'] != 'workflow_dispatch'):
+              raise ValueError('Deployment context differs from approval')
+          current = json.loads(subprocess.check_output(
+              ['gh', 'api', '--method', 'GET', 'repos/rosseca/kilo-proxy/commits/main']))
+          if current.get('sha') != approved:
+              raise ValueError('Main advanced before deployment')
+          PYCODE
+      - name: Deploy the independently prepared recovery repository
+        id: deployment
+        uses: actions/deploy-pages@v4
