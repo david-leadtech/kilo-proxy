@@ -25,6 +25,7 @@ type nativeUpdateFixture struct {
 	posts        int
 	failPost     bool
 	postGate     <-chan struct{}
+	postState    *releaseUpdateState
 	stateGate    <-chan struct{}
 	stateSeen    chan struct{}
 	installPosts int
@@ -70,6 +71,10 @@ func newNativeUpdateFixture(t *testing.T, language string, size image.Point) *na
 			gate, fail := f.postGate, f.failPost
 			if r.Method == "POST" {
 				f.posts++
+				if f.postState != nil {
+					state = *f.postState
+					f.state = state
+				}
 			}
 			f.mu.Unlock()
 			if gate != nil {
@@ -294,8 +299,11 @@ func TestNativeUpdateCheckRetryAndRelease(t *testing.T) {
 				t.Cleanup(unblock)
 				f.mu.Lock()
 				f.failPost, f.postGate = false, gate
-				f.state = releaseUpdateState{CurrentVersion: "0.50.0", Checking: true}
+				// The backend starts checking only after receiving the retry POST.
+				f.postState = &releaseUpdateState{CurrentVersion: "0.50.0", Checking: true}
 				f.mu.Unlock()
+				// Let a normal state poll arrive before the retry is submitted.
+				f.refresh(t)
 				h.frame()
 				h.reveal(check, semantic.Button)
 				h.click(check, semantic.Button)

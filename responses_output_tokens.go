@@ -45,20 +45,26 @@ func (a *app) prepareResponsesMaxOutputTokens(r *http.Request, model string) err
 
 func (a *app) responsesMaxOutputTokensLimit(model string) int {
 	id := strings.TrimPrefix(model, "~")
+	a.mu.Lock()
+	scope := a.catalogScopeLocked()
+	a.mu.Unlock()
+	publishedLimit := 0
+	for _, m := range readNativeCatalogCache(a.dir, scope) {
+		if m.ID == id && m.MaxOutputTokens > 0 {
+			publishedLimit = m.MaxOutputTokens
+			break
+		}
+	}
 	if a.modelLibrary != nil {
 		for _, item := range a.modelLibrary.snapshot().Library.Models {
 			if item.ID == id && item.MaxOutputTokens > 0 {
+				// Saved output preferences cannot exceed a known provider ceiling.
+				if publishedLimit > 0 {
+					return min(item.MaxOutputTokens, publishedLimit)
+				}
 				return item.MaxOutputTokens
 			}
 		}
 	}
-	a.mu.Lock()
-	scope := a.catalogScopeLocked()
-	a.mu.Unlock()
-	for _, m := range readNativeCatalogCache(a.dir, scope) {
-		if m.ID == id && m.MaxOutputTokens > 0 {
-			return m.MaxOutputTokens
-		}
-	}
-	return 0
+	return publishedLimit
 }
