@@ -144,6 +144,43 @@ class RecoveryTests(unittest.TestCase):
     def validate(self):
         recovery.validate_all(self.api, self.git, self.golden, self.approval, self.git.merge, 9001)
 
+    def test_download_preserves_raw_escape_and_binary_bytes_from_gh(self):
+        payload = b'x' * (1024 * 1024 - 1) + b'\x1b[31mraw\x1b[0m\n\x00\xff'
+        calls = []
+
+        class Response:
+            def __init__(self, allowed):
+                self.returncode = 0 if allowed else 1
+                self.stdout = io.BytesIO(payload if allowed else b'')
+                self.stderr = io.BytesIO(b'' if allowed else (
+                    b'the response contains terminal escape sequences; '
+                    b'pass --allow-escape-sequences to output it anyway'))
+
+            def wait(self, timeout=None):
+                return self.returncode
+
+            def poll(self):
+                return self.returncode
+
+        def binary_cli(argv, stdout, stderr):
+            self.assertEqual(argv[:2], ['gh', 'api'])
+            self.assertEqual(argv[-3:-1], ['--method', 'GET'])
+            self.assertEqual(stdout, subprocess.PIPE)
+            self.assertEqual(stderr, subprocess.PIPE)
+            calls.append(argv)
+            return Response('--allow-escape-sequences' in argv)
+
+        for number, route in enumerate(('actions/jobs/119240033891/logs',
+                                         'actions/artifacts/12348047748/zip')):
+            destination = self.root / ('raw-' + str(number))
+            with self.subTest(route=route), patch.object(recovery.subprocess, 'Popen', side_effect=binary_cli):
+                recovery.GitHub().download(route, destination, len(payload))
+                self.assertEqual(destination.read_bytes(), payload)
+                self.assertEqual(hashlib.sha256(destination.read_bytes()).hexdigest(),
+                                 hashlib.sha256(payload).hexdigest())
+                self.assertEqual(calls[-1][-1], 'repos/' + recovery.REPOSITORY + '/' + route)
+        self.assertEqual(len(calls), 2)
+
     def test_frozen_original40_and_explicit_publisher30_validate_without_download(self):
         self.validate()
         self.assertEqual(self.api.downloads, [])

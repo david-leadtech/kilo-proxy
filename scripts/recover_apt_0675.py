@@ -141,7 +141,7 @@ class GitHub:
     def download(self, route, destination, maximum):
         with destination.open('xb') as output:
             child = subprocess.Popen(
-                ['gh', 'api', '--method', 'GET', 'repos/' + REPOSITORY + '/' + route],
+                ['gh', 'api', '--allow-escape-sequences', '--method', 'GET', 'repos/' + REPOSITORY + '/' + route],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
                 total = 0
