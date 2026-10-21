@@ -15,6 +15,9 @@ func t3CodeMuseOnlyPreferences(connection string) t3CodePreferences {
 	prefs := normalizeT3CodePreferences(t3CodePreferences{})
 	prefs.Codex, prefs.Claude, prefs.KiloCodex, prefs.KiloClaude = false, false, false, false
 	prefs.Providers, prefs.MuseConnection = []string{"muse"}, connection
+	if connection == "kilo" {
+		prefs.MuseModels = "shared"
+	}
 	return prefs
 }
 

@@ -43,6 +43,7 @@ func TestT3CodeOpenCodeKiloContractRequiresLiveInstanceAndEnvironment(t *testing
 		{"registered-driver", "  OpenCodeDriver,", "  OtherDriver,"},
 		{"driver-kind", `ProviderDriverKind.make("opencode")`, `ProviderDriverKind.make("other")`},
 		{"schema", "configSchema: OpenCodeSettings", "configSchema: OtherSettings"},
+		{"commented-schema", "configSchema: OpenCodeSettings,", "configSchema: OtherSettings, /* configSchema: OpenCodeSettings, defaultConfig:()=>decode({}), create: */"},
 		{"single-instance", "supportsMultipleInstances: true", "supportsMultipleInstances: false"},
 		{"absent-metadata", "supportsMultipleInstances: true", "unused: true"},
 		{"quoted-metadata", "supportsMultipleInstances: true", `unused: "supportsMultipleInstances: true"`},

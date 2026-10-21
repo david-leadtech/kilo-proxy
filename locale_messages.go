@@ -37,6 +37,10 @@ func nativeMessage(message, language string) string {
 
 // Canonical backend translations shared with ui/i18n.mjs.
 var nativeBackendMessages = map[string]string{
+	"Elige modelos de Meta o todos los modelos compartidos para Muse Code.":                                               "Choose Meta models or all shared models for Muse Code.",
+	"Selecciona al menos un modelo de Meta en Modelos, elige todos los modelos compartidos o desactiva Muse Code · Kilo.": "Select at least one Meta model in Models, choose all shared models, or disable Muse Code · Kilo.",
+	"La política de modelos de Muse no es válida.":                                                                        "Invalid Muse model policy.",
+
 	"El espacio privado de Omnigent ha detectado un problema. Revisa su estado antes de volver a abrirlo.":                                                                                           "The private Omnigent workspace reported a problem. Check its status before opening it again.",
 	"Omnigent necesita el CLI nativo de Codex elegido o su paquete npm oficial correspondiente. Elige su ejecutable nativo o repara esa instalación; no se usará ninguna otra instalación de Codex.": "Omnigent requires the selected native Codex CLI or its matching official npm package. Choose its native executable or repair that selected installation; no other Codex installation will be used.",
 	"No se pudo iniciar el espacio privado de Omnigent. Revisa la instalación elegida y vuelve a abrirlo.":                                                                                           "The private Omnigent workspace could not start. Check the selected installation and open it again.",

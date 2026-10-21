@@ -308,6 +308,23 @@ func t3CodeOptionalProviderCapabilities(source string) ([]t3CodeProviderSupport,
 	return providers, openCode
 }
 
+// The native drivers used an arrow factory before adding Effect tracing.
+// Inspect only the live create property, after strings/comments were masked:
+// the traced factory's static label is therefore whitespace. Both forms must
+// bind the instance environment directly; an alias or a rest object is not proof.
+func t3CodeDriverHasInstanceEnvironment(body string) bool {
+	factories := regexp.MustCompile(`\bcreate\s*:\s*`).FindAllStringIndex(body, -1)
+	if len(factories) != 1 {
+		return false
+	}
+	factory := body[factories[0][1]:]
+	parameters := `\(\s*\{\s*(?:[^{}]*,\s*)?environment\s*(?:,[^{}]*)?\}\s*\)`
+	if regexp.MustCompile(`^` + parameters + `\s*=>`).MatchString(factory) {
+		return true
+	}
+	return regexp.MustCompile(`^(?:Effect\.)?fn(?:\$[0-9]+)?\(\s*\)\(\s*function\s*\*\s*` + parameters + `\s*\{`).MatchString(factory)
+}
+
 // A separate Kilo account needs more than an OpenCode label or a version probe:
 // its live driver must allow multiple instances and pass each instance's own
 // environment to both runtimes. Match the installed source contract, not a
@@ -331,7 +348,7 @@ func t3CodeOpenCodeKiloSupported(source string) bool {
 		return false
 	}
 	body, ok := t3CodeContractBody(code, declarations[0][1]-1)
-	if !ok || !regexp.MustCompile(`(?s)metadata:\s*\{[^{}]*\bsupportsMultipleInstances:\s*true\b`).MatchString(body) || !regexp.MustCompile(`create:\s*\(\{[^{}]*\benvironment\b[^{}]*\}\)\s*=>`).MatchString(body) {
+	if !ok || !regexp.MustCompile(`(?s)metadata:\s*\{[^{}]*\bsupportsMultipleInstances:\s*true\b`).MatchString(body) || !regexp.MustCompile(`configSchema:\s*OpenCodeSettings\s*,`).MatchString(body) || !t3CodeDriverHasInstanceEnvironment(body) {
 		return false
 	}
 	kind := regexp.MustCompile(`driverKind:\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*,`).FindStringSubmatch(body)
@@ -539,7 +556,7 @@ func t3CodeMuseKiloSupported(source string) bool {
 		return false
 	}
 	body, ok := t3CodeContractBody(code, declarations[0][1]-1)
-	if !ok || !regexp.MustCompile(`(?s)metadata:\s*\{[^{}]*\bsupportsMultipleInstances:\s*true\b`).MatchString(body) || !regexp.MustCompile(`configSchema:\s*MuseSettings\s*,`).MatchString(body) || !regexp.MustCompile(`create:\s*\(\{[^{}]*\benvironment\b[^{}]*\}\)\s*=>`).MatchString(body) {
+	if !ok || !regexp.MustCompile(`(?s)metadata:\s*\{[^{}]*\bsupportsMultipleInstances:\s*true\b`).MatchString(body) || !regexp.MustCompile(`configSchema:\s*MuseSettings\s*,`).MatchString(body) || !t3CodeDriverHasInstanceEnvironment(body) {
 		return false
 	}
 	kind := regexp.MustCompile(`driverKind:\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*,`).FindStringSubmatch(body)
