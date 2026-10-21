@@ -1,0 +1,3038 @@
+{
+  "artifact": {
+    "archive_download_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/artifacts/12348047748/zip",
+    "created_at": "2026-10-21T13:06:53Z",
+    "digest": "sha256:4e514ae82c0e66ab088aa27ffb4a703fc2139ebac28d4b02b0e5de70a09f3555",
+    "expired": false,
+    "expires_at": "2026-11-04T13:06:51Z",
+    "id": 12348047748,
+    "name": "debian-assets",
+    "node_id": "MDg6QXJ0aWZhY3QxMjM0ODA0Nzc0OA==",
+    "size_in_bytes": 31476759,
+    "updated_at": "2026-10-21T13:06:53Z",
+    "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/artifacts/12348047748",
+    "workflow_run": {
+      "head_branch": "v0.67.5",
+      "head_repository_id": 1360386824,
+      "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+      "id": 39602441102,
+      "repository_id": 1360386824
+    }
+  },
+  "assets": [
+    {
+      "browser_download_url": "https://github.com/rosseca/kilo-proxy/releases/download/v0.67.5/SHA256SUMS.txt",
+      "content_type": "text/plain; charset=utf-8",
+      "created_at": "2026-10-21T13:08:16Z",
+      "digest": "sha256:9c3b8e3abc11ababbff47e69af776e06c3fd97d403e2ae31f48bb38c64a39c13",
+      "id": 662544924,
+      "label": "",
+      "name": "SHA256SUMS.txt",
+      "node_id": "RA_kwDOURXbCM4nfaIc",
+      "size": 1062,
+      "state": "uploaded",
+      "updated_at": "2026-10-21T13:08:16Z",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/releases/assets/662544924"
+    },
+    {
+      "browser_download_url": "https://github.com/rosseca/kilo-proxy/releases/download/v0.67.5/kilo-proxy-0.67.5-darwin-amd64.zip",
+      "content_type": "application/zip",
+      "created_at": "2026-10-21T13:08:13Z",
+      "digest": "sha256:3d86f990464cd8f97e7e307c7c018ba5c7fb25f3ddc622a4c51be9d71fd59ad1",
+      "id": 662544822,
+      "label": "",
+      "name": "kilo-proxy-0.67.5-darwin-amd64.zip",
+      "node_id": "RA_kwDOURXbCM4nfaG2",
+      "size": 12854850,
+      "state": "uploaded",
+      "updated_at": "2026-10-21T13:08:14Z",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/releases/assets/662544822"
+    },
+    {
+      "browser_download_url": "https://github.com/rosseca/kilo-proxy/releases/download/v0.67.5/kilo-proxy-0.67.5-darwin-arm64.zip",
+      "content_type": "application/zip",
+      "created_at": "2026-10-21T13:08:13Z",
+      "digest": "sha256:6b00cd605718d57130b1044cd5e47ffa790a248d25b5d3f77f41c93be1cf48bd",
+      "id": 662544820,
+      "label": "",
+      "name": "kilo-proxy-0.67.5-darwin-arm64.zip",
+      "node_id": "RA_kwDOURXbCM4nfaG0",
+      "size": 11889347,
+      "state": "uploaded",
+      "updated_at": "2026-10-21T13:08:14Z",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/releases/assets/662544820"
+    },
+    {
+      "browser_download_url": "https://github.com/rosseca/kilo-proxy/releases/download/v0.67.5/kilo-proxy-0.67.5-linux-amd64.tar.gz",
+      "content_type": "application/x-gtar",
+      "created_at": "2026-10-21T13:08:13Z",
+      "digest": "sha256:18ce9eaf0fb7c8d6fbf48c3d52af5a95826fbcb98f7f0563a96c8a13135e2855",
+      "id": 662544821,
+      "label": "",
+      "name": "kilo-proxy-0.67.5-linux-amd64.tar.gz",
+      "node_id": "RA_kwDOURXbCM4nfaG1",
+      "size": 13483594,
+      "state": "uploaded",
+      "updated_at": "2026-10-21T13:08:14Z",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/releases/assets/662544821"
+    },
+    {
+      "browser_download_url": "https://github.com/rosseca/kilo-proxy/releases/download/v0.67.5/kilo-proxy-0.67.5-linux-arm64.tar.gz",
+      "content_type": "application/x-gtar",
+      "created_at": "2026-10-21T13:08:13Z",
+      "digest": "sha256:70c31a402913d91e9f54fc90e78379705f44e897806bf260d8305f4575906e05",
+      "id": 662544818,
+      "label": "",
+      "name": "kilo-proxy-0.67.5-linux-arm64.tar.gz",
+      "node_id": "RA_kwDOURXbCM4nfaGy",
+      "size": 12581769,
+      "state": "uploaded",
+      "updated_at": "2026-10-21T13:08:14Z",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/releases/assets/662544818"
+    },
+    {
+      "browser_download_url": "https://github.com/rosseca/kilo-proxy/releases/download/v0.67.5/kilo-proxy-0.67.5-windows-amd64.zip",
+      "content_type": "application/zip",
+      "created_at": "2026-10-21T13:08:13Z",
+      "digest": "sha256:b8b5293855c9879e364873d77f39fb68643719e97ca7fa3358bcd2472f2eb1d1",
+      "id": 662544826,
+      "label": "",
+      "name": "kilo-proxy-0.67.5-windows-amd64.zip",
+      "node_id": "RA_kwDOURXbCM4nfaG6",
+      "size": 12546349,
+      "state": "uploaded",
+      "updated_at": "2026-10-21T13:08:14Z",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/releases/assets/662544826"
+    },
+    {
+      "browser_download_url": "https://github.com/rosseca/kilo-proxy/releases/download/v0.67.5/kilo-proxy-0.67.5-windows-arm64.zip",
+      "content_type": "application/zip",
+      "created_at": "2026-10-21T13:08:15Z",
+      "digest": "sha256:c599e4538c41a1fca38523a4d3d4d2ddcc2c883bbe3846043e9065ec3b9e0675",
+      "id": 662544883,
+      "label": "",
+      "name": "kilo-proxy-0.67.5-windows-arm64.zip",
+      "node_id": "RA_kwDOURXbCM4nfaHz",
+      "size": 11655469,
+      "state": "uploaded",
+      "updated_at": "2026-10-21T13:08:15Z",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/releases/assets/662544883"
+    },
+    {
+      "browser_download_url": "https://github.com/rosseca/kilo-proxy/releases/download/v0.67.5/kilo-proxy-headless-0.67.5-darwin-amd64.tar.gz",
+      "content_type": "application/x-gtar",
+      "created_at": "2026-10-21T13:08:15Z",
+      "digest": "sha256:d25f3d4f95f6b4b68460393e0ad54cfdf89be44305508e9bfe7f7d7dcbea8e5c",
+      "id": 662544889,
+      "label": "",
+      "name": "kilo-proxy-headless-0.67.5-darwin-amd64.tar.gz",
+      "node_id": "RA_kwDOURXbCM4nfaH5",
+      "size": 7962511,
+      "state": "uploaded",
+      "updated_at": "2026-10-21T13:08:16Z",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/releases/assets/662544889"
+    },
+    {
+      "browser_download_url": "https://github.com/rosseca/kilo-proxy/releases/download/v0.67.5/kilo-proxy-headless-0.67.5-darwin-arm64.tar.gz",
+      "content_type": "application/x-gtar",
+      "created_at": "2026-10-21T13:08:15Z",
+      "digest": "sha256:2df349b84aeb6834003756a20cb7a67ca398c5a2b12ae132c5e5fbe03616bc2e",
+      "id": 662544887,
+      "label": "",
+      "name": "kilo-proxy-headless-0.67.5-darwin-arm64.tar.gz",
+      "node_id": "RA_kwDOURXbCM4nfaH3",
+      "size": 7531018,
+      "state": "uploaded",
+      "updated_at": "2026-10-21T13:08:15Z",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/releases/assets/662544887"
+    },
+    {
+      "browser_download_url": "https://github.com/rosseca/kilo-proxy/releases/download/v0.67.5/kilo-proxy-headless-0.67.5-linux-amd64.tar.gz",
+      "content_type": "application/x-gtar",
+      "created_at": "2026-10-21T13:08:15Z",
+      "digest": "sha256:cdb53b2634f6ed36e11302783d1b96599ec8902b394349adc8d320695173a63e",
+      "id": 662544894,
+      "label": "",
+      "name": "kilo-proxy-headless-0.67.5-linux-amd64.tar.gz",
+      "node_id": "RA_kwDOURXbCM4nfaH-",
+      "size": 7984236,
+      "state": "uploaded",
+      "updated_at": "2026-10-21T13:08:16Z",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/releases/assets/662544894"
+    },
+    {
+      "browser_download_url": "https://github.com/rosseca/kilo-proxy/releases/download/v0.67.5/kilo-proxy-headless-0.67.5-linux-arm64.tar.gz",
+      "content_type": "application/x-gtar",
+      "created_at": "2026-10-21T13:08:15Z",
+      "digest": "sha256:1578c24df3055331fd556479785963a72c578862061a3c681f2c2865ce8f5bd0",
+      "id": 662544900,
+      "label": "",
+      "name": "kilo-proxy-headless-0.67.5-linux-arm64.tar.gz",
+      "node_id": "RA_kwDOURXbCM4nfaIE",
+      "size": 7444168,
+      "state": "uploaded",
+      "updated_at": "2026-10-21T13:08:16Z",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/releases/assets/662544900"
+    }
+  ],
+  "baseline": {
+    "entries": [
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/0c3cbccc8330fcfd1a7a5af5ae89f8104d0c964c4237ab3c5fd6ed7050232e9c",
+        "sha256": "0c3cbccc8330fcfd1a7a5af5ae89f8104d0c964c4237ab3c5fd6ed7050232e9c",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/0fa590d9c74a7dce87144677423443eb468aa73a1ee381614796abaac96e2955",
+        "sha256": "0fa590d9c74a7dce87144677423443eb468aa73a1ee381614796abaac96e2955",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/17cec5de990108a1b28ce7e52fa1fda35cdb53c2359edd99d409eb00db415d3a",
+        "sha256": "17cec5de990108a1b28ce7e52fa1fda35cdb53c2359edd99d409eb00db415d3a",
+        "size": 655
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/3090cee28e647b31bbc67879a82a44907cd098589df38c1cdb603579373d3833",
+        "sha256": "3090cee28e647b31bbc67879a82a44907cd098589df38c1cdb603579373d3833",
+        "size": 657
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/3578629b6950715fb13489fa6883c7a9214a40f116b208a17f924751f6b6afc2",
+        "sha256": "3578629b6950715fb13489fa6883c7a9214a40f116b208a17f924751f6b6afc2",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/4a1b7493e92d2219d7aebbb0698a4a45d25052fbf6007a94789fcb6be840007e",
+        "sha256": "4a1b7493e92d2219d7aebbb0698a4a45d25052fbf6007a94789fcb6be840007e",
+        "size": 658
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/67d6c64e8850700ae13a72c500b5949d06edcf72817087ccda012545a1ec16d5",
+        "sha256": "67d6c64e8850700ae13a72c500b5949d06edcf72817087ccda012545a1ec16d5",
+        "size": 658
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/6dc7eb62551e7eaa8ff37a4210f063f425dd8bd910f7069ae1c79bc7fa820102",
+        "sha256": "6dc7eb62551e7eaa8ff37a4210f063f425dd8bd910f7069ae1c79bc7fa820102",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/74ca1c3d90d7d7b5621de53394a699777b8d883dc31fb627e92b72337d7c4ecf",
+        "sha256": "74ca1c3d90d7d7b5621de53394a699777b8d883dc31fb627e92b72337d7c4ecf",
+        "size": 1516
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/757b67d3dfd6f17bfe4d1218348804372d6b9708df134cb2d481c491371ae106",
+        "sha256": "757b67d3dfd6f17bfe4d1218348804372d6b9708df134cb2d481c491371ae106",
+        "size": 1516
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/75e7083550f87d63445684656a2227f4e7e975d3ad1015a69188c11e05480139",
+        "sha256": "75e7083550f87d63445684656a2227f4e7e975d3ad1015a69188c11e05480139",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/7904b9bce1a270724d5fc34d6e7e16e0c1dcabdc4de6ddcd3663c0e6b8d0dfdc",
+        "sha256": "7904b9bce1a270724d5fc34d6e7e16e0c1dcabdc4de6ddcd3663c0e6b8d0dfdc",
+        "size": 658
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/7d405658ebd5fa65bb08af68cbac2561a010d4f8c012d69783ae19a1f5d89327",
+        "sha256": "7d405658ebd5fa65bb08af68cbac2561a010d4f8c012d69783ae19a1f5d89327",
+        "size": 1516
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/83e244a5985f654a2f98ea244597cd05959d20ea1882c65900a2785806a09aac",
+        "sha256": "83e244a5985f654a2f98ea244597cd05959d20ea1882c65900a2785806a09aac",
+        "size": 654
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/8838fe2ffa5d20a014b1953eba1bd41d7857f7cab9fc63d9d73659ce78fb30f6",
+        "sha256": "8838fe2ffa5d20a014b1953eba1bd41d7857f7cab9fc63d9d73659ce78fb30f6",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/a75aae65b5fb6e40524a44cb3f7dc9ba0c4522f9d16bed0656ed06d19ae040d4",
+        "sha256": "a75aae65b5fb6e40524a44cb3f7dc9ba0c4522f9d16bed0656ed06d19ae040d4",
+        "size": 1516
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/ac23582ab3f62907dafed549ccf1a089ae4d905cf62eacf19f7151159e2427bd",
+        "sha256": "ac23582ab3f62907dafed549ccf1a089ae4d905cf62eacf19f7151159e2427bd",
+        "size": 656
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/ae1c5ffa2070d5b9b685c9a4e4f06439c0b4ac3c3474106ad51115a929da98e6",
+        "sha256": "ae1c5ffa2070d5b9b685c9a4e4f06439c0b4ac3c3474106ad51115a929da98e6",
+        "size": 1516
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/b3af0e8c3504594ba8586eabf6b71bc0c3adb9ff00c24cb62901b95fa12a8800",
+        "sha256": "b3af0e8c3504594ba8586eabf6b71bc0c3adb9ff00c24cb62901b95fa12a8800",
+        "size": 655
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/b944062060e83bf3850b5456499cead418a065bda12b2d0a5a7dc15d04a55209",
+        "sha256": "b944062060e83bf3850b5456499cead418a065bda12b2d0a5a7dc15d04a55209",
+        "size": 657
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/c25d53406702f05a14024f2c7c7bcf9a7d138b95edece703cc2284a49dbbeb9b",
+        "sha256": "c25d53406702f05a14024f2c7c7bcf9a7d138b95edece703cc2284a49dbbeb9b",
+        "size": 657
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/c40954377bfee4a4d01b434337ec2dc9790038b0893f9876dc76c5673c52fe43",
+        "sha256": "c40954377bfee4a4d01b434337ec2dc9790038b0893f9876dc76c5673c52fe43",
+        "size": 657
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/cc0eb1a34c3ec296c5718bf99d24aab3c2e5a3f67f74481e9361de364effca9d",
+        "sha256": "cc0eb1a34c3ec296c5718bf99d24aab3c2e5a3f67f74481e9361de364effca9d",
+        "size": 657
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/cdd71961b1bd94e254f5644399bf0644dd711bf3aff0f7ae868a5d25cdae498b",
+        "sha256": "cdd71961b1bd94e254f5644399bf0644dd711bf3aff0f7ae868a5d25cdae498b",
+        "size": 656
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/ce5c104c0856f6bf96b8c9b173610e6f94ab95ec6a3b3ace1c21cd0e71e24d7c",
+        "sha256": "ce5c104c0856f6bf96b8c9b173610e6f94ab95ec6a3b3ace1c21cd0e71e24d7c",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/e09e6262e01448bca4b44c4a3924c05c50a81171f8209df644f12ac3256a016f",
+        "sha256": "e09e6262e01448bca4b44c4a3924c05c50a81171f8209df644f12ac3256a016f",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/efd1361a9b7a0a4fa8ceb5b3efac04c55a858ece7fa6ef46f343070c1c3da205",
+        "sha256": "efd1361a9b7a0a4fa8ceb5b3efac04c55a858ece7fa6ef46f343070c1c3da205",
+        "size": 1516
+      },
+      {
+        "path": "dists/noble/main/binary-amd64/by-hash/SHA256/fd205e33bd89244f4d61f97ecb8c1df8c8f41be238687dba2b5a5fe16fdcadcb",
+        "sha256": "fd205e33bd89244f4d61f97ecb8c1df8c8f41be238687dba2b5a5fe16fdcadcb",
+        "size": 658
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/07fde4fd244190d43fe140816fa36d55ca33b417e83655436d329da2ed9c223a",
+        "sha256": "07fde4fd244190d43fe140816fa36d55ca33b417e83655436d329da2ed9c223a",
+        "size": 658
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/0d0ad35c60326c8203636cde1a46ad7a5164a7628900b34f420a1673b3f683d9",
+        "sha256": "0d0ad35c60326c8203636cde1a46ad7a5164a7628900b34f420a1673b3f683d9",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/0e1bf3522200e516a3b21f5fa306c422a69357059abec6c02eecaaeba745b8c9",
+        "sha256": "0e1bf3522200e516a3b21f5fa306c422a69357059abec6c02eecaaeba745b8c9",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/0e2756d47f5cf925968718d917c08b9180a6191d6c419e639071d4c1356e4c46",
+        "sha256": "0e2756d47f5cf925968718d917c08b9180a6191d6c419e639071d4c1356e4c46",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/14db91bd5dc81c4044fd3449380158358ef3068e9413dd6c829e1b7ffeed3370",
+        "sha256": "14db91bd5dc81c4044fd3449380158358ef3068e9413dd6c829e1b7ffeed3370",
+        "size": 655
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/1c9c06d4464225e016a3ad4e35b49ba1142c748007bff7f5f4d8577050217652",
+        "sha256": "1c9c06d4464225e016a3ad4e35b49ba1142c748007bff7f5f4d8577050217652",
+        "size": 658
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/1ced1bd9388ac87e150c02cf50ba5db8b1ad98d84963fbed9127f1736d32ed73",
+        "sha256": "1ced1bd9388ac87e150c02cf50ba5db8b1ad98d84963fbed9127f1736d32ed73",
+        "size": 657
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/2217193c83fde6a2a365b6a4980359b8b95bf3adda8651264ed42bc8f8e8e593",
+        "sha256": "2217193c83fde6a2a365b6a4980359b8b95bf3adda8651264ed42bc8f8e8e593",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/2de0b60a0fc18e5bf3308f2f0df986374acd5be7867b88ac6547c131fa206bcb",
+        "sha256": "2de0b60a0fc18e5bf3308f2f0df986374acd5be7867b88ac6547c131fa206bcb",
+        "size": 656
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/4573a5a1cb47a9d1732d41f45b2d63f2c2eca5b0591db8f791f4839cfc7baf0a",
+        "sha256": "4573a5a1cb47a9d1732d41f45b2d63f2c2eca5b0591db8f791f4839cfc7baf0a",
+        "size": 656
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/4e7c3228b2a07fc9d1511c6ff231f7e02d55f424c4ba872e51ab89bf0d1fbdcf",
+        "sha256": "4e7c3228b2a07fc9d1511c6ff231f7e02d55f424c4ba872e51ab89bf0d1fbdcf",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/50b6ae1386c2fcc8d9488ae6a1cbcf0b0deb7706250702231925adb0580a1724",
+        "sha256": "50b6ae1386c2fcc8d9488ae6a1cbcf0b0deb7706250702231925adb0580a1724",
+        "size": 655
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/524e09c943d5d12db60075d8a2222e7346140e1bdd8977f40ec527a8d333642a",
+        "sha256": "524e09c943d5d12db60075d8a2222e7346140e1bdd8977f40ec527a8d333642a",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/60c4a5f46e3843fdec12a267c4e3b00cb33dd5eea8316b1f531dd108d5ca5e00",
+        "sha256": "60c4a5f46e3843fdec12a267c4e3b00cb33dd5eea8316b1f531dd108d5ca5e00",
+        "size": 658
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/789996d6490db44d44bf50e5ede6d6b49a0e67f0340362b86404439c81d6b3b3",
+        "sha256": "789996d6490db44d44bf50e5ede6d6b49a0e67f0340362b86404439c81d6b3b3",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/79701029ab15ac9a018ceff0d660fc2208709a3479693435f5a24de76b75abd5",
+        "sha256": "79701029ab15ac9a018ceff0d660fc2208709a3479693435f5a24de76b75abd5",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/90e55112b7b46afa1929a52ead5ea1ec657a9f63853fe6a1b903270a5dbc355c",
+        "sha256": "90e55112b7b46afa1929a52ead5ea1ec657a9f63853fe6a1b903270a5dbc355c",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/a3c24208f1a7817f6bfe281983039e072904bc5cb4a09784add3948e62a94d5c",
+        "sha256": "a3c24208f1a7817f6bfe281983039e072904bc5cb4a09784add3948e62a94d5c",
+        "size": 656
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/a40c17aaa3d61b79fed400cd52ae1cf645661ef69faf50540aa23073f0edebc6",
+        "sha256": "a40c17aaa3d61b79fed400cd52ae1cf645661ef69faf50540aa23073f0edebc6",
+        "size": 659
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/ae114d67b8a6fcecb005bab9282232265e11e957aee417eba621c05922550107",
+        "sha256": "ae114d67b8a6fcecb005bab9282232265e11e957aee417eba621c05922550107",
+        "size": 656
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/b698140f78c52390d48f9f0fae019896caf51c329d0169d2e16e9ed12a0460bf",
+        "sha256": "b698140f78c52390d48f9f0fae019896caf51c329d0169d2e16e9ed12a0460bf",
+        "size": 658
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/d19bc864525451cb3814805a93ce43c40f08ad85fe016458f114208abc0103dd",
+        "sha256": "d19bc864525451cb3814805a93ce43c40f08ad85fe016458f114208abc0103dd",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/e236b6dd39e81e2e7687e98d22eed97d37bd546d22e95b8580d0fce2b2515109",
+        "sha256": "e236b6dd39e81e2e7687e98d22eed97d37bd546d22e95b8580d0fce2b2515109",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/e3ba9b64e10a75ffbbbada3903ce8d9dbf759a2d97ed6494f8da986cb0eb523a",
+        "sha256": "e3ba9b64e10a75ffbbbada3903ce8d9dbf759a2d97ed6494f8da986cb0eb523a",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/e7c0561da52bb664af268e5720b72f5c6260d0d4f8942173784ffa2fd2d762dd",
+        "sha256": "e7c0561da52bb664af268e5720b72f5c6260d0d4f8942173784ffa2fd2d762dd",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/f85a1631654cee4d9139a0e1012b1e77af79f7c24eeb8def2edf0f58458468df",
+        "sha256": "f85a1631654cee4d9139a0e1012b1e77af79f7c24eeb8def2edf0f58458468df",
+        "size": 656
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/fd6aacf21d2d363ee71e5591aa6533b129e58e82df46e8e64912c0307ef4fe37",
+        "sha256": "fd6aacf21d2d363ee71e5591aa6533b129e58e82df46e8e64912c0307ef4fe37",
+        "size": 1515
+      },
+      {
+        "path": "dists/noble/main/binary-arm64/by-hash/SHA256/feae244f7f7d1abaa1b1e178bb1dceb42cb4d7fecf466ac80511419ad879e755",
+        "sha256": "feae244f7f7d1abaa1b1e178bb1dceb42cb4d7fecf466ac80511419ad879e755",
+        "size": 658
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/0c3cbccc8330fcfd1a7a5af5ae89f8104d0c964c4237ab3c5fd6ed7050232e9c",
+        "sha256": "0c3cbccc8330fcfd1a7a5af5ae89f8104d0c964c4237ab3c5fd6ed7050232e9c",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/0fa590d9c74a7dce87144677423443eb468aa73a1ee381614796abaac96e2955",
+        "sha256": "0fa590d9c74a7dce87144677423443eb468aa73a1ee381614796abaac96e2955",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/17cec5de990108a1b28ce7e52fa1fda35cdb53c2359edd99d409eb00db415d3a",
+        "sha256": "17cec5de990108a1b28ce7e52fa1fda35cdb53c2359edd99d409eb00db415d3a",
+        "size": 655
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/3090cee28e647b31bbc67879a82a44907cd098589df38c1cdb603579373d3833",
+        "sha256": "3090cee28e647b31bbc67879a82a44907cd098589df38c1cdb603579373d3833",
+        "size": 657
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/3578629b6950715fb13489fa6883c7a9214a40f116b208a17f924751f6b6afc2",
+        "sha256": "3578629b6950715fb13489fa6883c7a9214a40f116b208a17f924751f6b6afc2",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/4a1b7493e92d2219d7aebbb0698a4a45d25052fbf6007a94789fcb6be840007e",
+        "sha256": "4a1b7493e92d2219d7aebbb0698a4a45d25052fbf6007a94789fcb6be840007e",
+        "size": 658
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/67d6c64e8850700ae13a72c500b5949d06edcf72817087ccda012545a1ec16d5",
+        "sha256": "67d6c64e8850700ae13a72c500b5949d06edcf72817087ccda012545a1ec16d5",
+        "size": 658
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/6dc7eb62551e7eaa8ff37a4210f063f425dd8bd910f7069ae1c79bc7fa820102",
+        "sha256": "6dc7eb62551e7eaa8ff37a4210f063f425dd8bd910f7069ae1c79bc7fa820102",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/74ca1c3d90d7d7b5621de53394a699777b8d883dc31fb627e92b72337d7c4ecf",
+        "sha256": "74ca1c3d90d7d7b5621de53394a699777b8d883dc31fb627e92b72337d7c4ecf",
+        "size": 1516
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/757b67d3dfd6f17bfe4d1218348804372d6b9708df134cb2d481c491371ae106",
+        "sha256": "757b67d3dfd6f17bfe4d1218348804372d6b9708df134cb2d481c491371ae106",
+        "size": 1516
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/75e7083550f87d63445684656a2227f4e7e975d3ad1015a69188c11e05480139",
+        "sha256": "75e7083550f87d63445684656a2227f4e7e975d3ad1015a69188c11e05480139",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/7904b9bce1a270724d5fc34d6e7e16e0c1dcabdc4de6ddcd3663c0e6b8d0dfdc",
+        "sha256": "7904b9bce1a270724d5fc34d6e7e16e0c1dcabdc4de6ddcd3663c0e6b8d0dfdc",
+        "size": 658
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/7d405658ebd5fa65bb08af68cbac2561a010d4f8c012d69783ae19a1f5d89327",
+        "sha256": "7d405658ebd5fa65bb08af68cbac2561a010d4f8c012d69783ae19a1f5d89327",
+        "size": 1516
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/83e244a5985f654a2f98ea244597cd05959d20ea1882c65900a2785806a09aac",
+        "sha256": "83e244a5985f654a2f98ea244597cd05959d20ea1882c65900a2785806a09aac",
+        "size": 654
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/8838fe2ffa5d20a014b1953eba1bd41d7857f7cab9fc63d9d73659ce78fb30f6",
+        "sha256": "8838fe2ffa5d20a014b1953eba1bd41d7857f7cab9fc63d9d73659ce78fb30f6",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/a75aae65b5fb6e40524a44cb3f7dc9ba0c4522f9d16bed0656ed06d19ae040d4",
+        "sha256": "a75aae65b5fb6e40524a44cb3f7dc9ba0c4522f9d16bed0656ed06d19ae040d4",
+        "size": 1516
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/ac23582ab3f62907dafed549ccf1a089ae4d905cf62eacf19f7151159e2427bd",
+        "sha256": "ac23582ab3f62907dafed549ccf1a089ae4d905cf62eacf19f7151159e2427bd",
+        "size": 656
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/ae1c5ffa2070d5b9b685c9a4e4f06439c0b4ac3c3474106ad51115a929da98e6",
+        "sha256": "ae1c5ffa2070d5b9b685c9a4e4f06439c0b4ac3c3474106ad51115a929da98e6",
+        "size": 1516
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/b3af0e8c3504594ba8586eabf6b71bc0c3adb9ff00c24cb62901b95fa12a8800",
+        "sha256": "b3af0e8c3504594ba8586eabf6b71bc0c3adb9ff00c24cb62901b95fa12a8800",
+        "size": 655
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/b944062060e83bf3850b5456499cead418a065bda12b2d0a5a7dc15d04a55209",
+        "sha256": "b944062060e83bf3850b5456499cead418a065bda12b2d0a5a7dc15d04a55209",
+        "size": 657
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/c25d53406702f05a14024f2c7c7bcf9a7d138b95edece703cc2284a49dbbeb9b",
+        "sha256": "c25d53406702f05a14024f2c7c7bcf9a7d138b95edece703cc2284a49dbbeb9b",
+        "size": 657
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/c40954377bfee4a4d01b434337ec2dc9790038b0893f9876dc76c5673c52fe43",
+        "sha256": "c40954377bfee4a4d01b434337ec2dc9790038b0893f9876dc76c5673c52fe43",
+        "size": 657
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/cc0eb1a34c3ec296c5718bf99d24aab3c2e5a3f67f74481e9361de364effca9d",
+        "sha256": "cc0eb1a34c3ec296c5718bf99d24aab3c2e5a3f67f74481e9361de364effca9d",
+        "size": 657
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/cdd71961b1bd94e254f5644399bf0644dd711bf3aff0f7ae868a5d25cdae498b",
+        "sha256": "cdd71961b1bd94e254f5644399bf0644dd711bf3aff0f7ae868a5d25cdae498b",
+        "size": 656
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/ce5c104c0856f6bf96b8c9b173610e6f94ab95ec6a3b3ace1c21cd0e71e24d7c",
+        "sha256": "ce5c104c0856f6bf96b8c9b173610e6f94ab95ec6a3b3ace1c21cd0e71e24d7c",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/e09e6262e01448bca4b44c4a3924c05c50a81171f8209df644f12ac3256a016f",
+        "sha256": "e09e6262e01448bca4b44c4a3924c05c50a81171f8209df644f12ac3256a016f",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/efd1361a9b7a0a4fa8ceb5b3efac04c55a858ece7fa6ef46f343070c1c3da205",
+        "sha256": "efd1361a9b7a0a4fa8ceb5b3efac04c55a858ece7fa6ef46f343070c1c3da205",
+        "size": 1516
+      },
+      {
+        "path": "dists/resolute/main/binary-amd64/by-hash/SHA256/fd205e33bd89244f4d61f97ecb8c1df8c8f41be238687dba2b5a5fe16fdcadcb",
+        "sha256": "fd205e33bd89244f4d61f97ecb8c1df8c8f41be238687dba2b5a5fe16fdcadcb",
+        "size": 658
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/07fde4fd244190d43fe140816fa36d55ca33b417e83655436d329da2ed9c223a",
+        "sha256": "07fde4fd244190d43fe140816fa36d55ca33b417e83655436d329da2ed9c223a",
+        "size": 658
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/0d0ad35c60326c8203636cde1a46ad7a5164a7628900b34f420a1673b3f683d9",
+        "sha256": "0d0ad35c60326c8203636cde1a46ad7a5164a7628900b34f420a1673b3f683d9",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/0e1bf3522200e516a3b21f5fa306c422a69357059abec6c02eecaaeba745b8c9",
+        "sha256": "0e1bf3522200e516a3b21f5fa306c422a69357059abec6c02eecaaeba745b8c9",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/0e2756d47f5cf925968718d917c08b9180a6191d6c419e639071d4c1356e4c46",
+        "sha256": "0e2756d47f5cf925968718d917c08b9180a6191d6c419e639071d4c1356e4c46",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/14db91bd5dc81c4044fd3449380158358ef3068e9413dd6c829e1b7ffeed3370",
+        "sha256": "14db91bd5dc81c4044fd3449380158358ef3068e9413dd6c829e1b7ffeed3370",
+        "size": 655
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/1c9c06d4464225e016a3ad4e35b49ba1142c748007bff7f5f4d8577050217652",
+        "sha256": "1c9c06d4464225e016a3ad4e35b49ba1142c748007bff7f5f4d8577050217652",
+        "size": 658
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/1ced1bd9388ac87e150c02cf50ba5db8b1ad98d84963fbed9127f1736d32ed73",
+        "sha256": "1ced1bd9388ac87e150c02cf50ba5db8b1ad98d84963fbed9127f1736d32ed73",
+        "size": 657
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/2217193c83fde6a2a365b6a4980359b8b95bf3adda8651264ed42bc8f8e8e593",
+        "sha256": "2217193c83fde6a2a365b6a4980359b8b95bf3adda8651264ed42bc8f8e8e593",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/2de0b60a0fc18e5bf3308f2f0df986374acd5be7867b88ac6547c131fa206bcb",
+        "sha256": "2de0b60a0fc18e5bf3308f2f0df986374acd5be7867b88ac6547c131fa206bcb",
+        "size": 656
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/4573a5a1cb47a9d1732d41f45b2d63f2c2eca5b0591db8f791f4839cfc7baf0a",
+        "sha256": "4573a5a1cb47a9d1732d41f45b2d63f2c2eca5b0591db8f791f4839cfc7baf0a",
+        "size": 656
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/4e7c3228b2a07fc9d1511c6ff231f7e02d55f424c4ba872e51ab89bf0d1fbdcf",
+        "sha256": "4e7c3228b2a07fc9d1511c6ff231f7e02d55f424c4ba872e51ab89bf0d1fbdcf",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/50b6ae1386c2fcc8d9488ae6a1cbcf0b0deb7706250702231925adb0580a1724",
+        "sha256": "50b6ae1386c2fcc8d9488ae6a1cbcf0b0deb7706250702231925adb0580a1724",
+        "size": 655
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/524e09c943d5d12db60075d8a2222e7346140e1bdd8977f40ec527a8d333642a",
+        "sha256": "524e09c943d5d12db60075d8a2222e7346140e1bdd8977f40ec527a8d333642a",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/60c4a5f46e3843fdec12a267c4e3b00cb33dd5eea8316b1f531dd108d5ca5e00",
+        "sha256": "60c4a5f46e3843fdec12a267c4e3b00cb33dd5eea8316b1f531dd108d5ca5e00",
+        "size": 658
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/789996d6490db44d44bf50e5ede6d6b49a0e67f0340362b86404439c81d6b3b3",
+        "sha256": "789996d6490db44d44bf50e5ede6d6b49a0e67f0340362b86404439c81d6b3b3",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/79701029ab15ac9a018ceff0d660fc2208709a3479693435f5a24de76b75abd5",
+        "sha256": "79701029ab15ac9a018ceff0d660fc2208709a3479693435f5a24de76b75abd5",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/90e55112b7b46afa1929a52ead5ea1ec657a9f63853fe6a1b903270a5dbc355c",
+        "sha256": "90e55112b7b46afa1929a52ead5ea1ec657a9f63853fe6a1b903270a5dbc355c",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/a3c24208f1a7817f6bfe281983039e072904bc5cb4a09784add3948e62a94d5c",
+        "sha256": "a3c24208f1a7817f6bfe281983039e072904bc5cb4a09784add3948e62a94d5c",
+        "size": 656
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/a40c17aaa3d61b79fed400cd52ae1cf645661ef69faf50540aa23073f0edebc6",
+        "sha256": "a40c17aaa3d61b79fed400cd52ae1cf645661ef69faf50540aa23073f0edebc6",
+        "size": 659
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/ae114d67b8a6fcecb005bab9282232265e11e957aee417eba621c05922550107",
+        "sha256": "ae114d67b8a6fcecb005bab9282232265e11e957aee417eba621c05922550107",
+        "size": 656
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/b698140f78c52390d48f9f0fae019896caf51c329d0169d2e16e9ed12a0460bf",
+        "sha256": "b698140f78c52390d48f9f0fae019896caf51c329d0169d2e16e9ed12a0460bf",
+        "size": 658
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/d19bc864525451cb3814805a93ce43c40f08ad85fe016458f114208abc0103dd",
+        "sha256": "d19bc864525451cb3814805a93ce43c40f08ad85fe016458f114208abc0103dd",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/e236b6dd39e81e2e7687e98d22eed97d37bd546d22e95b8580d0fce2b2515109",
+        "sha256": "e236b6dd39e81e2e7687e98d22eed97d37bd546d22e95b8580d0fce2b2515109",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/e3ba9b64e10a75ffbbbada3903ce8d9dbf759a2d97ed6494f8da986cb0eb523a",
+        "sha256": "e3ba9b64e10a75ffbbbada3903ce8d9dbf759a2d97ed6494f8da986cb0eb523a",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/e7c0561da52bb664af268e5720b72f5c6260d0d4f8942173784ffa2fd2d762dd",
+        "sha256": "e7c0561da52bb664af268e5720b72f5c6260d0d4f8942173784ffa2fd2d762dd",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/f85a1631654cee4d9139a0e1012b1e77af79f7c24eeb8def2edf0f58458468df",
+        "sha256": "f85a1631654cee4d9139a0e1012b1e77af79f7c24eeb8def2edf0f58458468df",
+        "size": 656
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/fd6aacf21d2d363ee71e5591aa6533b129e58e82df46e8e64912c0307ef4fe37",
+        "sha256": "fd6aacf21d2d363ee71e5591aa6533b129e58e82df46e8e64912c0307ef4fe37",
+        "size": 1515
+      },
+      {
+        "path": "dists/resolute/main/binary-arm64/by-hash/SHA256/feae244f7f7d1abaa1b1e178bb1dceb42cb4d7fecf466ac80511419ad879e755",
+        "sha256": "feae244f7f7d1abaa1b1e178bb1dceb42cb4d7fecf466ac80511419ad879e755",
+        "size": 658
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.56.3_amd64.deb",
+        "sha256": "a71a4f5ebb9e9cabfcb036e8c479bfa4db85991a54e6378026fdfba8dd91f4d7",
+        "size": 7957020
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.56.3_arm64.deb",
+        "sha256": "03496f7f96c1838c7c2fb4e2635f279a837a2f58ad5d64d0c038c274dca34570",
+        "size": 7039836
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.57.0_amd64.deb",
+        "sha256": "39ae1386ee10e5847dbabdef9b9543342953f5f39260b6e3a4a60916f0814f2b",
+        "size": 8002184
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.57.0_arm64.deb",
+        "sha256": "dbdad143ad5043c758200f08f6f26f2589b19ea17256ca9975b8d5ccba26ce76",
+        "size": 7078188
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.60.0_amd64.deb",
+        "sha256": "29a582f0afe4d3b34a1686a54b71d3115e0aa78b16aa735fbba4a0081dc2b069",
+        "size": 9353448
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.60.0_arm64.deb",
+        "sha256": "782aea77415cc0de08256aaed9f5ddbd4fec00feac17af471081e73db1ad752d",
+        "size": 8395996
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.61.1_amd64.deb",
+        "sha256": "b341ae168ca947b406a8e94d67d0548ae21e7e9be3d15f4f1febfcc0142c70df",
+        "size": 9534016
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.61.1_arm64.deb",
+        "sha256": "f43fc33959e5f69650bcf30bd2da10d8f2cab00e415f391144a81a565987ef25",
+        "size": 8544228
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.62.2_amd64.deb",
+        "sha256": "c9e00833e7c3bfcd1341384b582443e12bcd8edbb95be835db060aebefc48093",
+        "size": 9691176
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.62.2_arm64.deb",
+        "sha256": "78bdbf3b6b2c9a4b611b876d5610bec1df6ef49a9e6e4990a1324edb450ffd70",
+        "size": 8679452
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.63.3_amd64.deb",
+        "sha256": "fa407d5cd02df6320311ca091f335c5b859bfc29a9518c7a779a02222898b9cd",
+        "size": 9724988
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.63.3_arm64.deb",
+        "sha256": "1b48bf3a6fa35858b33e85708d9d486b484622feb51f4d92d491f1dd1f4f8164",
+        "size": 8709124
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.64.0_amd64.deb",
+        "sha256": "aca4959eea807483776def03bf2d6f0d69d78b211a15da326f6f46a486f5e33a",
+        "size": 9793912
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.64.0_arm64.deb",
+        "sha256": "9b76d17add9ba4361435f58b50ed961caa97a588ba8eed5c9ba1174b86c60438",
+        "size": 8764728
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.65.1_amd64.deb",
+        "sha256": "094e0bac6483afe01ea00d9d20931e90c6c7d53a05c4ecd7c8ce79aa9cb1b2db",
+        "size": 9916704
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.65.1_arm64.deb",
+        "sha256": "e89bcae29f388559ce528414ea4b0d9803aae2d78f6065817784475376d60b29",
+        "size": 8872224
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.66.0_amd64.deb",
+        "sha256": "966aa619e7e6ea85533bcda388553f9ecf773ac83bef9b8f598e101dfd1e841d",
+        "size": 10015948
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.66.0_arm64.deb",
+        "sha256": "d9b8bcb3cb2c073a5b9ff10a143094c75071fe6c1099bfa5cacf5dcccfcdbcc6",
+        "size": 8961084
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.67.0_amd64.deb",
+        "sha256": "eff8bc1c3f6e418f79dd4a9dd30809bbf37121e46e17f7cceb957bc29db8de10",
+        "size": 10028488
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.67.0_arm64.deb",
+        "sha256": "26c56e6eed74b1b71c5b90324fa8933ed5abc61fe49f172c98989a6acc9f984c",
+        "size": 8973548
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.67.1_amd64.deb",
+        "sha256": "ce113fe7c3a5e9d7a74c4d9a4c9d3163c3e643df03a3653c354ba857ebed1e59",
+        "size": 10031740
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.67.1_arm64.deb",
+        "sha256": "e44dcda337daa91d55b2ee76232ba604f1699116b99bf9756d73dd6127262fd2",
+        "size": 8975792
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.67.2_amd64.deb",
+        "sha256": "d7b086b04e320b8965cf4b60b093842fd74bc1929e13bb15a9fbae7efc6bdab8",
+        "size": 10033768
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.67.2_arm64.deb",
+        "sha256": "7b41d63d7aed304be297bd469527e5be023d55880aa4eb3529f6cc1caf63add0",
+        "size": 8974912
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.67.3_amd64.deb",
+        "sha256": "5e39c6183891fff05b493894d864fd4cbb2c31e104bda59999efa40b133e9c20",
+        "size": 10032312
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.67.3_arm64.deb",
+        "sha256": "b7f1ea249fb160ea33135a0271762ba2fd5cf72463ece65321455118cf04bebc",
+        "size": 8976004
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.67.4_amd64.deb",
+        "sha256": "8455b061e6a64c8f7120edd858c39be3c35a3e725d5890e5319626e571a1d6fa",
+        "size": 10038072
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-desktop_0.67.4_arm64.deb",
+        "sha256": "c10499af072f882396ffc3b989f65657466d1dbad8e25a7a4c532ca5cedf7637",
+        "size": 8977604
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.56.3_amd64.deb",
+        "sha256": "0c402c1021a1e30403c19d5bdcb86c1c0f16a6568ca83bc33ad0bdda81ed6155",
+        "size": 4804224
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.56.3_arm64.deb",
+        "sha256": "9323e79e33078d4bed7c4a7b5a3eee813c58ebd35d654f3643e4969c71b8a0d3",
+        "size": 4234104
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.57.0_amd64.deb",
+        "sha256": "9a55d73c43ff8ca66de42fefe8a51422b5ab17701656098128fc341c248077a5",
+        "size": 4844084
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.57.0_arm64.deb",
+        "sha256": "ce177ae338e847cfe29cab52446fcaeef14946b0f91863ba6d3821d4be0e62d6",
+        "size": 4266784
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.60.0_amd64.deb",
+        "sha256": "8ffd6bf0d58edc882d172d66d04a49237c118dd219720f44b8112baa4713a029",
+        "size": 6060636
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.60.0_arm64.deb",
+        "sha256": "39e0b9bd6622e88dd3f08f88c2eeadd4ec9ba79318e2409e58969cd8df9c6071",
+        "size": 5480800
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.61.1_amd64.deb",
+        "sha256": "4681f630e926f5e8f71f5eab90efb361f80f555d0dcf78d24ca3d6a09fbe44a0",
+        "size": 6217076
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.61.1_arm64.deb",
+        "sha256": "97d3183b3c716aea3366f063cfc08525f8d15da804e335dbfd5200199f3e6209",
+        "size": 5615556
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.62.2_amd64.deb",
+        "sha256": "6966aa0dea5287a9754812c5ab3407ff9c8f78df417200d77a756d96d8d9f0d6",
+        "size": 6304688
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.62.2_arm64.deb",
+        "sha256": "4a6882edb5e7d1733dc095d309a84f0d842fc690d454a43195ef303f476031e3",
+        "size": 5692144
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.63.3_amd64.deb",
+        "sha256": "35eb308f8c65da4c8931315062212f707dd1e906c4a8b84a65937a326d72589c",
+        "size": 6332620
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.63.3_arm64.deb",
+        "sha256": "7c2c1fc2128cda5542b5f83b7859f88ff369e396fcbac4b13fee64de5bc57cf0",
+        "size": 5713832
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.64.0_amd64.deb",
+        "sha256": "d0aabe07391237e2f6ce6ad3c973f6b2655cc5dbf25040d1e6df8fb6742d03a3",
+        "size": 6377028
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.64.0_arm64.deb",
+        "sha256": "e8d504379292ad24738508d3b5f67b828967ee93e031f2b0c9f5b61002337b43",
+        "size": 5749672
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.65.1_amd64.deb",
+        "sha256": "de3d28777878838894d8dd6ce7098e0f22b4b22af397bd2a4e9931336783e8f2",
+        "size": 6457688
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.65.1_arm64.deb",
+        "sha256": "6fff04f7544501cdbf5da249e5901897b510f086dab6b4f509f4664c80a78e7b",
+        "size": 5820784
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.66.0_amd64.deb",
+        "sha256": "c847d6e433e97c8a484f6bbfeed3d40ff81867eddf3d66efc613c07471217a02",
+        "size": 6535668
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.66.0_arm64.deb",
+        "sha256": "e7f333bb0dc98f1a7e40ecacf7b67ffdc0080a160f7227eaf0c6e55dd499ae8a",
+        "size": 5891924
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.67.0_amd64.deb",
+        "sha256": "53b36c38efc0492c3182acf05ade95f5324a40fccfd711ce3bdf7ce4a091737a",
+        "size": 6542040
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.67.0_arm64.deb",
+        "sha256": "3254c8c88b95356189a6bf8a105b79cca0403588f8640ed46543d36658883ad8",
+        "size": 5898208
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.67.1_amd64.deb",
+        "sha256": "7d65606bc614ff3a46e556599866dbaee6cf527b85b33d29d74e87d864094943",
+        "size": 6543096
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.67.1_arm64.deb",
+        "sha256": "154bb2516bd80e2981ae442f8f1e4fe7bf1cab135d8c450ac349fed59bce19b4",
+        "size": 5899908
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.67.2_amd64.deb",
+        "sha256": "7a6bf9cc38a7141e170874a6ee738fa1768d3cf2bbed68d49626881694f9a854",
+        "size": 6544008
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.67.2_arm64.deb",
+        "sha256": "73ba9ca0697dd797fc2afed77de08b2fd63cfe5a074a1fcf6bde21ff05d72e98",
+        "size": 5900952
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.67.3_amd64.deb",
+        "sha256": "bd592e6d0d5499f45b994072198bc4f6d777034cb0d84bcfd88c594accc68eae",
+        "size": 6542264
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.67.3_arm64.deb",
+        "sha256": "f6330a8d06a2de06c4ed882dde3f2c59f2ccf775ce44380c6fea093567e54125",
+        "size": 5899620
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.67.4_amd64.deb",
+        "sha256": "24bdeda3e2b2cf0f053558bf4883c4f477d381256c162ed977bb6ea110f5fe05",
+        "size": 6545996
+      },
+      {
+        "path": "pool/main/k/kilo-proxy/kilo-proxy-headless_0.67.4_arm64.deb",
+        "sha256": "ecdb54acf106dfdbfdceb00738c264be844cc3db979b70616c66e28c9647ea56",
+        "size": 5902076
+      }
+    ],
+    "previousTrustedSubkeyFingerprint": "7162477641224E16BBEB0883EE763E548375B763",
+    "primaryFingerprint": "15AAF121DBFB06322EF1D7C8099722B1E76932AC",
+    "sha256": "4079c437d356169a642f857f3525f834bc2202085796db06cc2a20ec2c99fcdc"
+  },
+  "commit": {
+    "node_id": "C_kwDOURXbCNoAKGYxYzJhZjg5NGU1ZjM2NWRjMWYxNDA4ODg4NjM5NjdhYTQ2YzRmMTM",
+    "parents": [
+      {
+        "html_url": "https://github.com/rosseca/kilo-proxy/commit/dd56bc2f3502a63e4634a01e41a02bf9d43552a2",
+        "sha": "dd56bc2f3502a63e4634a01e41a02bf9d43552a2",
+        "url": "https://api.github.com/repos/rosseca/kilo-proxy/git/commits/dd56bc2f3502a63e4634a01e41a02bf9d43552a2"
+      },
+      {
+        "html_url": "https://github.com/rosseca/kilo-proxy/commit/98fa733bc3f981862bb45ae59803019ebc458c22",
+        "sha": "98fa733bc3f981862bb45ae59803019ebc458c22",
+        "url": "https://api.github.com/repos/rosseca/kilo-proxy/git/commits/98fa733bc3f981862bb45ae59803019ebc458c22"
+      }
+    ],
+    "sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+    "tree": {
+      "sha": "0a84f2cbe8527f9d858082b45082d04f61518dc5",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/git/trees/0a84f2cbe8527f9d858082b45082d04f61518dc5"
+    },
+    "url": "https://api.github.com/repos/rosseca/kilo-proxy/git/commits/f1c2af894e5f365dc1f140888863967aa46c4f13"
+  },
+  "evidencePins": {
+    "humanAuthorization": {
+      "bytes": 6587,
+      "path": "recovery-human-approval-and-public-metadata.json",
+      "sha256": "aa25d5b62ec6e7975771452c9f4f54473ef5d07a26885cd9e42ab7a73df7a7e6"
+    },
+    "originalArtifactByteAudit": {
+      "bytes": 454,
+      "path": "apt-diagnostic-artifact-byte-audit.json",
+      "sha256": "b7eeb6b1411c617ce7061c248b8352f152e71b1c0b0ddb9135affa6b43978ec1"
+    },
+    "originalArtifactMetadata": {
+      "bytes": 682,
+      "path": "apt-diagnostic-artifact-metadata.json",
+      "sha256": "888606acfb8d5e739b08b2430f04338211cc4fc58ee336e89a61efccaf35249c"
+    },
+    "originalDebByteEvidence": {
+      "bytes": 2757,
+      "path": "apt-failure-owner/maintenance-review/roundtrip.json",
+      "sha256": "bc8c0752bbfc56bd57aec4b254399b59f61521ec2c4d8a81dd181dda23c039bd"
+    },
+    "originalFailedLog": {
+      "bytes": 30897,
+      "path": "release-failed-job-119240033891-full.log",
+      "sha256": "33768d0996a926bbdeb593042aa7ca029a2c09ef526b8d61880369c89e1b7c96"
+    },
+    "originalFailureAudit": {
+      "bytes": 17901,
+      "path": "release-attempt1-final-failure-audit.json",
+      "sha256": "07ed02c5a6642dae725a1a7e808070310dba4b866b91a5a747128731e7b124ba"
+    },
+    "originalFailurePeer": {
+      "bytes": 17745,
+      "path": "apt-failure-peer/release40-final-failure-peer.json",
+      "sha256": "09aecaaf4948a1bd2dd88c28aaec4dd42dc71bd44cd2ea03488df9f33b1c5bde"
+    },
+    "originalIdentity": {
+      "bytes": 1114,
+      "path": "release-trusted-f1c2af8.json",
+      "sha256": "3e7f2abbc1e91d864935f2a9e208c00967609cc29a771797e3099fac755bf040"
+    },
+    "originalMergeEvidence": {
+      "bytes": 46725,
+      "path": "merge-api-evidence.json",
+      "sha256": "76dad265153d11b284780ac10b2c4c45f8acee72ab46aa545cabe760e14f19a8"
+    },
+    "originalPreparation": {
+      "bytes": 14629,
+      "path": "ci-preparation/preparation-manifest.json",
+      "sha256": "420ce268bdbb4c9133885124ee10f0e7f0dd49bd8c9f1235025c6e579d17fce2"
+    },
+    "originalSnapshot": {
+      "bytes": 419212,
+      "path": "release-snapshot-t5yzml4b/snapshot.json",
+      "sha256": "685115d6aac0657d99a62afd408e005d4730ae5f6b824bbf7549525c29e41d11"
+    },
+    "publicReleaseMetadata": {
+      "bytes": 21241,
+      "path": "recovery-public-release-0675-metadata.json",
+      "sha256": "b6efb6bbc0fedf2d06ad600f805a72f1f586a2e88a1a815e2a8c30b3025187f5"
+    },
+    "retained168Baseline": {
+      "bytes": 40065,
+      "path": "distribution-preparation/apt-baseline/retention-baseline.json",
+      "sha256": "4079c437d356169a642f857f3525f834bc2202085796db06cc2a20ec2c99fcdc"
+    }
+  },
+  "failureLogSha256": "33768d0996a926bbdeb593042aa7ca029a2c09ef526b8d61880369c89e1b7c96",
+  "humanAuthorizationSha256": "aa25d5b62ec6e7975771452c9f4f54473ef5d07a26885cd9e42ab7a73df7a7e6",
+  "kind": "EXTERNALLY_FROZEN_ROOT_APPROVED_FACTS",
+  "originalDebs": [
+    {
+      "name": "kilo-proxy-desktop_0.67.5_amd64.deb",
+      "sha256": "a6f14c3bc1df1f4176cf3ad2c140b4f1765d56bddfebe780a0cec65564b5a618",
+      "size": 10040520
+    },
+    {
+      "name": "kilo-proxy-desktop_0.67.5_arm64.deb",
+      "sha256": "5fd1fbf7239419b5260ae83a858b58e3e30e6fc2bad7049efd58791b368f3c3d",
+      "size": 8976584
+    },
+    {
+      "name": "kilo-proxy-headless_0.67.5_amd64.deb",
+      "sha256": "263d7bfb2fe10edb8bebabedfd2e313cf55c81cfed48aeef175edf2c8f3310fa",
+      "size": 6545720
+    },
+    {
+      "name": "kilo-proxy-headless_0.67.5_arm64.deb",
+      "sha256": "f1c66a533165976d0272db3ca511b3da3163ce5c18b602bf435ec573247632c3",
+      "size": 5903792
+    }
+  ],
+  "originalIdentity": {
+    "headSha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+    "mergeParents": [
+      "dd56bc2f3502a63e4634a01e41a02bf9d43552a2",
+      "98fa733bc3f981862bb45ae59803019ebc458c22"
+    ],
+    "mode": "release",
+    "preparationSha256": "420ce268bdbb4c9133885124ee10f0e7f0dd49bd8c9f1235025c6e579d17fce2",
+    "purpose": "kilo-0.67.5-github-gate",
+    "repository": "rosseca/kilo-proxy",
+    "repositoryId": 1360386824,
+    "repositoryNodeId": "R_kgDOURXbCA",
+    "run": {
+      "attempt": 1,
+      "createdAt": "2026-10-21T12:47:31Z",
+      "event": "push",
+      "headBranch": "v0.67.5",
+      "id": 39602441102,
+      "nodeId": "WFR_kwLOURXbCM8AAAAJOH1Ljg",
+      "suiteId": 107320836499,
+      "suiteNodeId": "CS_kwDOURXbCM8AAAAY_NIBkw",
+      "workflowId": 352417669,
+      "workflowName": "Release",
+      "workflowPath": ".github/workflows/release.yml"
+    },
+    "schemaVersion": 1,
+    "tag": {
+      "name": "v0.67.5",
+      "objectNodeId": "TA_kwDOURXbCNoAKDI1NzRhOTM5NDViYTU3MzNhYzU5MDA3YjEwNTRmMjY5MjBlMTY4ZTI",
+      "objectSha": "2574a93945ba5733ac59007b1054f26920e168e2"
+    },
+    "treeSha": "0a84f2cbe8527f9d858082b45082d04f61518dc5",
+    "version": "0.67.5"
+  },
+  "originalRelease40GateSatisfied": false,
+  "pr": {
+    "base": {
+      "ref": "main",
+      "repo": {
+        "full_name": "rosseca/kilo-proxy",
+        "html_url": "https://github.com/rosseca/kilo-proxy",
+        "id": 1360386824,
+        "node_id": "R_kgDOURXbCA",
+        "url": "https://api.github.com/repos/rosseca/kilo-proxy"
+      },
+      "sha": "dd56bc2f3502a63e4634a01e41a02bf9d43552a2"
+    },
+    "draft": false,
+    "head": {
+      "ref": "fix/responses-output-limit-0675",
+      "repo": {
+        "full_name": "rosseca/kilo-proxy",
+        "html_url": "https://github.com/rosseca/kilo-proxy",
+        "id": 1360386824,
+        "node_id": "R_kgDOURXbCA",
+        "url": "https://api.github.com/repos/rosseca/kilo-proxy"
+      },
+      "sha": "98fa733bc3f981862bb45ae59803019ebc458c22"
+    },
+    "html_url": "https://github.com/rosseca/kilo-proxy/pull/72",
+    "id": 4951388454,
+    "merge_commit_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+    "merged": true,
+    "merged_at": "2026-10-21T12:45:56Z",
+    "node_id": "PR_kwDOURXbCM8AAAABJyAxJg",
+    "number": 72,
+    "state": "closed",
+    "url": "https://api.github.com/repos/rosseca/kilo-proxy/pulls/72"
+  },
+  "publicBytesVerified": false,
+  "publicPublicationVerified": false,
+  "purpose": "kilo-0.67.5-original-release-recovery-facts",
+  "release": {
+    "assets_url": "https://api.github.com/repos/rosseca/kilo-proxy/releases/419571329/assets",
+    "body": "Portable apps for macOS, Windows, and Linux (x64 and ARM64). Download the archive for your system and verify it with SHA256SUMS.txt. Windows ZIPs include Kilo Proxy.exe; macOS ZIPs include Kilo Proxy.app. macOS apps are ad-hoc signed for bundle integrity, but not Developer ID signed or notarized; Windows binaries are unsigned. Setup instructions are included in README.md. Console-only macOS and Linux x64/ARM64 archives are named kilo-proxy-headless-VERSION-OS-ARCH.tar.gz; they need no desktop, D-Bus credential service, or graphics libraries. See the [headless setup guide](https://github.com/rosseca/kilo-proxy/blob/v0.67.5/docs/headless.md).\n\n## What's Changed\n* Release 0.67.5: per-model Responses limits with provider compatibility by @sdurban in https://github.com/rosseca/kilo-proxy/pull/72\n\n\n**Full Changelog**: https://github.com/rosseca/kilo-proxy/compare/v0.67.4...v0.67.5",
+    "created_at": "2026-10-21T12:47:02Z",
+    "draft": false,
+    "html_url": "https://github.com/rosseca/kilo-proxy/releases/tag/v0.67.5",
+    "id": 419571329,
+    "name": "Kilo Proxy v0.67.5",
+    "node_id": "RE_kwDOURXbCM4ZAiaB",
+    "prerelease": false,
+    "published_at": "2026-10-21T13:08:18Z",
+    "tag_name": "v0.67.5",
+    "target_commitish": "main",
+    "updated_at": "2026-10-21T13:08:18Z",
+    "url": "https://api.github.com/repos/rosseca/kilo-proxy/releases/419571329"
+  },
+  "repository": "rosseca/kilo-proxy",
+  "schemaVersion": 1,
+  "source": {
+    "expectedCiJobNames": [
+      "test (macos-latest)",
+      "test (ubuntu-24.04)",
+      "test (windows-latest)",
+      "browser-e2e (chromium, 1, 1)",
+      "browser-e2e (webkit, 1, 2)",
+      "browser-e2e (webkit, 2, 2)",
+      "native (macos-latest, darwin, arm64, kilo-proxy-darwin-arm64)",
+      "native (macos-15-intel, darwin, amd64, kilo-proxy-darwin-amd64)",
+      "native (ubuntu-24.04, linux, amd64, kilo-proxy-linux-amd64)",
+      "native (ubuntu-24.04-arm, linux, arm64, kilo-proxy-linux-arm64)",
+      "native (windows-latest, windows, amd64, kilo-proxy-windows-amd64.exe)",
+      "native (windows-11-arm, windows, arm64, kilo-proxy-windows-arm64.exe)",
+      "headless (macos-latest, darwin, arm64, 20m, 30)",
+      "headless (macos-15-intel, darwin, amd64, 20m, 30)",
+      "headless (ubuntu-24.04, linux, amd64)",
+      "headless (ubuntu-24.04-arm, linux, arm64)",
+      "package (macos-latest, darwin, arm64)",
+      "package (macos-15-intel, darwin, amd64)",
+      "package (ubuntu-24.04, linux, amd64)",
+      "package (ubuntu-24.04-arm, linux, arm64)",
+      "package (windows-latest, windows, amd64)",
+      "package (windows-11-arm, windows, arm64)",
+      "debian-package (ubuntu-24.04, amd64)",
+      "debian-package (ubuntu-24.04-arm, arm64)",
+      "apt-repository",
+      "apt-install (ubuntu-24.04, amd64, 24.04)",
+      "apt-install (ubuntu-24.04, amd64, 26.04)",
+      "apt-install (ubuntu-24.04-arm, arm64, 24.04)",
+      "apt-install (ubuntu-24.04-arm, arm64, 26.04)",
+      "aggregate"
+    ],
+    "expectedReleaseJobNames": [
+      "build / test (macos-latest)",
+      "build / test (ubuntu-24.04)",
+      "build / test (windows-latest)",
+      "build / browser-e2e (chromium, 1, 1)",
+      "build / browser-e2e (webkit, 1, 2)",
+      "build / browser-e2e (webkit, 2, 2)",
+      "build / native (macos-latest, darwin, arm64, kilo-proxy-darwin-arm64)",
+      "build / native (macos-15-intel, darwin, amd64, kilo-proxy-darwin-amd64)",
+      "build / native (ubuntu-24.04, linux, amd64, kilo-proxy-linux-amd64)",
+      "build / native (ubuntu-24.04-arm, linux, arm64, kilo-proxy-linux-arm64)",
+      "build / native (windows-latest, windows, amd64, kilo-proxy-windows-amd64.exe)",
+      "build / native (windows-11-arm, windows, arm64, kilo-proxy-windows-arm64.exe)",
+      "build / headless (macos-latest, darwin, arm64, 20m, 30)",
+      "build / headless (macos-15-intel, darwin, amd64, 20m, 30)",
+      "build / headless (ubuntu-24.04, linux, amd64)",
+      "build / headless (ubuntu-24.04-arm, linux, arm64)",
+      "build / package (macos-latest, darwin, arm64)",
+      "build / package (macos-15-intel, darwin, amd64)",
+      "build / package (ubuntu-24.04, linux, amd64)",
+      "build / package (ubuntu-24.04-arm, linux, arm64)",
+      "build / package (windows-latest, windows, amd64)",
+      "build / package (windows-11-arm, windows, arm64)",
+      "build / debian-package (ubuntu-24.04, amd64)",
+      "build / debian-package (ubuntu-24.04-arm, arm64)",
+      "build / apt-repository",
+      "build / apt-install (ubuntu-24.04, amd64, 24.04)",
+      "build / apt-install (ubuntu-24.04, amd64, 26.04)",
+      "build / apt-install (ubuntu-24.04-arm, arm64, 24.04)",
+      "build / apt-install (ubuntu-24.04-arm, arm64, 26.04)",
+      "build / aggregate",
+      "publish",
+      "Update Homebrew tap / prepare",
+      "Update Homebrew tap / validate / metadata",
+      "Update Homebrew tap / validate / Install (macos-15)",
+      "Update Homebrew tap / validate / Install (macos-15-intel)",
+      "Update Homebrew tap / validate / Install (ubuntu-24.04)",
+      "Update Homebrew tap / validate / Install (ubuntu-24.04-arm)",
+      "Update Homebrew tap / publish",
+      "Update Ubuntu APT repository / sign",
+      "Update Ubuntu APT repository / deploy"
+    ],
+    "failureCount": 1,
+    "groupCounts": {
+      "apt": 2,
+      "build": 30,
+      "homebrew": 7,
+      "publish": 1
+    },
+    "pairs": [
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T12:59:12Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066875",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066875",
+          "id": 119230066875,
+          "name": "build / test (macos-latest)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwuw",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:54:18Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066875"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066875",
+          "completed_at": "2026-10-21T12:59:12Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066875",
+          "id": 119230066875,
+          "name": "build / test (macos-latest)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwuw",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:54:18Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230066875",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T12:54:34Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066375",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066375",
+          "id": 119230066375,
+          "name": "build / test (ubuntu-24.04)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpuxw",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:47:34Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066375"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066375",
+          "completed_at": "2026-10-21T12:54:34Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066375",
+          "id": 119230066375,
+          "name": "build / test (ubuntu-24.04)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpuxw",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:47:34Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230066375",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T12:55:28Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066744",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066744",
+          "id": 119230066744,
+          "name": "build / test (windows-latest)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwOA",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:47:33Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066744"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066744",
+          "completed_at": "2026-10-21T12:55:28Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066744",
+          "id": 119230066744,
+          "name": "build / test (windows-latest)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwOA",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:47:33Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230066744",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T12:55:03Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066773",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066773",
+          "id": 119230066773,
+          "name": "build / browser-e2e (chromium, 1, 1)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwVQ",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:47:33Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066773"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066773",
+          "completed_at": "2026-10-21T12:55:03Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066773",
+          "id": 119230066773,
+          "name": "build / browser-e2e (chromium, 1, 1)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwVQ",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:47:33Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230066773",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T12:59:08Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067098",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067098",
+          "id": 119230067098,
+          "name": "build / browser-e2e (webkit, 1, 2)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpxmg",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:47:33Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230067098"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230067098",
+          "completed_at": "2026-10-21T12:59:08Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067098",
+          "id": 119230067098,
+          "name": "build / browser-e2e (webkit, 1, 2)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpxmg",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:47:33Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230067098",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:00:59Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066813",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066813",
+          "id": 119230066813,
+          "name": "build / browser-e2e (webkit, 2, 2)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwfQ",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:47:33Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066813"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066813",
+          "completed_at": "2026-10-21T13:00:59Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066813",
+          "id": 119230066813,
+          "name": "build / browser-e2e (webkit, 2, 2)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwfQ",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:47:33Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230066813",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T12:56:44Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066689",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066689",
+          "id": 119230066689,
+          "name": "build / native (macos-latest, darwin, arm64, kilo-proxy-darwin-arm64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwAQ",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:51:24Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066689"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066689",
+          "completed_at": "2026-10-21T12:56:44Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066689",
+          "id": 119230066689,
+          "name": "build / native (macos-latest, darwin, arm64, kilo-proxy-darwin-arm64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwAQ",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:51:24Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230066689",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:05:44Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067165",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067165",
+          "id": 119230067165,
+          "name": "build / native (macos-15-intel, darwin, amd64, kilo-proxy-darwin-amd64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpx3Q",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:58:07Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230067165"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230067165",
+          "completed_at": "2026-10-21T13:05:44Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067165",
+          "id": 119230067165,
+          "name": "build / native (macos-15-intel, darwin, amd64, kilo-proxy-darwin-amd64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpx3Q",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:58:07Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230067165",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T12:52:01Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066686",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066686",
+          "id": 119230066686,
+          "name": "build / native (ubuntu-24.04, linux, amd64, kilo-proxy-linux-amd64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpv_g",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:47:33Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066686"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066686",
+          "completed_at": "2026-10-21T12:52:01Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066686",
+          "id": 119230066686,
+          "name": "build / native (ubuntu-24.04, linux, amd64, kilo-proxy-linux-amd64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpv_g",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:47:33Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230066686",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T12:52:31Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067079",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067079",
+          "id": 119230067079,
+          "name": "build / native (ubuntu-24.04-arm, linux, arm64, kilo-proxy-linux-arm64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpxhw",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:47:36Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230067079"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230067079",
+          "completed_at": "2026-10-21T12:52:31Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067079",
+          "id": 119230067079,
+          "name": "build / native (ubuntu-24.04-arm, linux, arm64, kilo-proxy-linux-arm64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpxhw",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:47:36Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230067079",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T12:54:41Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067032",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067032",
+          "id": 119230067032,
+          "name": "build / native (windows-latest, windows, amd64, kilo-proxy-windows-amd64.exe)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpxWA",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:47:34Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230067032"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230067032",
+          "completed_at": "2026-10-21T12:54:41Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067032",
+          "id": 119230067032,
+          "name": "build / native (windows-latest, windows, amd64, kilo-proxy-windows-amd64.exe)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpxWA",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:47:34Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230067032",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:01:57Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066863",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066863",
+          "id": 119230066863,
+          "name": "build / native (windows-11-arm, windows, arm64, kilo-proxy-windows-arm64.exe)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwrw",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:47:34Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066863"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066863",
+          "completed_at": "2026-10-21T13:01:57Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066863",
+          "id": 119230066863,
+          "name": "build / native (windows-11-arm, windows, arm64, kilo-proxy-windows-arm64.exe)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwrw",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:47:34Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230066863",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:02:39Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067020",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067020",
+          "id": 119230067020,
+          "name": "build / headless (macos-latest, darwin, arm64, 20m, 30)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpxTA",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:56:45Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230067020"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230067020",
+          "completed_at": "2026-10-21T13:02:39Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230067020",
+          "id": 119230067020,
+          "name": "build / headless (macos-latest, darwin, arm64, 20m, 30)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpxTA",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:56:45Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230067020",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:04:09Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066891",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066891",
+          "id": 119230066891,
+          "name": "build / headless (macos-15-intel, darwin, amd64, 20m, 30)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwyw",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:51:19Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066891"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066891",
+          "completed_at": "2026-10-21T13:04:09Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066891",
+          "id": 119230066891,
+          "name": "build / headless (macos-15-intel, darwin, amd64, 20m, 30)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwyw",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:51:19Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230066891",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T12:54:43Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066923",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066923",
+          "id": 119230066923,
+          "name": "build / headless (ubuntu-24.04, linux, amd64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpw6w",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:47:34Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066923"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066923",
+          "completed_at": "2026-10-21T12:54:43Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066923",
+          "id": 119230066923,
+          "name": "build / headless (ubuntu-24.04, linux, amd64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpw6w",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:47:34Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230066923",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T12:53:46Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066861",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066861",
+          "id": 119230066861,
+          "name": "build / headless (ubuntu-24.04-arm, linux, arm64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwrQ",
+          "pull_requests": [],
+          "started_at": "2026-10-21T12:47:36Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066861"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119230066861",
+          "completed_at": "2026-10-21T12:53:46Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119230066861",
+          "id": 119230066861,
+          "name": "build / headless (ubuntu-24.04-arm, linux, arm64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwqpwrQ",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T12:47:36Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119230066861",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:06:26Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770566",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770566",
+          "id": 119238770566,
+          "name": "build / package (macos-latest, darwin, arm64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy8_hg",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:05:48Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238770566"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238770566",
+          "completed_at": "2026-10-21T13:06:26Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770566",
+          "id": 119238770566,
+          "name": "build / package (macos-latest, darwin, arm64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy8_hg",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:05:48Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119238770566",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:06:53Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770591",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770591",
+          "id": 119238770591,
+          "name": "build / package (macos-15-intel, darwin, amd64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy8_nw",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:05:48Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238770591"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238770591",
+          "completed_at": "2026-10-21T13:06:53Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770591",
+          "id": 119238770591,
+          "name": "build / package (macos-15-intel, darwin, amd64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy8_nw",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:05:48Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119238770591",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:06:28Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770964",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770964",
+          "id": 119238770964,
+          "name": "build / package (ubuntu-24.04, linux, amd64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy9BFA",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:05:47Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238770964"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238770964",
+          "completed_at": "2026-10-21T13:06:28Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770964",
+          "id": 119238770964,
+          "name": "build / package (ubuntu-24.04, linux, amd64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy9BFA",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:05:47Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119238770964",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:06:23Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770908",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770908",
+          "id": 119238770908,
+          "name": "build / package (ubuntu-24.04-arm, linux, arm64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy9A3A",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:05:49Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238770908"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238770908",
+          "completed_at": "2026-10-21T13:06:23Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770908",
+          "id": 119238770908,
+          "name": "build / package (ubuntu-24.04-arm, linux, arm64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy9A3A",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:05:49Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119238770908",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:06:28Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770552",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770552",
+          "id": 119238770552,
+          "name": "build / package (windows-latest, windows, amd64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy8_eA",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:05:47Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238770552"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238770552",
+          "completed_at": "2026-10-21T13:06:28Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770552",
+          "id": 119238770552,
+          "name": "build / package (windows-latest, windows, amd64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy8_eA",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:05:47Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119238770552",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:06:52Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238771017",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238771017",
+          "id": 119238771017,
+          "name": "build / package (windows-11-arm, windows, arm64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy9BSQ",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:05:47Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238771017"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238771017",
+          "completed_at": "2026-10-21T13:06:52Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238771017",
+          "id": 119238771017,
+          "name": "build / package (windows-11-arm, windows, arm64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy9BSQ",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:05:47Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119238771017",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:06:27Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770309",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770309",
+          "id": 119238770309,
+          "name": "build / debian-package (ubuntu-24.04, amd64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy8-hQ",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:05:46Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238770309"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238770309",
+          "completed_at": "2026-10-21T13:06:27Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770309",
+          "id": 119238770309,
+          "name": "build / debian-package (ubuntu-24.04, amd64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy8-hQ",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:05:46Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119238770309",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:06:33Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770322",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770322",
+          "id": 119238770322,
+          "name": "build / debian-package (ubuntu-24.04-arm, arm64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy8-kg",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:05:48Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238770322"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119238770322",
+          "completed_at": "2026-10-21T13:06:33Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119238770322",
+          "id": 119238770322,
+          "name": "build / debian-package (ubuntu-24.04-arm, arm64)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwy8-kg",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:05:48Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119238770322",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:06:55Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239165555",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239165555",
+          "id": 119239165555,
+          "name": "build / apt-repository",
+          "node_id": "CR_kwDOURXbCM8AAAAbwzVGcw",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:06:35Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119239165555"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119239165555",
+          "completed_at": "2026-10-21T13:06:55Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239165555",
+          "id": 119239165555,
+          "name": "build / apt-repository",
+          "node_id": "CR_kwDOURXbCM8AAAAbwzVGcw",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:06:35Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119239165555",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:08:01Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239348530",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239348530",
+          "id": 119239348530,
+          "name": "build / apt-install (ubuntu-24.04, amd64, 24.04)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwzgRMg",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:06:58Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119239348530"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119239348530",
+          "completed_at": "2026-10-21T13:08:01Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239348530",
+          "id": 119239348530,
+          "name": "build / apt-install (ubuntu-24.04, amd64, 24.04)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwzgRMg",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:06:58Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119239348530",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:08:02Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239348526",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239348526",
+          "id": 119239348526,
+          "name": "build / apt-install (ubuntu-24.04, amd64, 26.04)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwzgRLg",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:06:57Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119239348526"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119239348526",
+          "completed_at": "2026-10-21T13:08:02Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239348526",
+          "id": 119239348526,
+          "name": "build / apt-install (ubuntu-24.04, amd64, 26.04)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwzgRLg",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:06:57Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119239348526",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:07:58Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239349176",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239349176",
+          "id": 119239349176,
+          "name": "build / apt-install (ubuntu-24.04-arm, arm64, 24.04)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwzgTuA",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:07:00Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119239349176"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119239349176",
+          "completed_at": "2026-10-21T13:07:58Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239349176",
+          "id": 119239349176,
+          "name": "build / apt-install (ubuntu-24.04-arm, arm64, 24.04)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwzgTuA",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:07:00Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119239349176",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:08:02Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239348518",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239348518",
+          "id": 119239348518,
+          "name": "build / apt-install (ubuntu-24.04-arm, arm64, 26.04)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwzgRJg",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:07:00Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119239348518"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119239348518",
+          "completed_at": "2026-10-21T13:08:02Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239348518",
+          "id": 119239348518,
+          "name": "build / apt-install (ubuntu-24.04-arm, arm64, 26.04)",
+          "node_id": "CR_kwDOURXbCM8AAAAbwzgRJg",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:07:00Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119239348518",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:07:11Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239328226",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239328226",
+          "id": 119239328226,
+          "name": "build / aggregate",
+          "node_id": "CR_kwDOURXbCM8AAAAbwzfB4g",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:06:55Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119239328226"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119239328226",
+          "completed_at": "2026-10-21T13:07:11Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239328226",
+          "id": 119239328226,
+          "name": "build / aggregate",
+          "node_id": "CR_kwDOURXbCM8AAAAbwzfB4g",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:06:55Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119239328226",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:08:20Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239886429",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239886429",
+          "id": 119239886429,
+          "name": "publish",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0BGXQ",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:08:04Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119239886429"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119239886429",
+          "completed_at": "2026-10-21T13:08:20Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119239886429",
+          "id": 119239886429,
+          "name": "publish",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0BGXQ",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:08:04Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119239886429",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:08:37Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240033851",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240033851",
+          "id": 119240033851,
+          "name": "Update Homebrew tap / prepare",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0KGOw",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:08:23Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240033851"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240033851",
+          "completed_at": "2026-10-21T13:08:37Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240033851",
+          "id": 119240033851,
+          "name": "Update Homebrew tap / prepare",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0KGOw",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:08:23Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119240033851",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:08:47Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240165889",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240165889",
+          "id": 119240165889,
+          "name": "Update Homebrew tap / validate / metadata",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0SKAQ",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:08:39Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240165889"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240165889",
+          "completed_at": "2026-10-21T13:08:47Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240165889",
+          "id": 119240165889,
+          "name": "Update Homebrew tap / validate / metadata",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0SKAQ",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:08:39Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119240165889",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:11:25Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240250028",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240250028",
+          "id": 119240250028,
+          "name": "Update Homebrew tap / validate / Install (macos-15)",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0XSrA",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:08:50Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240250028"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240250028",
+          "completed_at": "2026-10-21T13:11:25Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240250028",
+          "id": 119240250028,
+          "name": "Update Homebrew tap / validate / Install (macos-15)",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0XSrA",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:08:50Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119240250028",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:11:30Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240250102",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240250102",
+          "id": 119240250102,
+          "name": "Update Homebrew tap / validate / Install (macos-15-intel)",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0XS9g",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:08:50Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240250102"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240250102",
+          "completed_at": "2026-10-21T13:11:30Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240250102",
+          "id": 119240250102,
+          "name": "Update Homebrew tap / validate / Install (macos-15-intel)",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0XS9g",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:08:50Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119240250102",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:14:39Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240250016",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240250016",
+          "id": 119240250016,
+          "name": "Update Homebrew tap / validate / Install (ubuntu-24.04)",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0XSoA",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:08:49Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240250016"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240250016",
+          "completed_at": "2026-10-21T13:14:39Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240250016",
+          "id": 119240250016,
+          "name": "Update Homebrew tap / validate / Install (ubuntu-24.04)",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0XSoA",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:08:49Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119240250016",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:13:20Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240249924",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240249924",
+          "id": 119240249924,
+          "name": "Update Homebrew tap / validate / Install (ubuntu-24.04-arm)",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0XSRA",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:08:51Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240249924"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240249924",
+          "completed_at": "2026-10-21T13:13:20Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240249924",
+          "id": 119240249924,
+          "name": "Update Homebrew tap / validate / Install (ubuntu-24.04-arm)",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0XSRA",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:08:51Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119240249924",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:14:51Z",
+          "conclusion": "success",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119243183850",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119243183850",
+          "id": 119243183850,
+          "name": "Update Homebrew tap / publish",
+          "node_id": "CR_kwDOURXbCM8AAAAbw3KW6g",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:14:41Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119243183850"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119243183850",
+          "completed_at": "2026-10-21T13:14:51Z",
+          "conclusion": "success",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119243183850",
+          "id": 119243183850,
+          "name": "Update Homebrew tap / publish",
+          "node_id": "CR_kwDOURXbCM8AAAAbw3KW6g",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:14:41Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119243183850",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:09:58Z",
+          "conclusion": "failure",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240033891",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240033891",
+          "id": 119240033891,
+          "name": "Update Ubuntu APT repository / sign",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0KGYw",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:08:23Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240033891"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240033891",
+          "completed_at": "2026-10-21T13:09:58Z",
+          "conclusion": "failure",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240033891",
+          "id": 119240033891,
+          "name": "Update Ubuntu APT repository / sign",
+          "node_id": "CR_kwDOURXbCM8AAAAbw0KGYw",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:08:23Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119240033891",
+          "workflow_name": "Release"
+        }
+      },
+      {
+        "check": {
+          "app": {
+            "id": 15368,
+            "slug": "github-actions"
+          },
+          "check_suite": {
+            "id": 107320836499
+          },
+          "completed_at": "2026-10-21T13:09:58Z",
+          "conclusion": "skipped",
+          "details_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240838104",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240838104",
+          "id": 119240838104,
+          "name": "Update Ubuntu APT repository / deploy",
+          "node_id": "CR_kwDOURXbCM8AAAAbw07L2A",
+          "pull_requests": [],
+          "started_at": "2026-10-21T13:09:59Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240838104"
+        },
+        "job": {
+          "check_run_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-runs/119240838104",
+          "completed_at": "2026-10-21T13:09:58Z",
+          "conclusion": "skipped",
+          "head_branch": "v0.67.5",
+          "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102/job/119240838104",
+          "id": 119240838104,
+          "name": "Update Ubuntu APT repository / deploy",
+          "node_id": "CR_kwDOURXbCM8AAAAbw07L2A",
+          "run_attempt": 1,
+          "run_id": 39602441102,
+          "run_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+          "started_at": "2026-10-21T13:09:59Z",
+          "status": "completed",
+          "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/jobs/119240838104",
+          "workflow_name": "Release"
+        }
+      }
+    ],
+    "run": {
+      "check_suite_id": 107320836499,
+      "check_suite_node_id": "CS_kwDOURXbCM8AAAAY_NIBkw",
+      "check_suite_url": "https://api.github.com/repos/rosseca/kilo-proxy/check-suites/107320836499",
+      "conclusion": "failure",
+      "created_at": "2026-10-21T12:47:31Z",
+      "event": "push",
+      "head_branch": "v0.67.5",
+      "head_commit": {
+        "id": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+        "tree_id": "0a84f2cbe8527f9d858082b45082d04f61518dc5"
+      },
+      "head_repository": {
+        "full_name": "rosseca/kilo-proxy",
+        "html_url": "https://github.com/rosseca/kilo-proxy",
+        "id": 1360386824,
+        "node_id": "R_kgDOURXbCA",
+        "url": "https://api.github.com/repos/rosseca/kilo-proxy"
+      },
+      "head_sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+      "html_url": "https://github.com/rosseca/kilo-proxy/actions/runs/39602441102",
+      "id": 39602441102,
+      "jobs_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102/jobs",
+      "name": "Release",
+      "node_id": "WFR_kwLOURXbCM8AAAAJOH1Ljg",
+      "path": ".github/workflows/release.yml",
+      "pull_requests": [],
+      "referenced_workflows": [
+        {
+          "path": "rosseca/kilo-proxy/.github/workflows/apt-publish.yml@f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "ref": "refs/tags/v0.67.5",
+          "sha": "f1c2af894e5f365dc1f140888863967aa46c4f13"
+        },
+        {
+          "path": "rosseca/kilo-proxy/.github/workflows/build.yml@f1c2af894e5f365dc1f140888863967aa46c4f13",
+          "ref": "refs/tags/v0.67.5",
+          "sha": "f1c2af894e5f365dc1f140888863967aa46c4f13"
+        },
+        {
+          "path": "rosseca/homebrew-tap/.github/workflows/update-kilo-proxy.yml@75b8d5c6733b7acd3da67929cc0d322c0be1cd45",
+          "sha": "75b8d5c6733b7acd3da67929cc0d322c0be1cd45"
+        },
+        {
+          "path": "rosseca/homebrew-tap/.github/workflows/kilo-proxy-tests.yml@75b8d5c6733b7acd3da67929cc0d322c0be1cd45",
+          "sha": "75b8d5c6733b7acd3da67929cc0d322c0be1cd45"
+        }
+      ],
+      "repository": {
+        "full_name": "rosseca/kilo-proxy",
+        "html_url": "https://github.com/rosseca/kilo-proxy",
+        "id": 1360386824,
+        "node_id": "R_kgDOURXbCA",
+        "url": "https://api.github.com/repos/rosseca/kilo-proxy"
+      },
+      "run_attempt": 1,
+      "status": "completed",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/runs/39602441102",
+      "workflow_id": 352417669,
+      "workflow_url": "https://api.github.com/repos/rosseca/kilo-proxy/actions/workflows/352417669"
+    },
+    "skippedCount": 1,
+    "successCount": 38
+  },
+  "syntheticEvidence": false,
+  "tagObject": {
+    "node_id": "TA_kwDOURXbCNoAKDI1NzRhOTM5NDViYTU3MzNhYzU5MDA3YjEwNTRmMjY5MjBlMTY4ZTI",
+    "object": {
+      "sha": "f1c2af894e5f365dc1f140888863967aa46c4f13",
+      "type": "commit",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/git/commits/f1c2af894e5f365dc1f140888863967aa46c4f13"
+    },
+    "sha": "2574a93945ba5733ac59007b1054f26920e168e2",
+    "tag": "v0.67.5",
+    "url": "https://api.github.com/repos/rosseca/kilo-proxy/git/tags/2574a93945ba5733ac59007b1054f26920e168e2"
+  },
+  "tagRef": {
+    "node_id": "REF_kwDOURXbCLFyZWZzL3RhZ3MvdjAuNjcuNQ",
+    "object": {
+      "sha": "2574a93945ba5733ac59007b1054f26920e168e2",
+      "type": "tag",
+      "url": "https://api.github.com/repos/rosseca/kilo-proxy/git/tags/2574a93945ba5733ac59007b1054f26920e168e2"
+    },
+    "ref": "refs/tags/v0.67.5",
+    "url": "https://api.github.com/repos/rosseca/kilo-proxy/git/refs/tags/v0.67.5"
+  },
+  "version": "0.67.5"
+}
