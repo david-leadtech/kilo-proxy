@@ -74,6 +74,12 @@ After a stable GitHub release passes the complete build and publishes successful
 
 The publisher authenticates the previous repository snapshot before extracting it, verifies the signed indexes and retained-file inventory, and retains immutable package files and SHA-256 index paths. It refuses to replace the same package/version/architecture with different bytes or deploy an older release. A missing history snapshot fails unless an explicit initial bootstrap is enabled and no existing APT metadata is found. Size limits fail before deployment and require deliberate archival maintenance; history is never silently discarded.
 
+The history snapshot uses the V2 metadata format: the outer detached signature authenticates the archive, which contains the exact `repository-state-format` record `kilo-proxy-apt-snapshot-v2` followed by a newline, the public key, signed suite metadata, indexes and retained-file inventories. Package payloads remain at their original `/apt/pool/...` URLs in the complete deployed site; they are omitted only from the snapshot to avoid storing every DEB twice.
+
+When reading V2, the publisher verifies the outer signature before parsing the archive or requesting package payloads. It then verifies both suites' signatures, matching retained inventories, index hashes and the total materialization budget. Each retained DEB is downloaded from its signed repository-relative path without redirects and is accepted only at its exact signed size and SHA-256. Full repository validation follows before the new repository is built. Older V1 snapshots with embedded DEBs remain readable; both paths preserve every retained package and by-hash URL without pruning.
+
+The existing limits remain 400 MiB for compressed or extracted snapshot metadata and 900 MiB for the complete deployed site, including every retained DEB. V2 removes snapshot duplication, but does not remove the full-site limit. Older publisher code that only understands V1 cannot consume a V2 snapshot; subsequent publication must use a publisher with the V2 reader. Changing the publisher does not alter or rerun a previous immutable release tag.
+
 APT metadata deliberately has no `Valid-Until`: an infrequently released repository must not require periodic resigning. This means a previously valid signed index does not expire automatically. Users still verify signatures and package hashes, and maintainers must handle signing-key compromise or revocation explicitly. No package automatically changes users' trusted keys.
 
 ## Maintainer configuration

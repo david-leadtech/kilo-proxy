@@ -121,6 +121,96 @@ class AptSiteTests(unittest.TestCase):
             site.check_previous_version(self.root, '1.11.0')
 
 
+    def test_v2_marker_and_paths_are_exact_before_any_extraction(self):
+        cases = [
+            [(site.FORMAT_NAME, b'unsupported-v3\n')],
+            [(site.FORMAT_NAME, site.FORMAT_V2), ('pool/main/k/kilo-proxy/kilo-proxy-desktop_1.2.3_amd64.deb', b'x')],
+            [(site.FORMAT_NAME, site.FORMAT_V2), ('unexpected', b'x')],
+            [(site.FORMAT_NAME, site.FORMAT_V2), ('./dists/noble/Release', b'x')],
+            [(site.FORMAT_NAME, site.FORMAT_V2), ('dists//noble/Release', b'x')],
+            [(site.FORMAT_NAME, site.FORMAT_V2), ('dists/noble/../Release', b'x')],
+            [(site.FORMAT_NAME, site.FORMAT_V2), ('dists\\noble\\Release', b'x')],
+            [(site.FORMAT_NAME, site.FORMAT_V2), (site.FORMAT_NAME, site.FORMAT_V2)],
+        ]
+        for number, entries in enumerate(cases):
+            archive = self.root / f'v2-{number}.tar.gz'
+            with tarfile.open(archive, 'w:gz') as output:
+                for name, data in entries:
+                    entry = tarfile.TarInfo(name)
+                    entry.size = len(data)
+                    output.addfile(entry, io.BytesIO(data))
+            destination = self.root / f'v2-{number}'
+            destination.mkdir()
+            with self.subTest(entries=entries), self.assertRaises(ValueError):
+                site.extract_snapshot(archive, destination)
+            self.assertEqual(list(destination.iterdir()), [])
+
+    def test_snapshot_extraction_keeps_existing_400_mib_guard(self):
+        archive = self.root / 'oversize.tar.gz'
+        with tarfile.open(archive, 'w:gz') as output:
+            entry = tarfile.TarInfo('data')
+            entry.size = 4
+            output.addfile(entry, io.BytesIO(b'data'))
+        destination = self.root / 'oversize'
+        destination.mkdir()
+        with patch.object(site, 'MAX_SNAPSHOT', 3), self.assertRaisesRegex(ValueError, 'supported size'):
+            site.extract_snapshot(archive, destination)
+        self.assertEqual(list(destination.iterdir()), [])
+        self.assertEqual(site.MAX_SNAPSHOT, 400 * 1024 * 1024)
+        self.assertEqual(site.MAX_SITE, 900 * 1024 * 1024)
+
+    def test_writer_checks_uncompressed_metadata_before_opening_tar(self):
+        apt = self.root / 'site'
+        apt.mkdir()
+        (apt / 'kilo-proxy-archive-keyring.asc').write_bytes(b'four')
+        output = self.root / 'metadata.tar.gz'
+        with patch.object(site, 'MAX_SNAPSHOT', len(site.FORMAT_V2) + 3), patch.object(site.tarfile, 'open') as opened:
+            with self.assertRaisesRegex(ValueError, 'snapshot metadata'):
+                site.write_snapshot(apt, output, 1700000000)
+        opened.assert_not_called()
+        self.assertFalse(output.exists())
+
+    def test_pool_download_publishes_only_exact_signed_bytes(self):
+        url = 'https://example.invalid/apt/pool/main/k/kilo-proxy/kilo-proxy-desktop_1.2.3_amd64.deb'
+        expected = b'tested package'
+        for number, body in enumerate((expected, expected[:-1], expected + b'x', b'wrong contents')):
+            response = io.BytesIO(body)
+            response.geturl = lambda: url
+            opener = unittest.mock.Mock()
+            opener.open.return_value = response
+            destination = self.root / f'pool-{number}' / 'package.deb'
+            with patch.object(site.urllib.request, 'build_opener', return_value=opener):
+                if body == expected:
+                    site.download_pool(url, destination, len(expected), hashlib.sha256(expected).hexdigest())
+                    self.assertEqual(destination.read_bytes(), expected)
+                else:
+                    with self.assertRaises(ValueError):
+                        site.download_pool(url, destination, len(expected), hashlib.sha256(expected).hexdigest())
+                    self.assertFalse(destination.exists())
+                    self.assertEqual(list(destination.parent.iterdir()), [])
+            self.assertEqual(opener.open.call_count, 1)
+
+    def test_pool_redirect_or_missing_object_never_creates_payload(self):
+        url = 'https://example.invalid/apt/pool/package.deb'
+        self.assertIsNone(site.NoRedirect().redirect_request(None, None, 302, '', {}, 'https://other.invalid'))
+        for code in (302, 404):
+            opener = unittest.mock.Mock()
+            opener.open.side_effect = urllib.error.HTTPError(url, code, 'blocked', {}, None)
+            destination = self.root / f'http-{code}' / 'package.deb'
+            with patch.object(site.urllib.request, 'build_opener', return_value=opener), self.assertRaises(urllib.error.HTTPError):
+                site.download_pool(url, destination, 4, hashlib.sha256(b'data').hexdigest())
+            self.assertFalse(destination.exists())
+            self.assertEqual(list(destination.parent.iterdir()), [])
+
+    def test_history_base_url_rejects_credentials_aliases_and_backslash(self):
+        for url in ('http://example.invalid/apt', 'https://user:secret@example.invalid/apt',
+                    'https://example.invalid/apt?query', 'https://example.invalid/a/../apt',
+                    'https://example.invalid/apt\\path', 'https://example.invalid/apt%2fpath'):
+            with self.subTest(url=url), patch.object(site, 'download') as download, self.assertRaises(ValueError):
+                site.previous_repository(url, 'A' * 40, self.root, self.root, False)
+            download.assert_not_called()
+
+
 @unittest.skipUnless(shutil.which('gpg') and shutil.which('gpgv') and shutil.which('dpkg-deb'),
                      'Real isolated signing and Debian tools required')
 class AptSiteIntegrationTests(unittest.TestCase):
@@ -156,10 +246,21 @@ class AptSiteIntegrationTests(unittest.TestCase):
         def public_download(url, destination, maximum):
             if previous is None:
                 raise urllib.error.HTTPError(url, 404, 'Not found', {}, None)
-            source = previous / 'apt' / url.rsplit('/', 1)[-1]
+            source = previous / 'apt' / url.split('/apt/', 1)[1]
             shutil.copyfile(source, destination)
         output = self.root / name
-        with patch.object(site, 'ROOT', self.source), patch.object(site, 'download', side_effect=public_download):
+        def pool_response(request, timeout):
+            url = request.full_url
+            source = previous / 'apt' / url.split('/apt/', 1)[1]
+            self.pool_requests.append(url)
+            response = io.BytesIO(source.read_bytes())
+            response.geturl = lambda: url
+            return response
+        self.pool_requests = []
+        opener = unittest.mock.Mock()
+        opener.open.side_effect = pool_response
+        with patch.object(site, 'ROOT', self.source), patch.object(site, 'download', side_effect=public_download), \
+                patch.object(site.urllib.request, 'build_opener', return_value=opener):
             site.prepare(self.fixture.packages, output, self.identity, self.fixture.home,
                          'https://example.invalid/apt', previous is None, 1700000000)
         return output
@@ -177,6 +278,133 @@ class AptSiteIntegrationTests(unittest.TestCase):
             self.publish_candidate('downgrade', updated)
         self.assertFalse((self.root / 'downgrade').exists())
 
+
+    def sign_snapshot(self, apt, legacy=False):
+        archive = apt / 'repository-state.tar.gz'
+        signature = apt / 'repository-state.tar.gz.asc'
+        archive.unlink(missing_ok=True)
+        signature.unlink(missing_ok=True)
+        temporary = self.root / 'resigned.tar.gz'
+        if legacy:
+            with tarfile.open(temporary, 'w:gz') as output:
+                for child in sorted(apt.iterdir()):
+                    output.add(child, arcname=child.name)
+        else:
+            site.write_snapshot(apt, temporary, 1700000000)
+        temporary.rename(archive)
+        site.repository.gpg(self.fixture.home, '--local-user', self.identity,
+                            '--armor', '--detach-sign', archive)
+
+    def resign_metadata(self, apt, rebuild_manifest=False):
+        if rebuild_manifest:
+            manifest = site.repository.retained_manifest(apt)
+            for suite in site.repository.SUITES:
+                (apt / 'dists' / suite / 'retained-files.txt').write_text(manifest)
+        for suite in site.repository.SUITES:
+            root = apt / 'dists' / suite
+            release = root / 'Release'
+            release.write_text(site.repository.release_text(suite, root, 1700000000, '1.2.3'))
+            site.repository.gpg(self.fixture.home, '--yes', '--local-user', self.identity, '--armor',
+                                '--output', root / 'InRelease', '--clearsign', release)
+            site.repository.gpg(self.fixture.home, '--yes', '--local-user', self.identity, '--armor',
+                                '--output', root / 'Release.gpg', '--detach-sign', release)
+
+    def retained_bytes(self, apt):
+        return {path.relative_to(apt).as_posix(): path.read_bytes()
+                for path in site.repository.retained_files(apt)}
+
+    def test_new_snapshot_excludes_payloads_but_site_keeps_all_packages(self):
+        self.write_candidate('1.2.3')
+        initial = self.publish_candidate('metadata-only')
+        self.assertEqual(len(list((initial / 'apt/pool').rglob('*.deb'))), 4)
+        with tarfile.open(initial / 'apt/repository-state.tar.gz') as archive:
+            self.assertFalse(any(name.startswith('pool') for name in archive.getnames()))
+
+    def test_v1_to_v2_to_v2_preserves_every_old_path_and_byte(self):
+        self.write_candidate('1.2.3')
+        initial = self.publish_candidate('legacy')
+        old = self.retained_bytes(initial / 'apt')
+        self.sign_snapshot(initial / 'apt', legacy=True)
+        with tarfile.open(initial / 'apt/repository-state.tar.gz') as archive:
+            self.assertNotIn(site.FORMAT_NAME, archive.getnames())
+            self.assertTrue(any(name.startswith('pool/') for name in archive.getnames()))
+        self.write_candidate('1.2.4')
+        updated = self.publish_candidate('v2', initial)
+        self.assertEqual(self.pool_requests, [])
+        for name, data in old.items():
+            self.assertEqual((updated / 'apt' / name).read_bytes(), data)
+        with tarfile.open(updated / 'apt/repository-state.tar.gz') as archive:
+            self.assertEqual(archive.extractfile(site.FORMAT_NAME).read(), site.FORMAT_V2)
+            self.assertFalse(any(name.startswith('pool') for name in archive.getnames()))
+        all_old = self.retained_bytes(updated / 'apt')
+        self.write_candidate('1.2.5')
+        newest = self.publish_candidate('next-v2', updated)
+        self.assertEqual(len(self.pool_requests), 8)
+        for name, data in all_old.items():
+            self.assertEqual((newest / 'apt' / name).read_bytes(), data)
+        self.assertEqual(len(list((newest / 'apt/pool').rglob('*.deb'))), 12)
+        site.repository.verify_repository(newest / 'apt', self.identity, self.fixture.home)
+
+    def test_authenticated_bad_v2_metadata_fails_before_pool_requests(self):
+        self.write_candidate('1.2.3')
+        initial = self.publish_candidate('clean')
+        for case in ('duplicate', 'traversal', 'zero-size', 'suite-disagreement', 'missing-index', 'missing-byhash', 'extra-byhash', 'gzip-mismatch', 'wrong-key'):
+            previous = self.root / case
+            shutil.copytree(initial, previous)
+            apt = previous / 'apt'
+            manifest = apt / 'dists/noble/retained-files.txt'
+            if case == 'duplicate':
+                text = manifest.read_text()
+                for suite in site.repository.SUITES:
+                    (apt / 'dists' / suite / 'retained-files.txt').write_text(text + text.splitlines()[0] + '\n')
+            elif case == 'traversal':
+                text = manifest.read_text().replace('pool/main/', 'pool/../main/', 1)
+                for suite in site.repository.SUITES:
+                    (apt / 'dists' / suite / 'retained-files.txt').write_text(text)
+            elif case == 'zero-size':
+                lines = manifest.read_text().splitlines()
+                number = next(i for i, line in enumerate(lines) if ' pool/' in line)
+                fields = lines[number].split(' ')
+                fields[1] = '0'
+                lines[number] = ' '.join(fields)
+                for suite in site.repository.SUITES:
+                    (apt / 'dists' / suite / 'retained-files.txt').write_text('\n'.join(lines) + '\n')
+            elif case == 'missing-byhash':
+                next((apt / 'dists/noble/main/binary-amd64/by-hash/SHA256').iterdir()).unlink()
+            elif case == 'extra-byhash':
+                (apt / 'dists/noble/main/binary-amd64/by-hash/SHA256' / ('a' * 64)).write_bytes(b'unsigned')
+            elif case == 'suite-disagreement':
+                manifest.write_text(manifest.read_text() + manifest.read_text().splitlines()[0] + '\n')
+            elif case == 'gzip-mismatch':
+                for suite in site.repository.SUITES:
+                    path = apt / 'dists' / suite / 'main/binary-amd64/Packages.gz'
+                    path.write_bytes(__import__('gzip').compress(b'different plain index', mtime=0))
+                    by_hash = path.parent / 'by-hash/SHA256' / hashlib.sha256(path.read_bytes()).hexdigest()
+                    by_hash.write_bytes(path.read_bytes())
+                self.resign_metadata(apt, rebuild_manifest=True)
+            if case not in ('missing-index', 'wrong-key'):
+                self.resign_metadata(apt)
+            if case == 'missing-index':
+                (apt / 'dists/noble/main/binary-amd64/Packages').unlink()
+            if case == 'wrong-key':
+                (apt / site.KEY_NAME).write_bytes(b'not a public key')
+            self.sign_snapshot(apt)
+            self.write_candidate('1.2.4')
+            with self.subTest(case=case), self.assertRaises((ValueError, subprocess.CalledProcessError)):
+                self.publish_candidate('rejected-' + case, previous)
+            self.assertEqual(self.pool_requests, [])
+            self.assertFalse((self.root / ('rejected-' + case)).exists())
+            self.write_candidate('1.2.3')
+
+    def test_v2_total_materialization_budget_fails_before_any_pool_get(self):
+        self.write_candidate('1.2.3')
+        initial = self.publish_candidate('initial-budget')
+        self.write_candidate('1.2.4')
+        with patch.object(site, 'MAX_SITE', 1), self.assertRaisesRegex(ValueError, 'hosting size'):
+            self.publish_candidate('over-budget', initial)
+        self.assertEqual(self.pool_requests, [])
+        self.assertFalse((self.root / 'over-budget').exists())
+
     def test_tampered_public_snapshot_never_reaches_extraction_or_output(self):
         self.write_candidate('1.2.3')
         initial = self.publish_candidate('initial')
@@ -184,6 +412,7 @@ class AptSiteIntegrationTests(unittest.TestCase):
         archive.write_bytes(archive.read_bytes() + b'tampered bytes')
         with patch.object(site, 'extract_snapshot') as extract, self.assertRaises(subprocess.CalledProcessError):
             self.publish_candidate('tampered', initial)
+        self.assertEqual(self.pool_requests, [])
         extract.assert_not_called()
         self.assertFalse((self.root / 'tampered').exists())
 
