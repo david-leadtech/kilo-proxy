@@ -538,6 +538,15 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 			jsonError(recorder, 401, "This model requires a Kilo connection. Connect Kilo or choose a ChatGPT subscription model.")
 			return
 		}
+		if err := a.prepareResponsesMaxOutputTokens(r, model); err != nil {
+			status := http.StatusBadRequest
+			var oversized *http.MaxBytesError
+			if errors.As(err, &oversized) {
+				status = http.StatusRequestEntityTooLarge
+			}
+			jsonError(w, status, err.Error())
+			return
+		}
 		bridge, err := prepareSchemaBridge(r)
 		if err != nil {
 			var oversized *http.MaxBytesError
