@@ -172,6 +172,12 @@ func (t remoteImageFallbackTransport) RoundTrip(r *http.Request) (*http.Response
 	if err != nil || response == nil || plan == nil || plan.skipped == 0 || r.Context().Value(remoteImageFallbackAttemptedContextKey{}) != nil {
 		return response, err
 	}
+	// Never buffer successful responses: Responses, Messages, and Chat
+	// Completions commonly stream indefinitely until the client finishes. The
+	// fallback is only relevant to the gateway's 4xx download error.
+	if response.StatusCode < http.StatusBadRequest || response.StatusCode >= http.StatusInternalServerError {
+		return response, err
+	}
 
 	body, complete, replay := readReplayableResponseBody(response.Body, remoteImageFallbackResponseLimit)
 	if !complete {
