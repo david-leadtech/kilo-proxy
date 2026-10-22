@@ -190,7 +190,16 @@ class RecoveryTests(unittest.TestCase):
                          {pair['job']['name'].removeprefix('build / ')
                           for pair in self.golden['source']['pairs']
                           if pair['job']['name'].startswith('build / ')})
-        recovery.validate_local_sources()
+        historical = self.root / 'frozen-0675-sources'
+        (historical / 'scripts').mkdir(parents=True)
+        for name in ('prepare_apt_site.py', 'build_apt_repository.py'):
+            (historical / 'scripts' / name).write_bytes((recovery.ROOT / 'scripts' / name).read_bytes())
+        (historical / 'VERSION').write_bytes(b'0.67.5\n')
+        with patch.object(recovery, 'ROOT', historical):
+            recovery.validate_local_sources()
+            (historical / 'VERSION').write_bytes(b'0.67.6\n')
+            with self.assertRaisesRegex(ValueError, 'Recovery VERSION must remain 0.67.5'):
+                recovery.validate_local_sources()
 
     def test_each_original_or_publisher_binding_mutation_is_rejected(self):
         r = recovery.ORIGINAL_RUN
