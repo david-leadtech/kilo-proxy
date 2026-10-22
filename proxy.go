@@ -197,7 +197,7 @@ func (e responseAdaptationError) Unwrap() error { return e.cause }
 
 func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 	proxy := &httputil.ReverseProxy{
-		Transport:     traceTransport{a.transport},
+		Transport:     remoteImageFallbackTransport{base: traceTransport{a.transport}},
 		FlushInterval: -1,
 		ErrorLog:      log.New(io.Discard, "", 0),
 		Rewrite: func(p *httputil.ProxyRequest) {
@@ -518,6 +518,16 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 				status = http.StatusRequestEntityTooLarge
 			}
 			jsonError(recorder, status, err.Error())
+			return
+		}
+		imageRequest, err = prepareRemoteImageFallback(imageRequest)
+		if err != nil {
+			var oversized *http.MaxBytesError
+			if errors.As(err, &oversized) {
+				jsonError(recorder, http.StatusRequestEntityTooLarge, "La petición supera 32 MiB.")
+			} else {
+				jsonError(recorder, http.StatusBadRequest, "Could not prepare the request for unavailable image recovery.")
+			}
 			return
 		}
 		capture.updateImageTransport(func(d *imageTransportTrace) { d.GatewayStartedAt = time.Now().UnixMilli() })
