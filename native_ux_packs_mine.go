@@ -213,7 +213,7 @@ func (u *nativeUI) uxmPersonalPackDetail() layout.Widget {
 	if p.pendingDelete == id {
 		body = append(body, func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Left: 24, Right: 24, Bottom: 16}.Layout(gtx, u.column(
-				u.message(nativeToneWarning, u.tr("Delete this personal pack? Harnesses using it will return to your models.", "¿Eliminar este pack propio? Los harnesses que lo usan volverán a tus modelos.")),
+				u.message(nativeToneWarning, u.tr("Delete this personal pack? Apps using it will return to your models.", "¿Eliminar este pack propio? Las apps que lo usan volverán a tus modelos.")),
 				u.pills(u.dangerButton("packs.my.confirm-delete", u.tr("Delete pack", "Eliminar pack"), func() { u.uxmDeletePersonalPack(id) }),
 					u.button("packs.my.cancel-delete", u.tr("Cancel", "Cancelar"), func() { p.pendingDelete = "" })),
 			))

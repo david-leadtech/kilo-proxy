@@ -29,7 +29,7 @@ type nativeAppIcon struct {
 // uxhIconSources maps a harness to the launch clients whose bundle carries its
 // icon. The CLIs borrow their desktop sibling's icon and add a terminal badge.
 var uxhIconSources = map[string][]string{
-	"codex": {"codex"}, "claude-desktop": {"claude-desktop"}, "synara": {"synara"}, "t3-code": {"t3-code"},
+	"codex": {"codex"}, "claude-desktop": {"claude-desktop"}, "synara": {"synara"}, "omnigent": {"omnigent"}, "t3-code": {"t3-code"},
 	"openmausbot": {"openmausbot"}, "zed": {"zed"}, "open-design": {"open-design"},
 	"xcode":  {"xcode-chat", "xcode-codex", "xcode-claude"},
 	"claude": {"claude-desktop"}, "codex-cli": {"codex"},

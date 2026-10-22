@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/systray"
@@ -23,10 +24,21 @@ import (
 	"gioui.org/unit"
 )
 
+type desktopWindowReady struct {
+	window     *gioapp.Window
+	generation uint64
+	view       gioapp.ViewEvent
+}
+
 type nativeDesktop struct {
 	owner            *app
 	ui               *nativeUI
 	cleanup          func()
+	backendActions   chan string
+	backendResults   chan desktopBackendResult
+	trayWake         chan struct{}
+	trayProjection   atomic.Pointer[trayState]
+	lastMessage      string
 	actions          chan string
 	trayReady        chan struct{}
 	trayDone         chan struct{}
@@ -51,6 +63,9 @@ type nativeDesktop struct {
 	message          string
 	quitLabel        string
 	exitCode         int
+
+	windowReady           chan desktopWindowReady
+	windowRaiseGeneration uint64
 }
 
 // CopyText schedules the OS clipboard operation on the next native frame. It
@@ -100,9 +115,16 @@ func (u *nativeUI) reportProxyStartFailure(err error) {
 }
 
 func (d *nativeDesktop) show() {
+	d.showWindow(true)
+}
+
+// Initial startup creates the native window to initialize Cocoa and the tray.
+// Only a later explicit Open requests activation after a new window is ready.
+func (d *nativeDesktop) showWindow(explicit bool) {
 	d.mu.Lock()
 	if w := d.window; w != nil {
 		d.hidden = false
+		d.windowRaiseGeneration = 0
 		d.mu.Unlock()
 		w.Option(gioapp.Windowed.Option())
 		w.Perform(system.ActionRaise)
@@ -110,16 +132,82 @@ func (d *nativeDesktop) show() {
 		return
 	}
 	w := new(gioapp.Window)
+	ready := d.registerWindowLocked(w, explicit, runtime.GOOS)
+	done := d.windowDone
+	d.mu.Unlock()
+	go d.runWindow(w, done, ready.generation)
+}
+
+func (d *nativeDesktop) registerWindowLocked(w *gioapp.Window, explicit bool, platform string) desktopWindowReady {
 	d.window = w
 	d.hidden = false
 	d.windowDone = make(chan struct{})
 	d.generation++
-	done := d.windowDone
-	d.mu.Unlock()
-	go d.runWindow(w, done)
+	d.windowRaiseGeneration = 0
+	if explicit && platform == "darwin" {
+		d.windowRaiseGeneration = d.generation
+	}
+	return desktopWindowReady{window: w, generation: d.generation}
 }
 
-func (d *nativeDesktop) runWindow(w *gioapp.Window, done chan struct{}) {
+// Frame delivery must never wait for the controller. Coalesce a stale ready
+// notification so that a rapid close/reopen cannot lose the current window.
+func (d *nativeDesktop) queueWindowReady(ready desktopWindowReady) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.windowReady == nil || d.window != ready.window || d.generation != ready.generation || d.windowRaiseGeneration != ready.generation {
+		return
+	}
+	select {
+	case d.windowReady <- ready:
+	default:
+		select {
+		case <-d.windowReady:
+		default:
+		}
+		d.windowReady <- ready
+	}
+}
+
+// The controller serializes activation with Close. Recheck identity and intent
+// here rather than raising from the frame goroutine after a newer Close.
+func (d *nativeDesktop) readyWindowForRaise(ready desktopWindowReady) *gioapp.Window {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.window != ready.window || d.generation != ready.generation || d.windowRaiseGeneration != ready.generation {
+		return nil
+	}
+	d.windowRaiseGeneration = 0
+	if d.hidden {
+		return nil
+	}
+	select {
+	case <-d.owner.quit:
+		return nil
+	default:
+		return ready.window
+	}
+}
+
+// Dispatch without holding d.mu, then validate on the native event thread.
+// A native red-button Close may occur while the callback is waiting to run.
+func (d *nativeDesktop) runWindowRaise(ready desktopWindowReady, run func(func()), raise func()) {
+	run(func() {
+		if d.readyWindowForRaise(ready) != nil {
+			raise()
+		}
+	})
+}
+
+func (d *nativeDesktop) windowForClose() *gioapp.Window {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.hidden = true
+	d.windowRaiseGeneration = 0
+	return d.window
+}
+
+func (d *nativeDesktop) runWindow(w *gioapp.Window, done chan struct{}, generation uint64) {
 	defer close(done)
 	defer func() {
 		d.mu.Lock()
@@ -132,6 +220,7 @@ func (d *nativeDesktop) runWindow(w *gioapp.Window, done chan struct{}) {
 	var ops op.Ops
 	var nativeViewEvent gioapp.ViewEvent
 	lifecycleInstalled := false
+	windowReady := false
 	for {
 		switch e := w.Event().(type) {
 		case gioapp.DestroyEvent:
@@ -168,6 +257,10 @@ func (d *nativeDesktop) runWindow(w *gioapp.Window, done chan struct{}) {
 			d.processFrame(gtx)
 			d.ui.Layout(gtx)
 			e.Frame(gtx.Ops)
+			if !windowReady && (runtime.GOOS != "darwin" || lifecycleInstalled) {
+				d.queueWindowReady(desktopWindowReady{window: w, generation: generation, view: nativeViewEvent})
+				windowReady = true
+			}
 			d.mu.Lock()
 			d.frames++
 			d.mu.Unlock()
@@ -239,7 +332,7 @@ func (d *nativeDesktop) setupTray() {
 	systray.SetTitle("")
 	d.items = map[string]*systray.MenuItem{}
 	systray.AddMenuItem("Kilo Proxy · "+version, "").Disable()
-	for _, key := range []string{"status", "team", "address", "activity", "spend", "coverage", "balance"} {
+	for _, key := range []string{"status", "team", "activity", "spend", "coverage", "balance"} {
 		d.items[key] = systray.AddMenuItem(" ", "")
 		d.items[key].Disable()
 	}
@@ -274,7 +367,16 @@ func (d *nativeDesktop) updateTray() {
 		return
 	}
 	s := d.owner.trayState()
-	if s == d.last {
+	d.trayProjection.Store(&s)
+	select {
+	case <-d.owner.quit:
+		return
+	default:
+	}
+	d.mu.Lock()
+	message := d.message
+	d.mu.Unlock()
+	if s == d.last && message == d.lastMessage {
 		return
 	}
 	if s.display != d.last.display || s.display != trayDisplayIcon && s.amount != d.last.amount {
@@ -286,7 +388,6 @@ func (d *nativeDesktop) updateTray() {
 	}
 	d.items["status"].SetTitle(s.status)
 	d.items["team"].SetTitle(s.team)
-	d.items["address"].SetTitle(s.labels.endpoint + s.address)
 	d.items["activity"].SetTitle(s.activity)
 	d.items["spend"].SetTitle(s.spend)
 	d.items["coverage"].SetTitle(s.coverage)
@@ -309,17 +410,98 @@ func (d *nativeDesktop) updateTray() {
 		d.items["stop"].Disable()
 	}
 	d.items["quit"].SetTitle(s.labels.exit)
-	d.items["message"].SetTitle(s.labels.message(d.message))
+	d.items["message"].SetTitle(s.labels.message(message))
 	systray.SetTooltip(s.tooltip)
 	d.mu.Lock()
 	d.quitLabel = s.labels.exit
 	d.mu.Unlock()
-	d.last = s
+	d.last, d.lastMessage = s, message
+}
+
+type desktopBackendResult struct {
+	action     string
+	needsSetup bool
+	err        error
+}
+
+func (d *nativeDesktop) setTrayMessage(message string) {
+	d.mu.Lock()
+	d.message = message
+	d.mu.Unlock()
+	select {
+	case d.trayWake <- struct{}{}:
+	default:
+	}
+}
+
+// This worker alone owns native tray updates. Both backend snapshot collection
+// and synchronous platform setters may wait; neither blocks window actions.
+func (d *nativeDesktop) runTrayUpdates() {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-d.owner.quit:
+			return
+		case <-ticker.C:
+			d.updateTray()
+		case <-d.trayWake:
+			d.updateTray()
+		}
+	}
+}
+
+// Preserve Start/Stop ordering while keeping backend validation and shutdown
+// outside the controller that handles Open and Close.
+func (d *nativeDesktop) runBackendActions() {
+	for {
+		select {
+		case <-d.owner.quit:
+			return
+		case action := <-d.backendActions:
+			select {
+			case <-d.owner.quit:
+				return
+			default:
+			}
+			result := desktopBackendResult{action: action}
+			if action == "start" {
+				result.needsSetup = !d.owner.trayState().configured
+				if !result.needsSetup {
+					result.err = d.owner.start()
+				}
+			} else if action == "stop" {
+				d.owner.stop()
+			}
+			select {
+			case d.backendResults <- result:
+			case <-d.owner.quit:
+				return
+			}
+		}
+	}
+}
+
+func (d *nativeDesktop) handleControlAction(action string) {
+	d.setTrayMessage("")
+	switch action {
+	case "open":
+		d.show()
+	case "close":
+		if w := d.windowForClose(); w != nil {
+			w.Perform(system.ActionClose)
+		}
+	case "start", "stop":
+		select {
+		case d.backendActions <- action:
+		default:
+		}
+	case "quit":
+		d.owner.requestQuit()
+	}
 }
 
 func (d *nativeDesktop) control() {
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
 	for {
 		select {
 		case <-d.owner.quit:
@@ -367,44 +549,35 @@ func (d *nativeDesktop) control() {
 			// Gio owns the startup thread indefinitely. Terminate only after
 			// saving state and closing application services and native UI.
 			exitDesktopProcess(code)
+		case ready := <-d.windowReady:
+			d.raiseNewWindow(ready)
 		case action := <-d.actions:
-			d.message = ""
-			switch action {
-			case "open":
-				d.show()
-			case "close":
-				d.mu.Lock()
-				w := d.window
-				d.mu.Unlock()
-				if w != nil {
-					w.Perform(system.ActionClose)
-				}
-			case "start":
-				if !d.owner.trayState().configured {
+			d.handleControlAction(action)
+		case result := <-d.backendResults:
+			if result.action == "start" {
+				if result.needsSetup {
 					d.show()
-				} else if err := d.owner.start(); err != nil {
-					d.message = "start-error"
+				} else if result.err != nil {
+					d.setTrayMessage("start-error")
 					d.show()
-					d.ui.reportProxyStartFailure(err)
+					d.ui.reportProxyStartFailure(result.err)
 				}
-			case "stop":
-				d.owner.stop()
+			} else if result.action == "stop" {
 				d.invalidate()
-			case "quit":
-				d.owner.requestQuit()
 			}
-			d.last = trayState{}
-			d.updateTray()
-		case <-ticker.C:
-			d.updateTray()
+			select {
+			case d.trayWake <- struct{}{}:
+			default:
+			}
 		}
 	}
 }
 
 func (a *app) runDesktop(_ string, hidden bool, selfTest string, cleanup func()) error {
-	d := &nativeDesktop{owner: a, cleanup: cleanup, actions: make(chan string, 16), trayReady: make(chan struct{}), firstFrameReady: make(chan struct{})}
+	d := &nativeDesktop{owner: a, cleanup: cleanup, actions: make(chan string, 16), backendActions: make(chan string, 16), backendResults: make(chan desktopBackendResult, 16), trayWake: make(chan struct{}, 1), trayReady: make(chan struct{}), firstFrameReady: make(chan struct{}), windowReady: make(chan desktopWindowReady, 1)}
 	a.mu.Lock()
 	a.desktop = d
+	a.publishUIProjectionLocked()
 	a.mu.Unlock()
 	d.ui = newNativeUI(a, d.invalidate)
 	if runtime.GOOS != "darwin" {
@@ -416,10 +589,12 @@ func (a *app) runDesktop(_ string, hidden bool, selfTest string, cleanup func())
 			systray.Run(d.setupTray, func() {})
 		}()
 	}
+	go d.runTrayUpdates()
+	go d.runBackendActions()
 	go d.control()
 	// Cocoa initializes the tray through the first real window. Hidden startup
 	// closes that window after the tray is ready while retaining application state.
-	d.show()
+	d.showWindow(false)
 	if hidden {
 		go func() { <-d.trayReady; <-d.firstFrameReady; d.dispatch("close") }()
 	}

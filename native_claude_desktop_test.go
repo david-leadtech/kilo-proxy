@@ -65,6 +65,7 @@ func TestNativeClaudeDesktopExperimentalOptionPreservesSharedLibrary(t *testing.
 			u.language = lang
 			u.owner.mu.Lock()
 			u.owner.config.Language = lang
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			u.agentSetup("claude-desktop")
 			source, _ := json.Marshal(u.library.selection)
@@ -182,6 +183,7 @@ func TestNativeClaudeDesktopAgentBesideCodex(t *testing.T) {
 			u.page, u.language = "agents", lang
 			u.owner.mu.Lock()
 			u.owner.config.Language = lang
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			// An unrelated invalid project must never affect this desktop launcher.
 			u.setValue(agentProjectField("claude-desktop"), "/does-not-exist/unused")

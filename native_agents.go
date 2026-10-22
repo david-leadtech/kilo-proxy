@@ -16,6 +16,7 @@ type nativeAgents struct {
 	OpenMausBot       nativeOpenMausBotState
 	T3Code            nativeT3CodeState
 	Synara            nativeSynaraState
+	Omnigent          nativeOmnigentState
 	Preferences       agentPreferences
 	Error             string
 	ClaudeError       string
@@ -35,7 +36,7 @@ const uxhGlobalFolderBusy = "agents:folder"
 
 func (u *nativeUI) agentsState() *nativeAgents {
 	if u.agents == nil {
-		prefs, err := readAgentPreferences(u.owner.dir)
+		prefs, err := readAgentPreferences(u.dir)
 		u.agents = &nativeAgents{Preferences: prefs, chooseFolder: chooseNativeFolder, chooseApplication: chooseNativeApplication, now: time.Now}
 		if err != nil {
 			u.agents.Error = u.tr("Could not load remembered project folders.", "No se pudieron cargar las carpetas recordadas.")
@@ -106,8 +107,8 @@ func (u *nativeUI) agentProject(key string) string {
 func (u *nativeUI) uxhSavePreferences() {
 	a := u.agentsState()
 	a.Preferences.CodexAppPath = strings.TrimSpace(u.value("clients-launch-app-path"))
-	if err := writeAgentPreferences(u.owner.dir, a.Preferences); err != nil {
-		a.Error = u.tr("The project folder could not be remembered. You can still open the harness.", "No se pudo recordar la carpeta. Puedes abrir el harness igualmente.")
+	if err := writeAgentPreferences(u.dir, a.Preferences); err != nil {
+		a.Error = u.tr("The project folder could not be remembered. You can still open the app.", "No se pudo recordar la carpeta. Puedes abrir la app igualmente.")
 		return
 	}
 	a.Error = ""
@@ -226,9 +227,8 @@ func (u *nativeUI) agentConnectionReady() bool {
 	if u.chatGPTReady() {
 		return true
 	}
-	u.owner.mu.Lock()
-	defer u.owner.mu.Unlock()
-	return strings.TrimSpace(u.owner.apiKey) != "" && strings.TrimSpace(u.owner.config.OrgID) != ""
+	p := u.owner.readUIProjection()
+	return p.HasKey && p.HasOrg
 }
 
 func (u *nativeUI) detectAgentCapabilities() {
@@ -269,10 +269,12 @@ func (u *nativeUI) agentCompatibility(key string) string {
 		return u.tr("Uses Muse Code's own Meta login and official model catalog. Opens a terminal in your project with the installation selected in CLI settings. No Kilo connection or shared models are required.", "Usa el inicio de sesión de Meta y el catálogo oficial de Muse Code. Abre una terminal en tu proyecto con la instalación seleccionada en los ajustes de las CLI. No requiere conexión Kilo ni modelos compartidos.")
 	case "openmausbot":
 		return u.tr("Uses the local OpenAI-compatible connection with your shared models, listing the default first. OpenMausBot shows exact model IDs instead of custom names. Kilo Proxy applies each model’s supported reasoning level saved in Models. Generation and tools depend on the model and provider.", "Usa la conexión local compatible con OpenAI con tus modelos compartidos, mostrando primero el predeterminado. OpenMausBot muestra los ID exactos en lugar de nombres personalizados. Kilo Proxy aplica el nivel de razonamiento compatible de cada modelo guardado en Modelos. La generación y las herramientas dependen del modelo y del proveedor.")
+	case "omnigent":
+		return u.tr("Opens a separate Omnigent workspace. Choose your own CLI account or Kilo models for each enabled Codex or Claude agent. Start a new chat after changing a connection.", "Abre un espacio Omnigent separado. Elige tu cuenta CLI propia o modelos Kilo para cada agente Codex o Claude activado. Inicia un chat nuevo tras cambiar de conexión.")
 	case "synara":
 		return u.tr("Opens a separate Synara workspace with four Codex and Claude agents. Normal agents use existing CLI sessions; Kilo agents use shared models through the proxy. Start a new chat to change accounts and select the prepared exact gateway model ID.", "Abre un espacio Synara separado con cuatro agentes Codex y Claude. Los agentes normales usan sesiones CLI existentes; los agentes Kilo usan modelos compartidos a través del proxy. Inicia un chat nuevo para cambiar de cuenta y elige el ID exacto de modelo del gateway preparado.")
 	case "t3-code":
-		return u.tr("Opens a separate T3 Code workspace with the accounts and model lists chosen on this harness page. Codex and Claude use existing CLI login; Kilo accounts use the proxy. Claude's official models use its native reasoning selector.", "Abre un espacio T3 Code separado con las cuentas y listas de modelos elegidas en esta página del harness. Codex y Claude usan su sesión CLI existente; las cuentas Kilo usan el proxy. Los modelos oficiales de Claude usan su selector nativo de razonamiento.")
+		return u.tr("Opens a separate T3 Code workspace with the accounts and model lists chosen on this app page. Codex and Claude use existing CLI login; Kilo accounts use the proxy. Claude's official models use its native reasoning selector.", "Abre un espacio T3 Code separado con las cuentas y listas de modelos elegidas en esta página de la app. Codex y Claude usan su sesión CLI existente; las cuentas Kilo usan el proxy. Los modelos oficiales de Claude usan su selector nativo de razonamiento.")
 	case "claude-desktop":
 		return u.tr("Opens a separate Kilo data profile. Regular Claude can stay open; use its usual icon to open it. Quit only the Kilo window before applying changes or opening it again. Other providers require the experimental option in these settings.", "Abre un perfil de datos Kilo separado. Claude normal puede seguir abierto; ábrelo desde su icono habitual. Cierra solo la ventana Kilo antes de aplicar cambios o volver a abrirla. Los demás proveedores requieren la opción experimental de estos ajustes.")
 	case "opencode":
@@ -298,6 +300,8 @@ func (u *nativeUI) agentPurpose(key string) string {
 		return u.tr("Chat, Cowork and Code · your regular Claude can stay open", "Chat, Cowork y Code · tu Claude normal puede seguir abierto")
 	case "t3-code":
 		return u.tr("One workspace with your chosen accounts and models", "Un espacio con las cuentas y modelos que elijas")
+	case "omnigent":
+		return u.tr("Codex and Claude with your chosen connection", "Codex y Claude con la conexión que elijas")
 	case "synara":
 		return u.tr("One workspace, four Codex and Claude agent options", "Un espacio, cuatro opciones de agentes Codex y Claude")
 	case "openmausbot":

@@ -14,6 +14,9 @@ func (u *nativeUI) uxhProfileReady(key string, s *nativeClientSelection) bool {
 	if key == "t3-code" {
 		return u.t3CodePrepared(s)
 	}
+	if key == "omnigent" {
+		return u.omnigentPrepared(s)
+	}
 	base, local, _ := u.clientBase()
 	return s.Saved != "" && s.Saved == nativeSelectionFingerprint(key, s, base, local, u.clientCaps(key))
 }
@@ -77,6 +80,10 @@ func (u *nativeUI) uxhHarnessPage(key string, s *nativeClientSelection, d uxhDet
 	}
 	if key == "t3-code" && u.t3CodeNativeOnly() {
 		onOpen = append(onOpen, u.uxhKV(u.tr("Models", "Modelos"), u.column(u.uxhValue(u.tr("Native provider catalogs", "Catálogos nativos de los proveedores")), u.note(u.tr("Choose models in T3 using each account's native catalog. Shared Kilo models are only needed when a Kilo account is enabled.", "Elige modelos en T3 desde el catálogo nativo de cada cuenta. Los modelos compartidos de Kilo solo se necesitan si activas una cuenta Kilo.")))))
+	} else if key == "synara" && u.synaraNativeOnly() {
+		onOpen = append(onOpen, u.uxhKV(u.tr("Models", "Modelos"), u.column(u.uxhValue(u.tr("Native provider catalogs", "Catálogos nativos de los proveedores")), u.note(u.tr("Choose models in Synara using each account's native catalog. Shared Kilo models are only needed when a Kilo account is enabled.", "Elige modelos en Synara desde el catálogo nativo de cada cuenta. Los modelos compartidos de Kilo solo se necesitan si activas una cuenta Kilo.")))))
+	} else if key == "omnigent" && u.omnigentNativeOnly() {
+		onOpen = append(onOpen, u.uxhKV(u.tr("Models", "Modelos"), u.uxhValue(u.tr("Own CLI catalogs", "Catálogos propios de las CLI"))))
 	} else {
 		onOpen = append(onOpen, u.uxhModelsRow(key, summary))
 	}
@@ -90,7 +97,7 @@ func (u *nativeUI) uxhHarnessPage(key string, s *nativeClientSelection, d uxhDet
 	advanced = append(advanced, u.uxhCommandRows(key, s)...)
 	advanced = append(advanced, u.uxhExportRows(key, s)...)
 	if terminalClientSupported(key) {
-		advanced = append(advanced, u.uxhAdvancedRow(u.tr("Terminal commands", "Comandos de terminal"), u.tr("Open this harness by name from any terminal.", "Abre este harness por su nombre desde cualquier terminal."), nil,
+		advanced = append(advanced, u.uxhAdvancedRow(u.tr("Terminal commands", "Comandos de terminal"), u.tr("Open this app by name from any terminal.", "Abre esta app por su nombre desde cualquier terminal."), nil,
 			u.button("agent:"+key+":terminal-commands", u.tr("Open in Settings", "Abrir en Ajustes"), func() { u.page, u.settingsTab = "settings", "terminal" })))
 	}
 	widgets = append(widgets, u.uxhBlock(u.tr("Advanced", "Avanzado"), "", advanced...))
@@ -132,6 +139,8 @@ func (u *nativeUI) uxhCompatibilityRow(key string) layout.Widget {
 		switch key {
 		case "synara":
 			u.refreshSynaraProfile()
+		case "omnigent":
+			u.refreshOmnigentProfile()
 		case "t3-code":
 			u.refreshT3CodeProfile()
 		case "openmausbot":

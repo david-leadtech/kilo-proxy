@@ -18,9 +18,7 @@ type nativeCatalogCache struct {
 }
 
 func (u *nativeUI) cacheModels(org string) {
-	u.owner.mu.Lock()
-	dir := u.owner.dir
-	u.owner.mu.Unlock()
+	dir := u.dir
 	b, err := json.Marshal(nativeCachedCatalog{SchemaVersion: 1, OrgID: org, Models: u.models, FetchedAt: u.catalogFetchedAt})
 	if err != nil || len(b) > 4<<20 {
 		return

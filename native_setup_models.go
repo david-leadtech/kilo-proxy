@@ -36,16 +36,21 @@ func (u *nativeUI) setupModelsStep() layout.Widget {
 			heading += fmt.Sprintf(u.tr(" · %d models each, each with its role", " · %d modelos cada uno, cada uno con su papel"), size)
 		}
 		rows := []layout.Widget{}
-		for i, pack := range packs {
-			if i > 0 {
+		for _, pack := range packs {
+			// A pack this team cannot use is noise during setup; Models → Packs still lists it.
+			if len(u.models) > 0 && !u.uxmSetupStartUsable(pack.ID) {
+				continue
+			}
+			if len(rows) > 0 {
 				rows = append(rows, uxmHRule(1, nativeInk))
 			}
 			rows = append(rows, u.uxmSetupPackOption(pack, start))
 		}
-		widgets = append(widgets, u.uxmSetupGroup(heading, uxmStack(rows...)))
+		if len(rows) > 0 {
+			widgets = append(widgets, u.uxmSetupGroup(heading, uxmStack(rows...)))
+		}
 	}
 	widgets = append(widgets,
-		u.uxmSubtle(13, u.tr("Packs are candidate selections, not a ranking. Later, in Models → Packs, you can give each harness a different pack.", "Los packs son selecciones candidatas, no un ranking. Más adelante, en Modelos → Packs, puedes dar un pack distinto a cada harness.")),
 		uxmHStack(0, u.uxmLink("setup.models.choose", u.tr("I'd rather choose them myself from the catalog", "Prefiero elegirlos yo del catálogo"), u.openSetupCatalog), nil),
 	)
 	body := func(gtx layout.Context) layout.Dimensions {
@@ -259,16 +264,19 @@ func (u *nativeUI) uxmSetupRecommendedOption(start string) layout.Widget {
 	header := uxmSetupOptionHeader{
 		title:       u.tr("Recommended", "Recomendados"),
 		badge:       u.tr("Start here", "Empieza aquí"),
-		description: u.tr("A balanced selection for everyday coding. The simplest choice if you are not sure.", "Una selección equilibrada para programar a diario. Lo más sencillo si no sabes qué elegir."),
+		description: u.tr("A balanced selection for everyday work. The simplest choice if you are not sure; you can change it later.", "Una selección equilibrada para el día a día. Lo más sencillo si no sabes qué elegir; puedes cambiarla después."),
 	}
-	for _, m := range recommended {
+	// A handful of names is enough to recognise the set; the rest is a count.
+	const shown = 5
+	for i, m := range recommended {
+		if i == shown {
+			header.chips = append(header.chips, u.uxmSubtle(13, fmt.Sprintf(u.tr("+%d more", "+%d más"), len(recommended)-shown)))
+			break
+		}
 		header.chips = append(header.chips, u.uxmChip("", uxmSetupModelName(m), m.Recommendation.Default, nil))
 	}
 	if len(recommended) > 0 {
 		header.count = uxmPlural(len(recommended), u.tr("1 model", "1 modelo"), u.tr("%d models", "%d modelos"))
-		if prices := uxmSetupInputRange(recommended); prices != "" {
-			header.price = prices + u.tr(" input", " entrada")
-		}
 	} else if len(u.models) > 0 {
 		header.unavailable = u.tr("Not available in your catalog", "No disponible en tu catálogo")
 	}
@@ -300,9 +308,6 @@ func (u *nativeUI) uxmSetupPackOption(pack curatedModelPack, start string) layou
 		header.chips = append(header.chips, u.uxmChip("", uxmSetupModelName(m), spec.ID == pack.DefaultModel, nil))
 	}
 	header.count = uxmPlural(len(models), u.tr("1 model", "1 modelo"), u.tr("%d models", "%d modelos"))
-	if prices := uxmSetupInputRange(models); prices != "" {
-		header.price = prices + u.tr(" input · 1M", " entrada · 1M")
-	}
 	enabled := u.uxmSetupStartUsable(pack.ID)
 	if !enabled && len(u.models) > 0 {
 		header.unavailable = u.tr("Not available in your catalog", "No disponible en tu catálogo")

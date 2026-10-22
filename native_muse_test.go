@@ -36,6 +36,7 @@ func nativeMuseTestUI(t *testing.T, language string) (*nativeUI, *nativeLaunchRe
 	u := nativeTestUI(t)
 	u.owner.mu.Lock()
 	u.owner.apiKey, u.owner.config.OrgID, u.owner.config.Language = "", "", language
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	u.language, u.authenticated, u.models = language, false, nil
 	nativeSeedSharedForTest(t, u)
@@ -316,6 +317,7 @@ func nativeT3MuseOnlyTestUI(t *testing.T, language string, delay bool) (*nativeU
 	prefs.Providers = []string{"muse"}
 	u.owner.config.T3Code = prefs
 	u.owner.apiKey, u.owner.config.OrgID, u.owner.config.Language = "", "", language
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	u.authenticated, u.language, u.models = false, language, nil
 	nativeSeedSharedForTest(t, u)
@@ -363,6 +365,7 @@ func TestNativeT3MuseOnlyWithoutKiloConnectionOrModelsAndTransition(t *testing.T
 			}
 			u.owner.mu.Lock()
 			u.owner.config.T3Code.KiloCodex = true
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			u.refreshT3CodePreferences()
 			nativeTestWait(t, u, func() bool { return !u.busy["GET"+nativeT3CodePreferencesEndpoint] })
@@ -410,12 +413,13 @@ func TestNativeMuseKiloReadinessSnapshotsAndNativeRecovery(t *testing.T) {
 			u, recorder, binary := nativeMuseTestUI(t, language)
 			c := u.clientState()
 			prefs := nativeMusePreferences{Version: 1, Connection: "kilo"}
-			c.Muse = nativeMuseState{Preferences: prefs, Requested: true, Loaded: true, ProfileRequested: true, ProfileLoaded: true, Info: nativeMuseInfo{Preferences: prefs, KiloSupported: true, ResolvedExecutable: binary}}
+			c.Muse = nativeMuseState{Preferences: prefs, Requested: true, Loaded: true, ProfileRequested: true, ProfileLoaded: true, ProfilePath: binary, Info: nativeMuseInfo{Preferences: prefs, KiloSupported: true, ResolvedExecutable: binary}}
 			if state := u.uxhLaunchState("muse"); state.canOpen || !strings.Contains(state.reason, u.tr("Connect Kilo or ChatGPT", "Conecta Kilo o ChatGPT")) {
 				t.Fatalf("Muse Kilo bypassed connection: %+v", state)
 			}
 			u.owner.mu.Lock()
 			u.owner.apiKey, u.owner.config.OrgID = "synthetic-kilo-key", "synthetic-org"
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			if state := u.uxhLaunchState("muse"); state.canOpen || !strings.Contains(state.reason, u.tr("save shared models", "guarda modelos compartidos")) {
 				t.Fatalf("Muse Kilo bypassed saved Models: %+v", state)
@@ -469,6 +473,7 @@ func TestNativeMuseKiloReadinessSnapshotsAndNativeRecovery(t *testing.T) {
 			c.Muse.Info.Preferences = c.Muse.Preferences
 			u.owner.mu.Lock()
 			u.owner.apiKey, u.owner.config.OrgID = "", ""
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			nativeSeedSharedForTest(t, u)
 			if !u.museNative() || !u.uxhLaunchState("muse").canOpen {
@@ -489,6 +494,7 @@ func nativeMuseKiloTestUI(t *testing.T, language string) (*nativeUI, *nativeLaun
 	u, recorder, binary := nativeMuseTestUI(t, language)
 	u.owner.mu.Lock()
 	u.owner.apiKey, u.owner.config.OrgID = "synthetic-kilo-personal-key", "e2e-team"
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	probes := &atomic.Int32{}
 	u.owner.museVersionProbe = func(path string) (string, error) {

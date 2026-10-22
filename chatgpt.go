@@ -157,16 +157,19 @@ func (a *app) providerAPI(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	connection := a.chatgpt
 	if connection == nil {
+		a.publishUIProjectionLocked()
 		a.mu.Unlock()
 		jsonError(w, 503, "ChatGPT connection is unavailable.")
 		return
 	}
 	if r.URL.Path != "/api/chatgpt/refresh" && (a.proxyServer != nil || a.active > 0) {
+		a.publishUIProjectionLocked()
 		a.mu.Unlock()
 		jsonError(w, 409, "Stop the proxy before changing ChatGPT authentication.")
 		return
 	}
 	if a.providerChanging {
+		a.publishUIProjectionLocked()
 		a.mu.Unlock()
 		jsonError(w, 409, "Wait for the connection action to finish.")
 		return
@@ -174,6 +177,7 @@ func (a *app) providerAPI(w http.ResponseWriter, r *http.Request) {
 	// Persist the vault slot before starting OAuth, including on first launch.
 	if r.URL.Path == "/api/chatgpt/login" {
 		if err := writeSettings(a.dir, a.config); err != nil {
+			a.publishUIProjectionLocked()
 			a.mu.Unlock()
 			jsonError(w, 500, "Could not save the ChatGPT credential-store reference.")
 			return
@@ -183,6 +187,7 @@ func (a *app) providerAPI(w http.ResponseWriter, r *http.Request) {
 	if changing {
 		a.providerChanging = true
 	}
+	a.publishUIProjectionLocked()
 	a.mu.Unlock()
 	var err error
 	switch r.URL.Path {
@@ -197,6 +202,7 @@ func (a *app) providerAPI(w http.ResponseWriter, r *http.Request) {
 	default:
 		a.mu.Lock()
 		a.providerChanging = false
+		a.publishUIProjectionLocked()
 		a.mu.Unlock()
 		jsonError(w, 404, "Unknown ChatGPT operation.")
 		return
@@ -206,6 +212,7 @@ func (a *app) providerAPI(w http.ResponseWriter, r *http.Request) {
 		a.providerChanging = false
 	}
 	a.chatGPTQuotaDue = time.Now().Add(time.Minute)
+	a.publishUIProjectionLocked()
 	a.mu.Unlock()
 	if err != nil {
 		jsonError(w, 502, err.Error())
@@ -213,6 +220,7 @@ func (a *app) providerAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Lock()
 	a.catalogRevision++
+	a.publishUIProjectionLocked()
 	a.mu.Unlock()
 	a.state(w)
 }

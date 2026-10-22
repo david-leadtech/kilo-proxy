@@ -162,7 +162,7 @@ func (u *nativeUI) uxhFolderMenu() layout.Widget {
 			u.setValue(uxhFolderMenuID+":path", "")
 			u.expanded[uxhFolderMenuID] = false
 		}))
-	footer := u.column(choose, typed, u.note(u.tr("Used by coding harnesses. You can set another one in each harness's settings.", "Se usa en los harnesses de código. Puedes fijar otra en los ajustes de cada uno.")))
+	footer := u.column(choose, typed, u.note(u.tr("Used by coding apps. You can set another one in each app's settings.", "Se usa en las apps para programar. Puedes fijar otra en los ajustes de cada una.")))
 	return func(gtx layout.Context) layout.Dimensions {
 		children := make([]layout.FlexChild, 0, len(items)+2)
 		for _, item := range items {

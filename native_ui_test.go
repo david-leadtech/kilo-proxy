@@ -486,6 +486,7 @@ func TestNativeRejectsEarlierOrganizationCatalog(t *testing.T) {
 	u := nativeTestUI(t)
 	u.owner.mu.Lock()
 	u.owner.catalogRevision = 2
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	u.state["catalogRevision"] = float64(2)
 	u.models = nil

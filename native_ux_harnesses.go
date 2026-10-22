@@ -32,9 +32,9 @@ func (u *nativeUI) uxhGroups() []uxhGroup {
 	folder := uxhShortPath(u.uxhGlobalFolder())
 	return []uxhGroup{
 		{"Desktop apps", "Apps de escritorio", "The official apps, with a separate Kilo profile", "Las apps oficiales, con un perfil de Kilo aparte", []string{"codex", "claude-desktop"}},
-		{"Multi-agent", "Multiagente", "Several Codex and Claude agents in one workspace", "Varios agentes Codex y Claude en un mismo espacio", []string{"synara", "t3-code"}},
+		{"Multi-agent", "Multiagente", "Several Codex and Claude agents in one workspace", "Varios agentes Codex y Claude en un mismo espacio", []string{"synara", "t3-code", "omnigent"}},
 		{"Bots", "Bots", "Assistants that work on their own", "Asistentes que trabajan por su cuenta", []string{"openmausbot"}},
-		{"Coding harnesses", "Harnesses de código", "Terminal and editors · open in " + folder, "Terminal y editores · se abren en " + folder, []string{"claude", "codex-cli", "muse", "opencode", "zed", "open-design", "omp"}},
+		{"Coding apps", "Apps para programar", "Terminal and editors · open in " + folder, "Terminal y editores · se abren en " + folder, []string{"claude", "codex-cli", "muse", "opencode", "zed", "open-design", "omp"}},
 	}
 }
 
@@ -49,6 +49,8 @@ func uxhName(key string) string {
 		return "T3 Code"
 	case "synara":
 		return "Synara"
+	case "omnigent":
+		return "Omnigent"
 	case "generic":
 		return "API"
 	}
@@ -58,7 +60,7 @@ func uxhName(key string) string {
 
 func uxhMonogramText(key string) string {
 	return map[string]string{
-		"codex": "CX", "claude-desktop": "CD", "synara": "SY", "t3-code": "T3", "openmausbot": "MB",
+		"codex": "CX", "claude-desktop": "CD", "synara": "SY", "omnigent": "OM", "t3-code": "T3", "openmausbot": "MB",
 		"claude": ">CC", "codex-cli": ">CX", "muse": ">MU", "opencode": ">OC", "opencode2": ">OC", "zed": "ZD", "open-design": "OD", "omp": ">PI",
 		"xcode": "XC", "generic": "API",
 	}[key]

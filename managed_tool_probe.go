@@ -293,6 +293,13 @@ func managedToolInstalledVersion(ctx context.Context, client, executable, platfo
 		}
 	case "t3-code":
 		version, err = t3CodeVersion(executable, platform)
+		if err == nil {
+			// T3 Code's product branding can include "(Alpha)" or "(Beta)"
+			// even when the selected release is stable. Its packaged version,
+			// which is checked against the selected release before installation,
+			// is the channel identity; the app bundle name is not.
+			channel = managedToolReleaseChannel(version)
+		}
 	case "synara":
 		var meta synaraPackageInfo
 		meta, err = synaraPackageMetadata(executable, platform)
@@ -323,7 +330,7 @@ func managedToolInstalledVersion(ctx context.Context, client, executable, platfo
 	if err != nil {
 		return "", channel, err
 	}
-	if channel == "" && client != "claude" {
+	if channel == "" && client != "claude" && client != "t3-code" {
 		channel = managedToolChannel(version, executable)
 	}
 	// A Claude release number cannot establish whether the user selected the

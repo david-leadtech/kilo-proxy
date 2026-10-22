@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createT3CodeHelper, t3CodeNativeOnly, t3CodePrepared, t3CodePreferencesValid} from '../ui/t3-code-helper.mjs';
 
 const saved = () => ({revision:2,library:{schemaVersion:1,defaultModel:'vendor/second',models:[{id:'vendor/first',displayName:'Friendly',reasoningEffort:'high'},{id:'vendor/second'}]}});
-const preferences = () => ({version:1,codex:true,claude:true,kiloCodex:true,kiloClaude:true,codexModels:'shared',claudeModels:'shared',providers:[],openCode2:false,openCodeConnection:'native',museConnection:'native'});
+const preferences = () => ({version:1,codex:true,claude:true,kiloCodex:true,kiloClaude:true,codexModels:'shared',claudeModels:'shared',providers:[],openCode2:false,openCodeConnection:'native',museConnection:'native',museModels:'official'});
 const preferencesResponse = () => ({preferences:preferences(),supportedProviders:[],openCode2Supported:false,requiresPreparation:false});
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function fixture(t, api, options = {}) {
@@ -370,7 +370,7 @@ test('newly enabling Muse selects Kilo explicitly and missing capability permits
  let prefs={...preferences(),kiloCodex:false,kiloClaude:false};const writes=[];
  const {helper,nodes}=fixture(t,async path=>path==='model-library'?saved():{preferences:prefs,prepared:false}, {preferencesAPI:async body=>{if(body){writes.push(structuredClone(body));prefs=structuredClone(body);}return {preferences:prefs,supportedProviders:[{id:'muse',label:'Muse Code'}]};}});
  await tick();const muse=nodes.get('t3-code-provider-options').children.find(row=>row.children[0]?.id==='t3-code-provider-muse').children[0];muse.checked=true;muse.dispatch('change');await tick();
- assert.equal(writes[0].museConnection,'kilo');assert.equal(helper.launchState().valid,false);assert.match(helper.launchState().reason,/cannot use the Kilo Muse connection/);assert.equal(nodes.get('t3-code-muse-connection-kilo').disabled,true);
+ assert.equal(writes[0].museConnection,'kilo');assert.equal(writes[0].museModels,'official');assert.equal(helper.launchState().valid,false);assert.match(helper.launchState().reason,/cannot use the Kilo Muse connection/);assert.equal(nodes.get('t3-code-muse-connection-kilo').disabled,true);
  nodes.get('t3-code-muse-connection').value='native';nodes.get('t3-code-muse-connection').dispatch('change');await tick();assert.equal(helper.preferences().museConnection,'native');assert.equal(helper.launchState().nativeOnly,true);assert.ok(nodes.get('t3-code-agents').children.some(row=>/Meta login/.test(row.textContent)));
 });
 
@@ -379,4 +379,54 @@ test('Muse Kilo saves require exact confirmation and stale mode changes block pr
  const {helper,nodes}=fixture(t,async(path,body)=>{if(body)writes.push(body);return path==='model-library'?saved():{preferences:prefs,prepared:true,library:saved().library,effectiveMuseModels:[]};},{preferencesAPI:async body=>{if(body)prefs=structuredClone(body);const response=structuredClone(prefs);if(body&&omit)delete response.museConnection;return {preferences:response,supportedProviders:[{id:'muse',label:'Muse Code'}],museKiloSupported:true};}});
  await tick();await helper.savePreferences({...prefs,museConnection:'kilo'});assert.equal(nodes.get('t3-code-settings-retry').hidden,false);assert.equal(helper.launchState().valid,false);assert.equal(writes.length,0);
  omit=false;nodes.get('t3-code-settings-retry').dispatch('click');await tick();assert.equal(helper.preferences().museConnection,'kilo');prefs={...prefs,museConnection:'native'};await assert.rejects(helper.launchState().prepare(),/settings changed/);assert.equal(writes.length,0);
+});
+
+
+test('Muse policy normalizes legacy availability and confirms explicit Meta/shared saves', async t=>{
+ let current={...preferences(),codex:false,claude:false,kiloCodex:false,kiloClaude:false,providers:['muse'],museConnection:'kilo'};
+ delete current.museModels;
+ const writes=[];
+ const {helper,nodes}=fixture(t,async path=>path==='model-library'?saved():{prepared:false,preferences:structuredClone(current),library:saved().library,effectiveMuseModels:[]},{preferencesAPI:async body=>{
+  if(body){writes.push(structuredClone(body));current=structuredClone(body);}
+  return {preferences:structuredClone(current),supportedProviders:[{id:'muse',label:'Muse Code'}],museKiloSupported:true};
+ }});
+ await tick();
+ assert.equal(helper.preferences().museModels,'shared');
+ assert.equal(nodes.get('t3-code-muse-models').value,'shared');
+ assert.equal(nodes.get('t3-code-muse-models-field').hidden,false);
+ nodes.get('t3-code-muse-models').value='official';nodes.get('t3-code-muse-models').dispatch('change');
+ await tick();
+ assert.equal(writes.at(-1).museModels,'official');
+ assert.equal(writes.at(-1).museConnection,'kilo');
+ assert.equal(helper.preferences().museModels,'official');
+ assert.match(nodes.get('t3-code-agents').children.at(-1).textContent,/Meta models through the proxy/);
+ helper.render({state:{connectionReady:true},language:'es'});
+ assert.equal(nodes.get('t3-code-muse-official').textContent,'Modelos de Meta');
+ assert.equal(nodes.get('t3-code-muse-shared').textContent,'Todos los modelos compartidos');
+ nodes.get('t3-code-muse-models').value='shared';nodes.get('t3-code-muse-models').dispatch('change');
+ await tick();assert.equal(helper.preferences().museModels,'shared');
+ nodes.get('t3-code-muse-connection').value='native';nodes.get('t3-code-muse-connection').dispatch('change');
+ await tick();
+ assert.equal(helper.preferences().museModels,'shared');
+ assert.equal(nodes.get('t3-code-muse-models-field').hidden,true);
+});
+
+test('Muse policy changes invalidate preparation and omitted response cannot confirm Meta', async t=>{
+ let current={...preferences(),providers:['muse'],museConnection:'kilo',museModels:'shared'};
+ let omit=false;
+ const {helper,nodes}=fixture(t,async path=>path==='model-library'?saved():{prepared:true,preferences:structuredClone(current),library:saved().library},{preferencesAPI:async body=>{
+  if(body)current=structuredClone(body);
+  const response=structuredClone(current);if(omit)delete response.museModels;
+  return {preferences:response,supportedProviders:[{id:'muse',label:'Muse Code'}],museKiloSupported:true};
+ }});
+ await tick();omit=true;
+ await helper.savePreferences({...helper.preferences(),museModels:'official'});
+ assert.equal(helper.preferences().museModels,'shared');
+ assert.match(nodes.get('t3-code-settings-status').textContent,/did not confirm/);
+ assert.equal(helper.launchState().valid,false);
+ assert.equal(t3CodePreferencesValid({...current,museModels:null}),false);
+ assert.equal(t3CodePreferencesValid({...current,museModels:''}),false);
+ assert.equal(t3CodePreferencesValid({...current,museModels:'all'}),false);
+ omit=false;nodes.get('t3-code-settings-retry').dispatch('click');await tick();
+ assert.equal(helper.preferences().museModels,'official');
 });

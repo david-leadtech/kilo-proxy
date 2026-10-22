@@ -34,9 +34,7 @@ func (u *nativeUI) setupConnectionNeeded() bool {
 	if u.chatGPTReady() {
 		return false
 	}
-	u.owner.mu.Lock()
-	defer u.owner.mu.Unlock()
-	return !u.owner.connectionReadyLocked()
+	return !u.owner.uiConnectionReady()
 }
 
 func (u *nativeUI) setSetupStep(step int) {
@@ -60,9 +58,7 @@ func (u *nativeUI) beginSetup() {
 }
 
 func (u *nativeUI) connectionHasKey() bool {
-	u.owner.mu.Lock()
-	defer u.owner.mu.Unlock()
-	return strings.TrimSpace(u.owner.apiKey) != ""
+	return u.owner.readUIProjection().HasKey
 }
 
 func (u *nativeUI) connectionWorking() bool {
@@ -175,7 +171,7 @@ func (u *nativeUI) setProxyRunning(start bool, done func()) {
 	u.call("POST", path, map[string]any{}, func(raw json.RawMessage) {
 		u.acceptState(raw)
 		if nativeBool(u.state, "running") != start {
-			u.setNotice(nativeToneWarning, u.tr("The proxy status could not be confirmed. Try again.", "No se pudo confirmar el estado del proxy. Vuelve a intentarlo."))
+			u.setNotice(nativeToneWarning, u.tr("Could not confirm the Kilo connection. Try again.", "No se pudo confirmar la conexión con Kilo. Vuelve a intentarlo."))
 			return
 		}
 		if done != nil {
@@ -199,24 +195,24 @@ func (u *nativeUI) finishSetup() {
 		if u.page == "setup" && u.setupStep == setupReady {
 			u.page = "agents"
 		}
-		u.setNotice(nativeToneSuccess, u.tr("Your proxy is running. Choose an agent to open your workspace.", "Tu proxy está activo. Elige un agente para abrir tu espacio de trabajo."))
+		u.setNotice(nativeToneSuccess, u.tr("All set. Open an app to start working.", "Todo listo. Abre una app para empezar."))
 	})
 }
 
 func (u *nativeUI) proxyButton() layout.Widget {
 	running := nativeBool(u.state, "running")
-	label := u.tr("Start proxy", "Arrancar proxy")
+	label := u.tr("Turn on", "Activar")
 	if running {
-		label = u.tr("Stop proxy", "Detener proxy")
+		label = u.tr("Pause", "Pausar")
 	} else if !u.agentConnectionReady() {
 		label = u.tr("Connect an account", "Conectar una cuenta")
 	} else if u.setupConnectionNeeded() {
 		label = u.tr("Save connection", "Guardar conexión")
 	}
 	if u.busy["POST/api/start"] {
-		label = u.tr("Starting…", "Arrancando…")
+		label = u.tr("Turning on…", "Activando…")
 	} else if u.busy["POST/api/stop"] {
-		label = u.tr("Stopping…", "Deteniendo…")
+		label = u.tr("Pausing…", "Pausando…")
 	}
 	id := "primary.agents.proxy"
 	button := u.primaryButton
@@ -245,7 +241,7 @@ func (u *nativeUI) setupStepReachable(step int) bool {
 }
 
 func (u *nativeUI) setupStepper() layout.Widget {
-	labels := [...]string{u.tr("Accounts", "Cuentas"), u.tr("Models", "Modelos"), u.tr("Start", "Arrancar")}
+	labels := [...]string{u.tr("Sign in", "Iniciar sesión"), u.tr("Models", "Modelos"), u.tr("Ready", "Listo")}
 	steps := [3]layout.Widget{}
 	for i, label := range labels {
 		step, text := i, label
@@ -415,15 +411,14 @@ func (u *nativeUI) setupPanel() layout.Widget {
 		if choice := u.library.selection.choice(defaultModel); choice != nil {
 			defaultModel = nativeCodexDisplayName(*choice)
 		}
-		summary := u.section(u.tr("Your setup", "Tu configuración"), u.tr("Your connection and models are ready for the local proxy.", "Tu conexión y tus modelos están listos para el proxy local."),
-			u.setupSummaryRowWidget(u.tr("Connected accounts", "Cuentas conectadas"), account),
+		summary := u.section(u.tr("Your setup", "Tu configuración"), u.tr("Press Get started and open your first app. You can change all of this later.", "Pulsa Empezar y abre tu primera app. Puedes cambiar todo esto después."),
+			u.setupSummaryRowWidget(u.tr("Account", "Cuenta"), account),
 			u.setupSummaryRowWidget(u.tr("Models", "Modelos"), modelCount),
 			u.setupSummaryRowWidget(u.tr("Default model", "Modelo predeterminado"), defaultModel),
-			u.pills(u.button("setup.connection-settings", u.tr("Connection settings", "Ajustes de conexión"), func() { u.page, u.settingsTab = "settings", "account" })),
 		)
 		content = u.column(u.banner(nativeToneSuccess, u.tr("You're ready", "Todo está listo")), summary)
 	default:
-		content = u.column(u.setupConnectionPanel(), u.chatGPTAccountPanel())
+		content = u.column(u.setupConnectionPanel(), u.setupChatGPTOption())
 	}
 	return u.column(u.setupStepper(), content)
 }
@@ -441,22 +436,18 @@ func (u *nativeUI) setupFooter() layout.Widget {
 		hasKey := u.connectionHasKey()
 		auth := nativeMap(u.state["auth"])
 		pending := nativeString(auth, "status") == "pending" || nativeString(auth, "status") == "starting"
-		if !hasKey && !pending && !u.expanded["setup.manual"] {
-			primary = u.disabled(!u.kiloConnectionWorking() && !nativeBool(u.state, "running"), u.primaryButton("connection.login", u.tr("Sign in with Kilo / SSO", "Iniciar sesión con Kilo / SSO"), u.beginKiloLogin))
-		} else if hasKey || u.expanded["setup.manual"] {
+		if (hasKey || u.expanded["setup.manual"]) && !pending {
 			canContinue := !u.kiloConnectionWorking() && !nativeBool(u.state, "running") && (hasKey || strings.TrimSpace(u.value("connection.key")) != "") && strings.TrimSpace(u.value("connection.org")) != ""
-			primary = u.disabled(canContinue, u.primaryButton("primary.setup.connection-next", u.tr("Save & choose models", "Guardar y elegir modelos"), u.setupConnectionContinue))
+			primary = u.disabled(canContinue, u.primaryButton("primary.setup.connection-next", u.tr("Continue", "Continuar"), u.setupConnectionContinue))
 		}
 	case setupModels:
 		back = u.button("setup.back-account", u.tr("Back", "Atrás"), func() { u.setSetupStep(setupConnect) })
 		primary = u.uxmSetupPrimary()
 	case setupReady:
 		back = u.button("setup.back-models", u.tr("Back", "Atrás"), func() { u.setSetupStep(setupModels) })
-		label := u.tr("Start proxy and go to agents", "Arrancar proxy e ir a agentes")
-		if nativeBool(u.state, "running") {
-			label = u.tr("Go to agents", "Ir a agentes")
-		} else if u.busy["POST/api/start"] {
-			label = u.tr("Starting…", "Arrancando…")
+		label := u.tr("Get started", "Empezar")
+		if u.busy["POST/api/start"] {
+			label = u.tr("Turning on…", "Activando…")
 		}
 		primary = u.disabled(!u.connectionWorking(), u.primaryButton("primary.setup.finish", label, u.finishSetup))
 	}
@@ -479,17 +470,19 @@ func (u *nativeUI) setupConnectionPanel() layout.Widget {
 	hasKey := u.connectionHasKey()
 	editable := !u.kiloConnectionWorking() && !nativeBool(u.state, "running")
 	widgets := []layout.Widget{}
-	if !hasKey && u.expanded["setup.manual"] && !pending {
-		widgets = append(widgets, u.disabled(editable, u.button("connection.login", u.tr("Sign in with Kilo / SSO", "Iniciar sesión con Kilo / SSO"), u.beginKiloLogin)))
+	if !hasKey && !pending {
+		// The one action most people need: sign in through the browser.
+		widgets = append(widgets, u.disabled(editable, u.primaryButton("connection.login", u.tr("Sign in with Kilo", "Iniciar sesión con Kilo"), u.beginKiloLogin)), u.note(u.tr("Your browser opens so you can confirm. Company single sign-on (SSO) works too.", "Se abrirá tu navegador para que lo confirmes. También funciona con el acceso de tu empresa (SSO).")))
 	} else if hasKey && !pending {
 		account := nativeString(u.state, "accountEmail")
-		if account == "" {
-			account = u.tr("Kilo credential connected", "Credencial de Kilo conectada")
+		signedIn := u.tr("You're signed in to Kilo", "Has iniciado sesión en Kilo")
+		if account != "" {
+			signedIn = fmt.Sprintf(u.tr("Signed in as %s", "Has iniciado sesión como %s"), account)
 		}
-		widgets = append(widgets, u.actionRow(u.label(account), u.disabled(editable, u.button("setup.switch-account", u.tr("Use another account", "Usar otra cuenta"), u.beginKiloLogin))))
+		widgets = append(widgets, u.actionRow(u.label(signedIn), u.disabled(editable, u.button("setup.switch-account", u.tr("Use another account", "Usar otra cuenta"), u.beginKiloLogin))))
 	}
 	if pending {
-		widgets = append(widgets, u.label(u.tr("Enter this code in Kilo: ", "Introduce este código en Kilo: ")+nativeString(auth, "code")), u.note(u.tr("Waiting for authorization. This screen will update when you finish signing in.", "Esperando autorización. Esta pantalla se actualizará al terminar el inicio de sesión.")), u.pills(u.button("connection.verify", u.tr("Open authorization page", "Abrir autorización"), func() { u.open(nativeString(auth, "verificationUrl")) }), u.button("connection.cancel", u.tr("Cancel login", "Cancelar inicio de sesión"), func() { u.call("POST", "/api/auth/cancel", map[string]any{}, u.acceptState) })))
+		widgets = append(widgets, u.setupAuthCode(auth))
 	}
 	if message := nativeString(auth, "message"); message != "" && nativeString(auth, "status") != "approved" {
 		if nativeString(auth, "status") == "error" || nativeString(auth, "status") == "failed" {
@@ -504,25 +497,34 @@ func (u *nativeUI) setupConnectionPanel() layout.Widget {
 		for _, raw := range nativeArray(u.state, "organizations") {
 			org := nativeMap(raw)
 			id, name := nativeString(org, "id"), nativeString(org, "name")
+			caption := ""
 			if name == "" {
 				name = id
 			}
-			teamChoices = append(teamChoices, nativeChoice{Value: id, Label: name, Caption: id})
+			teamChoices = append(teamChoices, nativeChoice{Value: id, Label: name, Caption: caption})
 		}
 		if len(teamChoices) > 0 {
-			widgets = append(widgets, u.optionCards("team.", teamChoices, u.value("connection.org"), editable, func(id string) { u.setValue("connection.org", id) }))
+			widgets = append(widgets, u.note(u.tr("Choose the team that pays for your models.", "Elige el equipo que paga tus modelos.")), u.optionCards("team.", teamChoices, u.value("connection.org"), editable, func(id string) { u.setValue("connection.org", id) }))
 		} else {
-			widgets = append(widgets, u.note(u.tr("No teams loaded yet. Load your teams or enter the organization ID below.", "Aún no se han cargado equipos. Carga tus equipos o introduce el ID de organización abajo.")))
+			widgets = append(widgets, u.note(u.tr("Your teams haven't loaded yet.", "Tus equipos aún no se han cargado.")))
 		}
 		widgets = append(widgets, u.disabled(editable, u.button("connection.teams", u.tr("Load my teams", "Cargar mis equipos"), func() { u.call("POST", "/api/auth/organizations", map[string]any{}, u.acceptState) })))
 	}
-	widgets = append(widgets, u.disabled(editable, u.disclosure("setup.manual", u.tr("Use an API key or team ID instead", "Usar una API key o un ID de equipo en su lugar"))))
-	if u.expanded["setup.manual"] {
-		widgets = append(widgets, u.disabled(editable, u.field("connection.key", u.tr("Personal API key", "API key personal"), u.tr("Leave blank to keep the current key", "Deja vacío para mantener la clave"), true)), u.disabled(editable, u.field("connection.org", u.tr("Organization ID", "ID de organización"), "org_…", false)))
-	} else if hasKey && u.value("connection.org") != "" {
+	if hasKey && !u.expanded["setup.manual"] && u.value("connection.org") != "" {
 		widgets = append(widgets, u.note(u.tr("Selected team: ", "Equipo seleccionado: ")+u.teamName(u.value("connection.org"))))
 	}
-	widgets = append(widgets, u.disabled(editable, u.check("connection.remember", u.tr("Remember my login in the system credential store", "Recordar mi sesión en el almacén del sistema"), nil)), u.hint(u.tr("Remember saves your login in the system credential store, so you stay signed in after quitting.", "Recordar guarda tu inicio de sesión en el almacén del sistema para mantener la sesión al volver a abrir la aplicación.")))
+	if !pending {
+		// Keys, organization IDs and keychain storage are for IT-provided setups.
+		widgets = append(widgets, u.disabled(editable, u.disclosure("setup.manual", u.tr("Did your company give you a key? Use it here", "¿Tu empresa te dio una clave? Úsala aquí"))))
+	}
+	if u.expanded["setup.manual"] && !pending {
+		widgets = append(widgets,
+			u.disabled(editable, u.field("connection.key", u.tr("Personal API key", "API key personal"), u.tr("Leave blank to keep the current key", "Deja vacío para mantener la clave"), true)),
+			u.disabled(editable, u.field("connection.org", u.tr("Organization ID", "ID de organización"), "org_…", false)),
+			u.disabled(editable, u.check("connection.remember", u.tr("Keep me signed in on this computer", "Mantener la sesión iniciada en este equipo"), nil)),
+			u.hint(u.tr("Saves your login in the system credential store, so you stay signed in after quitting.", "Guarda tu inicio de sesión en el almacén del sistema para mantener la sesión al volver a abrir la aplicación.")),
+		)
+	}
 	if hasKey || u.expanded["setup.manual"] {
 		if !hasKey && strings.TrimSpace(u.value("connection.key")) == "" {
 			widgets = append(widgets, u.hint(u.tr("Sign in or enter your personal API key to continue.", "Inicia sesión o introduce tu API key personal para continuar.")))
@@ -531,7 +533,43 @@ func (u *nativeUI) setupConnectionPanel() layout.Widget {
 		}
 	}
 	if nativeBool(u.state, "running") {
-		widgets = append(widgets, u.note(u.tr("Stop the proxy to change your connection, or continue with this account.", "Detén el proxy para cambiar la conexión o continúa con esta cuenta.")), u.pills(u.proxyButton(), u.button("setup.keep-account", u.tr("Continue with this account", "Continuar con esta cuenta"), func() { u.setSetupStep(setupModels) })))
+		widgets = append(widgets, u.note(u.tr("Pause the Kilo connection to change accounts, or continue with this account.", "Pausa la conexión con Kilo para cambiar de cuenta o continúa con esta cuenta.")), u.pills(u.proxyButton(), u.button("setup.keep-account", u.tr("Continue with this account", "Continuar con esta cuenta"), func() { u.setSetupStep(setupModels) })))
 	}
-	return u.section(u.tr("Connect your Kilo account", "Conecta tu cuenta de Kilo"), u.tr("Choose the team that pays for your models.", "Elige el equipo que paga tus modelos."), widgets...)
+	description := u.tr("Use the same account you use on kilo.ai.", "Usa la misma cuenta con la que entras en kilo.ai.")
+	if hasKey {
+		description = ""
+	}
+	return u.section(u.tr("Sign in to Kilo", "Inicia sesión en Kilo"), description, widgets...)
+}
+
+// setupAuthCode shows the device code large, with a copy button and the
+// browser steps, because this is where most first-time users get lost.
+func (u *nativeUI) setupAuthCode(auth map[string]any) layout.Widget {
+	code := nativeString(auth, "code")
+	steps := u.column(
+		u.label(u.tr("1. Your browser opened the Kilo page.", "1. Se ha abierto la página de Kilo en tu navegador.")),
+		u.label(u.tr("2. Check that it shows this code.", "2. Comprueba que muestra este código.")),
+		u.label(u.tr("3. Press Authorize. This screen updates by itself.", "3. Pulsa Autorizar. Esta pantalla se actualiza sola.")),
+	)
+	codeRow := u.actionRow(u.column(u.eyebrow(u.tr("Your code", "Tu código")), u.monoStyle(32, code, nativeInk, font.Bold)), u.iconButton("connection.copy-code", u.tr("Copy", "Copiar"), nativeButtonSecondary, nativeIconCopy, func() { u.copy(code) }))
+	return u.card(
+		u.statusBadge(nativeToneInfo, u.tr("Waiting for you to authorize in the browser…", "Esperando a que autorices en el navegador…")),
+		codeRow,
+		steps,
+		u.pills(
+			u.button("connection.verify", u.tr("Open the browser again", "Volver a abrir el navegador"), func() { u.open(nativeString(auth, "verificationUrl")) }),
+			u.ghostButton("connection.cancel", u.tr("Cancel login", "Cancelar inicio de sesión"), func() { u.call("POST", "/api/auth/cancel", map[string]any{}, u.acceptState) }),
+		),
+	)
+}
+
+// setupChatGPTOption keeps the experimental ChatGPT connection one click away
+// so it does not compete with the Kilo sign-in. It stays open while in use.
+func (u *nativeUI) setupChatGPTOption() layout.Widget {
+	account := nativeMap(u.state["chatgpt"])
+	status := nativeString(account, "status")
+	if u.expanded["setup.chatgpt"] || u.chatGPTLoginRequested || nativeBool(account, "connected") || status == "pending" || status == "error" {
+		return u.chatGPTAccountPanel()
+	}
+	return u.disclosure("setup.chatgpt", u.tr("Have ChatGPT Plus or Pro? Connect it too (optional)", "¿Tienes ChatGPT Plus o Pro? Conéctalo también (opcional)"))
 }

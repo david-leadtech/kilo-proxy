@@ -8,6 +8,7 @@ package main
 #include <stdint.h>
 void kiloInstallLifecycle(uintptr_t view);
 int kiloWindowVisible(uintptr_t view);
+int kiloRaiseVisibleWindow(uintptr_t view);
 */
 import "C"
 
@@ -74,4 +75,16 @@ func (d *nativeDesktop) windowVisible() bool {
 	visible := false
 	w.Run(func() { visible = C.kiloWindowVisible(C.uintptr_t(view)) != 0 })
 	return visible
+}
+
+// Deferred activation belongs to this exact new native view. Run the final
+// checks and visible-only raise on Cocoa's thread, serialized with native Close.
+func (d *nativeDesktop) raiseNewWindow(ready desktopWindowReady) {
+	event, ok := ready.view.(gioapp.AppKitViewEvent)
+	if !ok || event.View == 0 || ready.window == nil {
+		return
+	}
+	d.runWindowRaise(ready, ready.window.Run, func() {
+		C.kiloRaiseVisibleWindow(C.uintptr_t(event.View))
+	})
 }

@@ -433,7 +433,8 @@ func runPackageUpdateHelperFixture(t *testing.T, failUpgrade bool) {
 	t.Setenv("NODE_OPTIONS", "synthetic-injection")
 	_ = os.WriteFile(versionFile, []byte("0.57.0"), 0600)
 	newSource := filepath.Join(home, "new-program")
-	newScript := "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 0.58.0; else printf '%s\\n' \"$PATH\" > " + helperShellQuote(restartPathLog) + "; /usr/bin/env node > " + helperShellQuote(nodeLog) + "; if [ -n \"${KILO_API_KEY-}${NODE_OPTIONS-}${HOMEBREW_NO_AUTO_UPDATE-}${GIT_CONFIG_GLOBAL-}\" ]; then printf leaked > " + helperShellQuote(secretLog) + "; fi; printf '%s\\n' \"$@\" > " + helperShellQuote(launch) + "; fi\n"
+	// Publish complete synthetic relaunch evidence before the observer can read it.
+	newScript := "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 0.58.0; else printf '%s\\n' \"$PATH\" > " + helperShellQuote(restartPathLog) + "; /usr/bin/env node > " + helperShellQuote(nodeLog) + "; if [ -n \"${KILO_API_KEY-}${NODE_OPTIONS-}${HOMEBREW_NO_AUTO_UPDATE-}${GIT_CONFIG_GLOBAL-}\" ]; then printf leaked > " + helperShellQuote(secretLog) + "; fi; printf '%s\\n' \"$@\" > " + helperShellQuote(launch+".tmp") + " && /bin/mv " + helperShellQuote(launch+".tmp") + " " + helperShellQuote(launch) + "; fi\n"
 	_ = os.WriteFile(newSource, []byte(newScript), 0700)
 	bundle := strings.TrimSuffix(binary, "/Contents/MacOS/kilo-proxy")
 	brewScript := "#!/bin/sh\nprintf '%s\\n' \"$PATH\" >> " + helperShellQuote(managerPathLog) + "; printf '%s\\n' \"$*\" >> " + helperShellQuote(log) + "\nv=$(/bin/cat " + helperShellQuote(versionFile) + ")\ncase \"$1\" in\n--prefix) printf '%s\\n' " + helperShellQuote(prefix) + ";;\n--cellar) printf '%s\\n' " + helperShellQuote(filepath.Join(prefix, "Cellar/kilo-proxy-desktop")) + ";;\ninfo) "

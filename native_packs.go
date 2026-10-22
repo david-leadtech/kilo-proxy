@@ -22,7 +22,7 @@ type nativePackUI struct {
 
 func (u *nativeUI) packsState() *nativePackUI {
 	if u.packs == nil {
-		store := newModelPacksStore(u.owner.dir)
+		store := newModelPacksStore(u.dir)
 		u.packs = &nativePackUI{store: store, file: cloneModelPacksFile(store.value), tab: "library", selected: modelLibraryStartRecommended}
 	}
 	return u.packs
@@ -119,7 +119,7 @@ func (u *nativeUI) changePacks(change func(*modelPacksFile) error) bool {
 	}
 	p.file = candidate
 	p.saveError = nil
-	u.setNotice(nativeToneSuccess, u.tr("Model packs saved. Reopen the agent to apply changes.", "Packs guardados. Vuelve a abrir el agente para aplicar los cambios."))
+	u.setNotice(nativeToneSuccess, u.tr("Model packs saved. Reopen the app to apply changes.", "Packs guardados. Vuelve a abrir la app para aplicar los cambios."))
 	return true
 }
 
@@ -198,7 +198,7 @@ func (u *nativeUI) changePersonalPack(id string, change func(*personalModelPack)
 		if len(pack.Library.Models) == 0 {
 			for _, assigned := range file.Assignments {
 				if assigned == id {
-					return errors.New(u.tr("Switch agents back to the shared library before removing the last pack model.", "Devuelve los agentes a la biblioteca compartida antes de quitar el último modelo del pack."))
+					return errors.New(u.tr("Switch apps back to the shared library before removing the last pack model.", "Devuelve las apps a la biblioteca compartida antes de quitar el último modelo del pack."))
 				}
 			}
 		}
@@ -235,7 +235,7 @@ func (u *nativeUI) packReadinessError(key string) error {
 	}
 	packs := u.packsState()
 	if packs.store.recovery || packs.saveError != nil {
-		return errors.New(u.tr("Review saved model packs in Models before opening this agent.", "Revisa los packs guardados en Modelos antes de abrir este agente."))
+		return errors.New(u.tr("Review saved model packs in Models before opening this app.", "Revisa los packs guardados en Modelos antes de abrir esta app."))
 	}
 	id := packs.file.Assignments[key]
 	if id == "" {
@@ -246,7 +246,7 @@ func (u *nativeUI) packReadinessError(key string) error {
 		return errors.New(u.tr("The selected model pack is unavailable or empty.", "El pack seleccionado no está disponible o está vacío."))
 	}
 	if len(u.models) == 0 || len(u.missingPackModels(id)) > 0 {
-		return errors.New(u.tr("Refresh the catalog and review missing pack models before opening this agent.", "Actualiza el catálogo y revisa los modelos ausentes del pack antes de abrir este agente."))
+		return errors.New(u.tr("Refresh the catalog and review missing pack models before opening this app.", "Actualiza el catálogo y revisa los modelos ausentes del pack antes de abrir esta app."))
 	}
 	if key == "claude-desktop" && !slices.ContainsFunc(library.Models, func(item modelLibraryItem) bool {
 		return nativeClaudeDesktopModelAllowed(item.ID, u.claudeDesktopExperimentalModels())
@@ -283,7 +283,7 @@ func (u *nativeUI) packStoreNotice() []layout.Widget {
 	}
 	if p.saveError != nil {
 		return []layout.Widget{u.card(u.message(nativeToneError, p.saveError.Error()), u.button("packs.reload", u.tr("Reload saved packs", "Recargar packs guardados"), func() {
-			p.store = newModelPacksStore(u.owner.dir)
+			p.store = newModelPacksStore(u.dir)
 			p.file = cloneModelPacksFile(p.store.value)
 			p.saveError = nil
 		}))}

@@ -55,13 +55,20 @@ func TestNativeOpenMausBotWideCardAfterDesktopApps(t *testing.T) {
 			u.page, u.language = "agents", lang
 			u.owner.mu.Lock()
 			u.owner.config.Language = lang
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			u.setValue(agentProjectField("openmausbot"), "/does-not-exist/ignored")
 			h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 1700), now: time.Now()}
 			h.frame()
-			// Loading CLI paths changes the readiness hints above the Bots row.
-			// Let that real response settle before targeting the row's pixels.
-			nativeTestWait(t, u, func() bool { return u.cliPreferencesReady() })
+			// CLI paths and multi-agent preferences change hints above Bots.
+			// Finish those real reads before capturing the row's pointer bounds.
+			nativeTestWait(t, u, func() bool {
+				a := u.agentsState()
+				return u.cliPreferencesReady() &&
+					a.Synara.PreferencesState.Loaded && !u.busy["GET"+nativeSynaraPreferencesEndpoint] &&
+					a.T3Code.PreferencesState.Loaded && !u.busy["GET"+nativeT3CodePreferencesEndpoint] &&
+					a.Omnigent.PreferencesState.Loaded && !u.busy["GET"+nativeOmnigentPreferencesEndpoint]
+			})
 			h.frame()
 			codex := h.target(u.tr("Open Codex", "Abrir Codex"), semantic.Button).Desc.Bounds
 			claude := h.target(u.tr("Open Claude Desktop", "Abrir Claude Desktop"), semantic.Button).Desc.Bounds
@@ -146,6 +153,7 @@ func TestNativeOpenMausBotPreparationFailureAndEditsNeverLaunch(t *testing.T) {
 			case "connection":
 				u.owner.mu.Lock()
 				u.owner.config.OrgID = "changed-team"
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 			}
 			recorder.unblock()
@@ -221,6 +229,7 @@ func TestNativeOpenMausBotPreparedReasoningIsReadOnlyAndFresh(t *testing.T) {
 			u.agentsState().OpenMausBot.Info.Prepared = true
 			u.owner.mu.Lock()
 			u.owner.config.OrgID = "changed-team"
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			if u.openMausBotReasoningReady(selection) {
 				t.Fatal("changed connection displayed stale applied reasoning")

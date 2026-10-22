@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/zalando/go-keyring"
@@ -74,6 +75,7 @@ type chatGPTCredentials struct {
 }
 
 type chatGPTConnection struct {
+	uiProjection     atomic.Pointer[chatGPTUIProjection]
 	mu               sync.Mutex
 	vault            credentialVault
 	vaultID          string
@@ -113,6 +115,7 @@ func newChatGPTConnection(vault credentialVault, vaultID string, transport http.
 		state:            chatGPTState{Status: "idle"},
 		writeCredentials: atomicCatalogFile,
 	}
+	defer c.publishUIProjectionLocked()
 	if len(dirs) > 0 {
 		c.storageDir = dirs[0]
 	}
@@ -260,6 +263,7 @@ func (c *chatGPTConnection) begin(ctx context.Context) error {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	defer c.publishUIProjectionLocked()
 	if c.state.Status == "pending" {
 		return errors.New("ChatGPT sign-in is already pending.")
 	}
@@ -293,6 +297,7 @@ func (c *chatGPTConnection) cancel() {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	defer c.publishUIProjectionLocked()
 	c.invalidateLocked()
 	c.state.Status, c.state.Error = "idle", ""
 	c.state.VerificationURL, c.state.Code = "", ""
@@ -301,6 +306,7 @@ func (c *chatGPTConnection) cancel() {
 func (c *chatGPTConnection) logout() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	defer c.publishUIProjectionLocked()
 	c.invalidateLocked()
 	c.creds = chatGPTCredentials{}
 	c.state = chatGPTState{Status: "idle"}
@@ -329,6 +335,7 @@ func (c *chatGPTConnection) logout() error {
 func (c *chatGPTConnection) failLogin(gen uint64, message string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	defer c.publishUIProjectionLocked()
 	if c.generation != gen {
 		return
 	}
@@ -444,6 +451,7 @@ func (c *chatGPTConnection) deviceLogin(ctx context.Context, gen uint64) {
 		}
 		c.state = chatGPTState{Status: "idle"}
 		c.loginCancel = nil
+		c.publishUIProjectionLocked()
 		c.mu.Unlock()
 		// Quota failure is nonfatal and never changes a successful login.
 		quotaCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -567,6 +575,7 @@ func (c *chatGPTConnection) saveLocked(creds chatGPTCredentials) error {
 		return errors.New("Could not save encrypted ChatGPT credentials. Check the configuration folder.")
 	}
 	c.creds = creds
+	c.publishUIProjectionLocked()
 	return nil
 }
 
@@ -613,6 +622,7 @@ func (c *chatGPTConnection) refreshCredentials(ctx context.Context, cancel conte
 	creds, err := c.exchange(ctx, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {old.Refresh}}, old)
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	defer c.publishUIProjectionLocked()
 	if gen != c.generation {
 		err = errors.New("ChatGPT connection changed. Try again.")
 	} else {

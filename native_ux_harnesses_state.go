@@ -43,10 +43,11 @@ func (u *nativeUI) uxhMuseLaunchState() uxhLaunch {
 	if !c.Muse.Requested {
 		u.refreshMusePreferencesAfter(nil)
 	}
-	if c.Muse.ProfileLoaded && c.Muse.Info.ResolvedExecutable != c.LaunchInfo.Clients["muse"].Path {
+	if c.Muse.ProfileRequested && c.Muse.ProfilePath != c.LaunchInfo.Clients["muse"].Path {
 		c.Muse.ProfileRequested = false
 		c.Muse.ProfileLoaded = false
 		c.Muse.Info.Prepared = false
+		c.Muse.ProfileGeneration++
 	}
 	if c.Muse.Loaded && !c.Muse.ProfileRequested {
 		u.refreshMuseProfile()
@@ -64,7 +65,7 @@ func (u *nativeUI) uxhMuseLaunchState() uxhLaunch {
 	case !u.cliPreferencesReady():
 		l.reason, l.local = u.tr("Load or finish saving CLI executable settings before opening.", "Carga o termina de guardar las rutas de las CLI antes de abrir."), true
 	case c.Launching != "" || u.busy["POST"+nativeLaunchEndpoint]:
-		l.reason = u.tr("Wait for the current harness operation to finish.", "Espera a que termine la operación actual del harness.")
+		l.reason = u.tr("Wait for the current app operation to finish.", "Espera a que termine la operación actual de la app.")
 	}
 	if l.reason == "" {
 		if reason := u.museReadinessReason(); reason != "" {
@@ -90,6 +91,12 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 	if key == "t3-code" && !a.T3Code.PreferencesState.Requested {
 		u.refreshT3CodePreferences()
 	}
+	if key == "omnigent" && !a.Omnigent.PreferencesState.Requested {
+		u.refreshOmnigentPreferencesAfter(nil)
+	}
+	if key == "synara" && !a.Synara.PreferencesState.Requested {
+		u.refreshSynaraPreferences()
+	}
 	if key == "opencode" {
 		if !c.OpenCodePreferences.Requested {
 			u.refreshOpenCodePreferencesAfter(nil)
@@ -103,12 +110,12 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 	_, validation := nativeClientPayload(key, s)
 	libraryStatus, libraryReady := u.libraryStatus()
 	connectionReady := u.agentConnectionReady() && !u.connectionWorking() && !u.setupConnectionNeeded()
-	nativeT3 := key == "t3-code" && u.t3CodeNativeOnly()
-	if nativeT3 {
+	nativeAccounts := key == "t3-code" && u.t3CodeNativeOnly() || key == "synara" && u.synaraNativeOnly() || key == "omnigent" && u.omnigentNativeOnly()
+	if nativeAccounts {
 		packIssue, validation, libraryReady, connectionReady = nil, nil, true, true
 	}
 	busy := c.Launching != "" || u.busy["POST"+nativeClientEndpoint(key)] || key == "claude-desktop" && u.busy["POST/api/claude-desktop/options"]
-	l.canOpen = available && libraryReady && connectionReady && (nativeT3 || len(s.Models) > 0) && validation == nil && packIssue == nil && !busy
+	l.canOpen = available && libraryReady && connectionReady && (nativeAccounts || len(s.Models) > 0) && validation == nil && packIssue == nil && !busy
 	if key == "codex" || key == "codex-cli" {
 		l.canOpen = l.canOpen && nativeClientImagesReady(s, u.models, u.state)
 	}
@@ -150,14 +157,14 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 		local(reason)
 	case len(s.Models) == 0 && key == "claude-desktop":
 		local(u.claudeDesktopModelSummary(s))
-	case len(s.Models) == 0 && !nativeT3:
-		l.reason = u.tr("Add at least one shared model before opening a harness.", "Añade al menos un modelo compartido antes de abrir un harness.")
+	case len(s.Models) == 0 && !nativeAccounts:
+		l.reason = u.tr("Add at least one shared model before opening an app.", "Añade al menos un modelo compartido antes de abrir una app.")
 	case validation != nil:
 		local(nativeMessage(validation.Error(), u.language))
 	case (key == "codex" || key == "codex-cli") && !nativeClientImagesReady(s, u.models, u.state):
 		local(u.tr("Review image generation settings in Models before opening Codex.", "Revisa la generación de imágenes en Modelos antes de abrir Codex."))
 	case busy:
-		l.reason = u.tr("Wait for the current harness operation to finish.", "Espera a que termine la operación actual del harness.")
+		l.reason = u.tr("Wait for the current app operation to finish.", "Espera a que termine la operación actual de la app.")
 	}
 	if (key == "opencode" || key == "opencode2") && !u.openCodePreferencesReady() {
 		l.canOpen = false
@@ -194,6 +201,40 @@ func (u *nativeUI) uxhLaunchState(key string) uxhLaunch {
 			}
 		}
 	}
+	if key == "omnigent" {
+		preferences := &a.Omnigent.PreferencesState
+		if preferences.Loaded && !preferences.Preferences.Codex && !preferences.Preferences.Claude {
+			l.canOpen = false
+			l.reason, l.local = u.tr("Enable Codex or Claude before preparing Omnigent.", "Activa Codex o Claude antes de preparar Omnigent."), true
+		}
+		if !preferences.Loaded || preferences.Pending != nil || u.omnigentPreferencesBusy() || u.busy["GET"+nativeOmnigentPreferencesEndpoint] {
+			l.canOpen = false
+			l.reason, l.local = u.tr("Load or finish saving Omnigent settings before opening.", "Carga o termina de guardar los ajustes de Omnigent antes de abrir."), true
+		}
+	}
+	if key == "synara" && available {
+		if u.clientState().OpenCodePreferences.Loaded && (u.openCodePathDirty() || u.openCodePreferencesBusy() || u.clientState().OpenCodePreferences.Pending != nil) {
+			l.canOpen = false
+			l.reason, l.local = u.tr("Finish saving the OpenCode paths before opening Synara.", "Termina de guardar las rutas de OpenCode antes de abrir Synara."), true
+		}
+		preferences := &a.Synara.PreferencesState
+		if preferences.Pending != nil || u.synaraPreferencesBusy() || u.busy["GET"+nativeSynaraPreferencesEndpoint] || preferences.Requested && !preferences.Loaded {
+			l.canOpen = false
+			l.reason, l.local = u.tr("Load or finish saving Synara settings before opening.", "Carga o termina de guardar los ajustes de Synara antes de abrir."), true
+		}
+		if err := u.synaraProviderSelectionError(); err != nil {
+			l.canOpen = false
+			l.reason, l.local = err.Error(), true
+		}
+		if preferences.Loaded {
+			if payload, err := nativeClientPayload(key, s); err == nil {
+				if err := nativeSynaraPreferenceLibraryError(preferences.Preferences, payload.(map[string]any)["library"].(modelLibrary)); err != nil {
+					l.canOpen = false
+					l.reason, l.local = nativeMessage(err.Error(), u.language), true
+				}
+			}
+		}
+	}
 	l.label = u.tr("Open ", "Abrir ") + uxhName(key)
 	if key == "open-design" {
 		l.label = u.tr("Launch Open Design", "Abrir Open Design")
@@ -211,11 +252,11 @@ func (u *nativeUI) uxhSharedReason() string {
 	u.initModelLibrary()
 	switch {
 	case !(u.agentConnectionReady() && !u.connectionWorking() && !u.setupConnectionNeeded()):
-		return u.tr("Connect Kilo or ChatGPT to use Kilo-backed harnesses.", "Conecta Kilo o ChatGPT para usar los harnesses conectados a Kilo.")
+		return u.tr("Connect Kilo or ChatGPT to use apps connected to Kilo.", "Conecta Kilo o ChatGPT para usar las apps conectadas a Kilo.")
 	case !libraryReady:
 		return libraryStatus
 	case len(u.library.selection.Models) == 0:
-		return u.tr("Add shared models for Kilo-backed harnesses.", "Añade modelos compartidos para los harnesses conectados a Kilo.")
+		return u.tr("Add shared models for apps connected to Kilo.", "Añade modelos compartidos para las apps conectadas a Kilo.")
 	}
 	return ""
 }

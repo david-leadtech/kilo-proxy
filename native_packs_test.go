@@ -303,6 +303,7 @@ func TestNativePackUiPointerNavigationAndOwnCopy(t *testing.T) {
 			// restore English during slower Windows/ARM pointer interactions.
 			u.owner.mu.Lock()
 			u.owner.config.Language = "es"
+			u.owner.publishUIProjectionLocked()
 			u.owner.mu.Unlock()
 			u.languageRevision++
 			u.page, u.language = "models", "es"

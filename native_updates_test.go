@@ -25,6 +25,7 @@ type nativeUpdateFixture struct {
 	posts        int
 	failPost     bool
 	postGate     <-chan struct{}
+	postState    *releaseUpdateState
 	stateGate    <-chan struct{}
 	stateSeen    chan struct{}
 	installPosts int
@@ -70,6 +71,10 @@ func newNativeUpdateFixture(t *testing.T, language string, size image.Point) *na
 			gate, fail := f.postGate, f.failPost
 			if r.Method == "POST" {
 				f.posts++
+				if f.postState != nil {
+					state = *f.postState
+					f.state = state
+				}
 			}
 			f.mu.Unlock()
 			if gate != nil {
@@ -101,6 +106,24 @@ func newNativeUpdateFixture(t *testing.T, language string, size image.Point) *na
 				return
 			}
 			jsonResponse(w, 200, map[string]any{"started": true, "message": "synthetic terminal"})
+		case nativeOmnigentPreferencesEndpoint:
+			f.mu.Unlock()
+			if r.Method != http.MethodGet {
+				t.Errorf("update fixture attempted to change Omnigent preferences: %s", r.Method)
+				jsonError(w, 405, "read-only fixture")
+				return
+			}
+			jsonResponse(w, 200, map[string]any{"preferences": normalizeOmnigentPreferences(omnigentPreferences{})})
+		case "/api/clients/omnigent":
+			f.mu.Unlock()
+			if r.Method != http.MethodGet {
+				t.Errorf("update fixture attempted to prepare Omnigent: %s", r.Method)
+				jsonError(w, 405, "read-only fixture")
+				return
+			}
+			// This isolated update fixture has no Omnigent installation.
+			// Describe readiness without resolving, probing or opening an app.
+			jsonResponse(w, 200, map[string]any{"prepared": false, "running": false, "library": emptyModelLibrary(), "preferences": normalizeOmnigentPreferences(omnigentPreferences{}), "effectiveCodexModels": []any{}, "effectiveClaudeModels": []any{}})
 		case nativeT3CodePreferencesEndpoint:
 			f.mu.Unlock()
 			if r.Method != http.MethodGet {
@@ -109,6 +132,14 @@ func newNativeUpdateFixture(t *testing.T, language string, size image.Point) *na
 				return
 			}
 			jsonResponse(w, 200, map[string]any{"preferences": normalizeT3CodePreferences(t3CodePreferences{}), "supportedProviders": []t3CodeProviderSupport{}, "openCode2Supported": false})
+		case nativeSynaraPreferencesEndpoint:
+			f.mu.Unlock()
+			if r.Method != http.MethodGet {
+				t.Errorf("update fixture attempted to change Synara preferences: %s", r.Method)
+				jsonError(w, 405, "read-only fixture")
+				return
+			}
+			jsonResponse(w, 200, map[string]any{"preferences": defaultSynaraPreferences(), "supportedProviders": []nativeSynaraProvider{}, "openCode2Supported": false})
 		case nativeOpenCodePreferencesEndpoint:
 			f.mu.Unlock()
 			if r.Method != http.MethodGet {
@@ -268,8 +299,11 @@ func TestNativeUpdateCheckRetryAndRelease(t *testing.T) {
 				t.Cleanup(unblock)
 				f.mu.Lock()
 				f.failPost, f.postGate = false, gate
-				f.state = releaseUpdateState{CurrentVersion: "0.50.0", Checking: true}
+				// The backend starts checking only after receiving the retry POST.
+				f.postState = &releaseUpdateState{CurrentVersion: "0.50.0", Checking: true}
 				f.mu.Unlock()
+				// Let a normal state poll arrive before the retry is submitted.
+				f.refresh(t)
 				h.frame()
 				h.reveal(check, semantic.Button)
 				h.click(check, semantic.Button)

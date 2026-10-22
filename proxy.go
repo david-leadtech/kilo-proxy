@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -49,6 +50,7 @@ type app struct {
 	imageUploadWarning        string
 	usageHistory              *usageHistoryStore
 	billing                   billingCache
+	usageQueryMu              sync.Mutex
 	billingAutoRefresh        bool
 	modelLibrary              *modelLibraryStore
 	imageGenerationURL        string
@@ -68,6 +70,9 @@ type app struct {
 	museExecutable            string
 	museVersionProbe          func(string) (string, error) // Synthetic fixtures only.
 	synaraExecutable          string
+	omnigentExecutable        string
+	omnigentLaunchUntil       time.Time
+	omnigentSessionEfforts    map[string]omnigentSessionEffort
 	t3CodeProbeClaude         func(string, clientLaunchRuntime) claudeCapabilities // Synthetic test fixtures only.
 	t3CodeCheckRunning        func(string) (bool, error)
 	t3CodeLaunchUntil         time.Time
@@ -113,6 +118,7 @@ type app struct {
 	accountEmail              string
 	keySaved                  bool
 	connectionNeedsSave       bool // Device login and auto-selected teams still need an explicit config save.
+	uiProjection              atomic.Pointer[appUIProjection]
 	mu                        sync.Mutex
 	dir                       string
 	config                    settings
@@ -152,6 +158,7 @@ func newApp(dir string, vault credentialVault) (*app, error) {
 	a.cliExecutables = [2]string{cfg.CodexCLIExecutable, cfg.ClaudeCodeExecutable}
 	a.museExecutable = cfg.MuseCodeExecutable
 	a.synaraExecutable = cfg.SynaraExecutable
+	a.omnigentExecutable = cfg.OmnigentExecutable
 	a.updates = newReleaseUpdateChecker(version)
 	a.chatgpt = newChatGPTConnection(vault, cfg.VaultID, tr, dir)
 	a.modelLibrary = newModelLibraryStore(dir)
@@ -170,6 +177,7 @@ func newApp(dir string, vault credentialVault) (*app, error) {
 			a.keySaved = true
 		}
 	}
+	a.publishUIProjectionLocked()
 	return a, nil
 }
 
@@ -197,7 +205,7 @@ func (e responseAdaptationError) Unwrap() error { return e.cause }
 
 func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 	proxy := &httputil.ReverseProxy{
-		Transport:     remoteImageFallbackTransport{base: traceTransport{a.transport}},
+		Transport:     traceTransport{remoteImageFallbackTransport{base: a.transport}},
 		FlushInterval: -1,
 		ErrorLog:      log.New(io.Discard, "", 0),
 		Rewrite: func(p *httputil.ProxyRequest) {
@@ -262,9 +270,32 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 		}
 		bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		museScope := museProxyScope(bearer, localKey)
-		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || museScope == "" && !secureEqual(bearer, localKey) {
+		omnigentScope := omnigentProxyScope(bearer, localKey)
+		if r.Header.Get("Authorization") == "" && strings.HasPrefix(r.URL.Path, "/omnigent/") {
+			// The Anthropic SDK uses x-api-key. This exception accepts only a
+			// scoped Omnigent credential, never the general local key.
+			omnigentScope = omnigentProxyScope(r.Header.Get("X-Api-Key"), localKey)
+		}
+		if omnigentScope == "" && (!strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || museScope == "" && !secureEqual(bearer, localKey)) {
 			jsonError(w, http.StatusUnauthorized, "API key local incorrecta. Cópiala desde Kilo Proxy.")
 			return
+		}
+		if omnigentScope != "" {
+			if omnigentScope == "claude" && r.Method == http.MethodPost && r.URL.Path == "/omnigent/claude/v1/session-effort" && r.URL.RawPath == "" && r.URL.RawQuery == "" && !r.URL.ForceQuery {
+				a.omnigentSessionEffortAPI(w, r)
+				return
+			}
+			path, ok := omnigentInferencePath(r, omnigentScope)
+			if !ok {
+				jsonError(w, http.StatusNotFound, "This credential is scoped to its Omnigent connection.")
+				return
+			}
+			if r.Method == http.MethodGet {
+				a.serveOmnigentModels(w, omnigentScope)
+				return
+			}
+			r = r.Clone(context.WithValue(r.Context(), omnigentRequestScopeKey{}, omnigentScope))
+			r.URL.Path = path
 		}
 		if museScope != "" {
 			if museCatalogPath(r) {
@@ -321,6 +352,9 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 		recorder := &statusWriter{ResponseWriter: w, status: http.StatusOK, capture: capture}
 		w = recorder
 		if capture != nil {
+			if omnigentScope != "" {
+				capture.addSecrets(omnigentProxyToken(localKey, omnigentScope))
+			}
 			if museScope != "" {
 				capture.addSecrets(museProxyToken(localKey, museScope))
 			}
@@ -379,6 +413,30 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
+		if scope, _ := r.Context().Value(omnigentRequestScopeKey{}).(string); scope != "" {
+			library, catalog, err := a.omnigentScopeLibrary(scope)
+			if err != nil {
+				jsonError(w, http.StatusConflict, err.Error())
+				return
+			}
+			if scope == "claude" {
+				var err error
+				r, err = a.omnigentSessionEffortRequest(r)
+				if err != nil {
+					jsonError(w, http.StatusConflict, err.Error())
+					return
+				}
+			}
+			if err = prepareOmnigentModelRequest(r, scope, library, catalog); err != nil {
+				status := http.StatusBadRequest
+				var oversized *http.MaxBytesError
+				if errors.As(err, &oversized) {
+					status = http.StatusRequestEntityTooLarge
+				}
+				jsonError(w, status, err.Error())
+				return
+			}
+		}
 		if scope, _ := r.Context().Value(museRequestScopeKey{}).(string); scope != "" {
 			library, catalog, err := a.museScopeLibrary(scope)
 			if err != nil {
@@ -478,6 +536,15 @@ func (a *app) inferenceHandler(key, orgID, localKey, host string) http.Handler {
 		}
 		if key == "" || orgID == "" {
 			jsonError(recorder, 401, "This model requires a Kilo connection. Connect Kilo or choose a ChatGPT subscription model.")
+			return
+		}
+		if err := a.prepareResponsesMaxOutputTokens(r, model); err != nil {
+			status := http.StatusBadRequest
+			var oversized *http.MaxBytesError
+			if errors.As(err, &oversized) {
+				status = http.StatusRequestEntityTooLarge
+			}
+			jsonError(w, status, err.Error())
 			return
 		}
 		bridge, err := prepareSchemaBridge(r)

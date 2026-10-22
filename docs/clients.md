@@ -68,6 +68,14 @@ Interface data lives in `~/Library/Application Support/Codex Kilo` on macOS, `%L
 
 Keep the normal `~/.codex/config.toml` unchanged. Do not copy its `auth.json`, cookies, or history. The generated provider uses the local proxy key and `cli_auth_credentials_store = "file"`. Profiles isolate settings and history, not workspaces: use separate checkouts or worktrees for concurrent edits to the same repository. If you previously edited your main config, restore its original provider/model manually.
 
+### Optional ChatGPT-backed desktop tools
+
+Chrome/browser integrations and other OpenAI-backed desktop tools may require a ChatGPT login in the **same isolated profile** used by Codex Kilo. In that case, enable `requires_openai_auth = true` under `[model_providers.kilo-local]` and sign in once with the CLI using that profile's `CODEX_HOME`. Keep `env_key = "KILO_LOCAL_API_KEY"` unchanged: model inference continues to use the local proxy credential.
+
+Profile preparation and catalog updates preserve an existing explicit `requires_openai_auth` choice and do not edit `auth.json`. Fresh profiles still default to `false`, so using Kilo models alone does not require a ChatGPT account. The saved session is managed by Codex; repeated device codes are not a session-renewal mechanism. Logging out, revoking access, or an account policy can still require a new login. Do not copy credentials from the normal Codex profile or run competing credential-refresh scripts.
+
+Xcode's separate profile remains local-key-only and does not inherit this desktop-tools opt-in.
+
 The Electron isolation variable is version-dependent rather than a stable public API. [Compatibility notes](codex-desktop-compatibility.md) describe the inspected macOS version and what was tested. The original vendor app is installed separately and is not redistributed here. Windows and Linux require verification with the installed app version.
 
 ### Multiple models, reasoning, and short names

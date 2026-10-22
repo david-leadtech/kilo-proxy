@@ -24,13 +24,16 @@ type nativeCLIPreferencesState struct {
 
 func nativeCLIPathClient(key string) bool {
 	switch key {
-	case "codex-cli", "claude", "muse", "t3-code", "synara", "open-design", "xcode-codex", "xcode-claude":
+	case "codex-cli", "claude", "muse", "t3-code", "synara", "omnigent", "open-design", "xcode-codex", "xcode-claude":
 		return true
 	}
 	return false
 }
 
 func nativeCLIPathValue(p cliPreferences, client string) string {
+	if client == "omnigent" {
+		return p.OmnigentExecutable
+	}
 	if client == "synara" {
 		return p.SynaraExecutable
 	}
@@ -51,7 +54,7 @@ func (u *nativeUI) cliPreferencesBusy() bool {
 
 func (u *nativeUI) cliPathDirty() bool {
 	s := &u.clientState().CLIPreferences
-	return s.Loaded && (strings.TrimSpace(u.value(nativeCLIPathField("codex-cli"))) != s.Preferences.CodexExecutable || strings.TrimSpace(u.value(nativeCLIPathField("claude"))) != s.Preferences.ClaudeExecutable || strings.TrimSpace(u.value(nativeCLIPathField("muse"))) != s.Preferences.MuseExecutable || strings.TrimSpace(u.value(nativeCLIPathField("synara"))) != s.Preferences.SynaraExecutable)
+	return s.Loaded && (strings.TrimSpace(u.value(nativeCLIPathField("codex-cli"))) != s.Preferences.CodexExecutable || strings.TrimSpace(u.value(nativeCLIPathField("claude"))) != s.Preferences.ClaudeExecutable || strings.TrimSpace(u.value(nativeCLIPathField("muse"))) != s.Preferences.MuseExecutable || strings.TrimSpace(u.value(nativeCLIPathField("synara"))) != s.Preferences.SynaraExecutable || strings.TrimSpace(u.value(nativeCLIPathField("omnigent"))) != s.Preferences.OmnigentExecutable)
 }
 
 func (u *nativeUI) cliPreferencesReady() bool {
@@ -64,7 +67,7 @@ func (u *nativeUI) acceptCLIPreferences(next cliPreferences, discardDraft bool) 
 	changed := s.Loaded && s.Preferences != next
 	claudeChanged := s.Loaded && s.Preferences.ClaudeExecutable != next.ClaudeExecutable
 	synaraChanged := s.Loaded && s.Preferences.SynaraExecutable != next.SynaraExecutable
-	for _, client := range []string{"codex-cli", "claude", "muse", "synara"} {
+	for _, client := range []string{"codex-cli", "claude", "muse", "synara", "omnigent"} {
 		id := nativeCLIPathField(client)
 		if discardDraft || !s.Loaded || strings.TrimSpace(u.value(id)) == nativeCLIPathValue(s.Preferences, client) {
 			u.setValue(id, nativeCLIPathValue(next, client))
@@ -95,6 +98,9 @@ func (u *nativeUI) acceptCLIPreferences(next cliPreferences, discardDraft bool) 
 		}
 		u.agentsState().T3Code.Info.Prepared = false
 		u.agentsState().Synara.Info.Prepared = false
+		u.agentsState().Omnigent.Info.Prepared = false
+		u.agentsState().Omnigent.Generation++
+		u.agentsState().Omnigent.Requested = false
 	}
 }
 
@@ -221,7 +227,9 @@ func (u *nativeUI) saveCLIExecutable(client string, automatic bool) {
 		return
 	}
 	next := s.Preferences
-	if client == "synara" {
+	if client == "omnigent" {
+		next.OmnigentExecutable = path
+	} else if client == "synara" {
 		next.SynaraExecutable = path
 	} else if client == "muse" {
 		next.MuseExecutable = path
@@ -239,8 +247,8 @@ func (u *nativeUI) cliPreferencesPanel() layout.Widget {
 		u.refreshCLIPreferencesAfter(nil)
 	}
 	editable := s.Loaded && s.Pending == nil && !u.cliPreferencesBusy() && u.clientState().Launching == ""
-	rows := []layout.Widget{uxhCell(u.note(u.tr("Choose an installed application or CLI, including a custom version. Empty paths use the current verified Kilo copy first, then the system installation. T3 Code, Synara and Open Design use these same CLI paths. Accounts and chats are kept.", "Elige una aplicación o CLI instalada, incluida una versión personalizada. Las rutas vacías usan primero la copia Kilo actual verificada y después la instalación del sistema. T3 Code, Synara y Open Design usan las mismas rutas de las CLI. Se conservan las cuentas y los chats.")))}
-	for _, choice := range []nativeChoice{{Value: "codex-cli", Label: "Codex CLI"}, {Value: "claude", Label: "Claude Code"}, {Value: "muse", Label: "Muse Code"}, {Value: "synara", Label: "Synara"}} {
+	rows := []layout.Widget{uxhCell(u.note(u.tr("Choose an installed application or CLI, including a custom version. Empty paths use the current verified Kilo copy first, then the system installation. T3 Code, Synara, Omnigent and Open Design use these same CLI paths. Accounts and chats are kept.", "Elige una aplicación o CLI instalada, incluida una versión personalizada. Las rutas vacías usan primero la copia Kilo actual verificada y después la instalación del sistema. T3 Code, Synara, Omnigent y Open Design usan las mismas rutas de las CLI. Se conservan las cuentas y los chats.")))}
+	for _, choice := range []nativeChoice{{Value: "codex-cli", Label: "Codex CLI"}, {Value: "claude", Label: "Claude Code"}, {Value: "muse", Label: "Muse Code"}, {Value: "synara", Label: "Synara"}, {Value: "omnigent", Label: "Omnigent"}} {
 		client, label := choice.Value, choice.Label
 		id := nativeCLIPathField(client)
 		dirty := s.Loaded && strings.TrimSpace(u.value(id)) != nativeCLIPathValue(s.Preferences, client)
@@ -257,9 +265,9 @@ func (u *nativeUI) cliPreferencesPanel() layout.Widget {
 			rows = append(rows, uxhCell(u.note(u.tr("Resolved executable: ", "Ejecutable detectado: ")+info.Path)))
 		}
 		if client == "muse" {
-			rows = append(rows, uxhCell(u.note(u.tr("Choose Kilo shared models or your Meta account in the Muse or T3 Code harness settings. Both use this selected executable, including custom versions.", "Elige los modelos compartidos de Kilo o tu cuenta de Meta en los ajustes del harness Muse o T3 Code. Ambas opciones usan este ejecutable seleccionado, incluidas las versiones personalizadas."))))
+			rows = append(rows, uxhCell(u.note(u.tr("Choose Kilo shared models or your Meta account in the Muse or T3 Code app settings. Both use this selected executable, including custom versions.", "Elige los modelos compartidos de Kilo o tu cuenta de Meta en los ajustes de la app Muse o T3 Code. Ambas opciones usan este ejecutable seleccionado, incluidas las versiones personalizadas."))))
 		}
-		if client == "synara" {
+		if client == "synara" && u.owner.launchRuntime().platform == "linux" {
 			rows = append(rows, uxhCell(u.note(u.tr("On Linux, select a persistent extracted Synara executable. A raw AppImage can be detected but is not ready to open: install a verified Kilo copy or select the extracted executable. Detection does not verify its source, version or channel. Ubuntu sandbox restrictions still apply.", "En Linux, selecciona un ejecutable de Synara extraído en una ubicación permanente. Un AppImage sin extraer puede detectarse, pero no está listo para abrir: instala una copia Kilo verificada o selecciona el ejecutable extraído. La detección no verifica su origen, versión ni canal. Se mantienen las restricciones del sandbox de Ubuntu."))))
 		}
 	}
@@ -270,7 +278,7 @@ func (u *nativeUI) cliPreferencesPanel() layout.Widget {
 	case !s.Loaded:
 		status = u.tr("Loading CLI paths…", "Cargando rutas de las CLI…")
 	case u.cliPathDirty():
-		status = u.tr("Save the executable paths before preparing or opening a harness.", "Guarda las rutas de los ejecutables antes de preparar o abrir un harness.")
+		status = u.tr("Save the executable paths before preparing or opening an app.", "Guarda las rutas de los ejecutables antes de preparar o abrir una app.")
 	case s.Changed:
 		status = u.tr("Paths saved. Close the affected Kilo workspace and prepare again. Chats are kept.", "Rutas guardadas. Cierra el espacio Kilo afectado y prepara de nuevo. Los chats se conservan.")
 	}

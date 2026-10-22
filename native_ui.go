@@ -43,6 +43,7 @@ type nativeUI struct {
 	packs               *nativePackUI
 	agents              *nativeAgents
 	terminalCommands    *nativeTerminalCommands
+	usageExplorer       *nativeUsageExplorer
 	setupStep           int
 	traceGeneration     uint64
 	modelsPending       bool
@@ -66,9 +67,12 @@ type nativeUI struct {
 	packageUpdateStarted        bool
 	packageUpdateFailed         bool
 	proxyRevision               uint64
+	kiloAuthRevision            uint64
 	chatGPTRevision             uint64
 	chatGPTLoginRequested       bool
 
+	dir                            string
+	bridge                         desktopBridge
 	owner                          *app
 	invalidate                     func()
 	theme                          *material.Theme
@@ -107,16 +111,28 @@ func newNativeUI(owner *app, invalidate func()) *nativeUI {
 	t.Bg, t.Fg = nativeBg, nativeText
 	t.ContrastBg, t.ContrastFg = nativeInk, nativeSurface
 	u := &nativeUI{owner: owner, invalidate: invalidate, theme: t, updates: make(chan func(), 128), editors: map[string]*widget.Editor{}, buttons: map[string]*widget.Clickable{}, checks: map[string]*widget.Bool{}, lists: map[string]*widget.List{}, expanded: map[string]bool{}, busy: map[string]bool{}, state: map[string]any{}, client: "codex", page: "agents", traceStage: "request"}
+	// Startup may seed configuration before attaching the native window.
+	// Publish once here; no frame or queued completion acquires app.mu.
 	owner.mu.Lock()
-	u.language = owner.config.Language
-	u.setValue("connection.org", owner.config.OrgID)
-	u.setValue("connection.port", strconv.Itoa(owner.config.Port))
-	catalog := readNativeCachedCatalog(owner.dir, owner.catalogScopeLocked())
+	owner.publishUIProjectionLocked()
+	u.dir, u.bridge = owner.dir, owner.desktop
+	owner.mu.Unlock()
+	if owner.chatgpt != nil {
+		owner.chatgpt.mu.Lock()
+		owner.chatgpt.publishUIProjectionLocked()
+		owner.chatgpt.mu.Unlock()
+	}
+	projection := owner.readUIProjection()
+	u.language = projection.Language
+	u.setValue("connection.org", projection.OrgID)
+	u.setValue("connection.port", strconv.Itoa(projection.Port))
+	catalog := readNativeCachedCatalog(u.dir, owner.uiCatalogScope())
 	u.models, u.catalogFetchedAt = catalog.Models, catalog.FetchedAt
 	u.catalogCached = len(u.models) > 0
-	u.setChecked("connection.remember", nativeRememberDefault(owner.config.Remember, owner.apiKey != ""))
-	owner.mu.Unlock()
+	u.setChecked("connection.remember", nativeRememberDefault(projection.Remember, projection.HasKey))
 	u.initModelLibrary()
+	u.agentsState()
+	u.packsState()
 	if u.setupNeeded() {
 		u.beginSetup()
 	}
@@ -129,7 +145,10 @@ func newNativeUI(owner *app, invalidate func()) *nativeUI {
 			case <-owner.quit:
 				return
 			case <-ticker.C:
-				u.enqueue(func() { u.refreshState() })
+				u.enqueue(func() {
+					u.refreshState()
+					u.pollOmnigentLaunchStatus(time.Now())
+				})
 			}
 		}
 	}()
@@ -526,9 +545,7 @@ func (u *nativeUI) code(id, value string) layout.Widget {
 	}
 }
 func (u *nativeUI) copy(value string) {
-	u.owner.mu.Lock()
-	d := u.owner.desktop
-	u.owner.mu.Unlock()
+	d := u.bridge
 	if d == nil {
 		u.setNotice(nativeToneWarning, u.tr("Clipboard unavailable", "Portapapeles no disponible"))
 		return
@@ -545,9 +562,7 @@ func (u *nativeUI) open(address string) {
 		u.noticeError(err)
 		return
 	}
-	u.owner.mu.Lock()
-	bridge := u.owner.desktop
-	u.owner.mu.Unlock()
+	bridge := u.bridge
 	go func() {
 		open := openBrowser
 		if bridge != nil {
@@ -576,7 +591,11 @@ func nativeRequest(owner *app, method, path string, payload any) (json.RawMessag
 	}
 	req.Header.Set("Authorization", "Bearer "+owner.adminToken)
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 45 * time.Second, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	timeout := 45 * time.Second
+	if path == "/api/usage/query" {
+		timeout = 160 * time.Second
+	}
+	client := &http.Client{Timeout: timeout, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	defer client.CloseIdleConnections()
 	response, err := client.Do(req)
 	if err != nil {
@@ -611,6 +630,10 @@ func (u *nativeUI) call(method, path string, payload any, done func(json.RawMess
 	if changesChatGPT {
 		u.chatGPTRevision++
 	}
+	changesKiloAuth := method == "POST" && (path == "/api/auth/start" || path == "/api/auth/cancel")
+	if changesKiloAuth {
+		u.kiloAuthRevision++
+	}
 	changesProxy := method == "POST" && (path == "/api/start" || path == "/api/stop")
 	if changesProxy {
 		u.proxyRevision++
@@ -619,6 +642,9 @@ func (u *nativeUI) call(method, path string, payload any, done func(json.RawMess
 		raw, err := nativeRequest(u.owner, method, path, payload)
 		u.enqueue(func() {
 			delete(u.busy, key)
+			if changesKiloAuth {
+				u.kiloAuthRevision++
+			}
 			if changesChatGPT {
 				u.chatGPTRevision++
 			}
@@ -640,6 +666,7 @@ func (u *nativeUI) call(method, path string, payload any, done func(json.RawMess
 }
 func (u *nativeUI) refreshState() {
 	revision, saving := u.languageRevision, u.languageTarget != ""
+	kiloAuthRevision, kiloAuthSaving := u.kiloAuthRevision, u.busy["POST/api/auth/start"] || u.busy["POST/api/auth/cancel"]
 	chatGPTRevision, chatGPTSaving := u.chatGPTRevision, u.chatGPTRequestBusy()
 	proxyRevision, proxySaving := u.proxyRevision, u.busy["POST/api/start"] || u.busy["POST/api/stop"]
 	updateRevision, updateSaving := u.updateRevision, u.busy["POST/api/updates"] || u.busy["POST/api/updates/install"]
@@ -650,6 +677,11 @@ func (u *nativeUI) refreshState() {
 		// operation. Discard it before applying any state-derived effects;
 		// the next poll will fetch a coherent snapshot, including after errors.
 		if proxySaving || proxyRevision != u.proxyRevision || u.busy["POST/api/start"] || u.busy["POST/api/stop"] {
+			return
+		}
+		// A Kilo login poll must not restore an earlier login or cancellation.
+		// Only in-flight mutations fence polling; pending approval still refreshes.
+		if kiloAuthSaving || kiloAuthRevision != u.kiloAuthRevision || u.busy["POST/api/auth/start"] || u.busy["POST/api/auth/cancel"] {
 			return
 		}
 		if chatGPTSaving || chatGPTRevision != u.chatGPTRevision || u.chatGPTRequestBusy() {
@@ -776,9 +808,7 @@ func (u *nativeUI) applyModels(raw json.RawMessage, requestedRevision float64, f
 		u.refreshState()
 		return false
 	}
-	u.owner.mu.Lock()
-	currentRevision, org := u.owner.catalogRevision, u.owner.catalogScopeLocked()
-	u.owner.mu.Unlock()
+	currentRevision, org := u.owner.readUIProjection().CatalogRevision, u.owner.uiCatalogScope()
 	if response.Revision != float64(currentRevision) {
 		u.modelsPending = true
 		u.refreshState()

@@ -66,6 +66,7 @@ func (a *app) imageTransportSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	defer a.publishUIProjectionLocked()
 	cfg := a.config
 	input = normalizeImageTransportSettings(input)
 	cfg.ImageTransport = input

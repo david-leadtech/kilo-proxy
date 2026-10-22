@@ -47,6 +47,32 @@ func headlessTestPort(t *testing.T) int {
 	return listener.Addr().(*net.TCPAddr).Port
 }
 
+// Keep the proxy port reserved through fixture setup and offline profile reopening.
+func headlessTestProxyReservation(t *testing.T) (int, func(string, string) (net.Listener, error)) {
+	t.Helper()
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	var mu sync.Mutex
+	reserved := listener
+	return listener.Addr().(*net.TCPAddr).Port, func(network, address string) (net.Listener, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if reserved != nil {
+			if network != "tcp4" || address != reserved.Addr().String() {
+				return nil, errors.New("unexpected headless proxy listener address")
+			}
+			owned := reserved
+			reserved = nil
+			return owned, nil
+		}
+		// Later starts still bind a real socket, preserving restart semantics.
+		return net.Listen(network, address)
+	}
+}
+
 func awaitHeadlessRuntime(t *testing.T, dir string, done <-chan error) terminalRuntime {
 	t.Helper()
 	deadline := time.NewTimer(5 * time.Second)
@@ -151,7 +177,7 @@ func TestHeadlessServeRequiresConnectionAndDoesNotPublishOnFailure(t *testing.T)
 
 func TestHeadlessSetupLiveConfigurationStatusAndStop(t *testing.T) {
 	c := headlessTestClient(t)
-	c.app.config.Port = headlessTestPort(t)
+	c.app.config.Port, c.app.listenProxy = headlessTestProxyReservation(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var serviceOutput bytes.Buffer
@@ -225,7 +251,7 @@ func TestHeadlessSetupLiveConfigurationStatusAndStop(t *testing.T) {
 func TestHeadlessShutdownDrainsInflightInference(t *testing.T) {
 	c := headlessTestClient(t)
 	c.app.apiKey, c.app.config.OrgID = "fixture-upstream", "fixture-org"
-	c.app.config.Port = headlessTestPort(t)
+	c.app.config.Port, c.app.listenProxy = headlessTestProxyReservation(t)
 	entered, releaseUpstream := make(chan struct{}), make(chan struct{})
 	upstreamCancelled := make(chan struct{}, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -303,7 +329,7 @@ func TestHeadlessShutdownDrainsInflightInference(t *testing.T) {
 
 func TestHeadlessShutdownDrainsChatGPTCredentialRefresh(t *testing.T) {
 	c := headlessTestClient(t)
-	c.app.config.Port = headlessTestPort(t)
+	c.app.config.Port, c.app.listenProxy = headlessTestProxyReservation(t)
 	c.app.chatgpt.creds = chatGPTCredentials{Access: chatGPTTestJWT("headless-account"), Refresh: "headless-refresh", Account: "headless-account", Expires: time.Now().Add(-time.Hour).Unix()}
 	refreshEntered, releaseRefresh := make(chan struct{}), make(chan struct{})
 	refreshCancelled := make(chan struct{}, 1)
@@ -406,7 +432,7 @@ func (t *headlessControlUnwindTransport) RoundTrip(r *http.Request) (*http.Respo
 func TestHeadlessShutdownCancelsAndJoinsActiveControlRequests(t *testing.T) {
 	c := headlessTestClient(t)
 	c.app.apiKey, c.app.config.OrgID = "synthetic-key", "synthetic-org"
-	c.app.config.Port = headlessTestPort(t)
+	c.app.config.Port, c.app.listenProxy = headlessTestProxyReservation(t)
 	entered, allowUpstream, finishControl := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	var releaseOnce sync.Once
 	release := func() {

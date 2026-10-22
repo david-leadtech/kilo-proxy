@@ -4,13 +4,14 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 )
 
 // The private gateway correction is selected by its account and model contract,
 // independently of upstream version labels or release hashes. Installed
 // application files are never rewritten.
-const synaraDelegationRevision = 1
+const synaraDelegationRevision = 3
 
 //go:embed synara_delegation_helpers.js
 var synaraDelegationHelpers string
@@ -26,6 +27,9 @@ type synaraDelegationPatch struct {
 }
 
 func synaraDelegationModels(options synaraProfileOptions) (map[string]any, error) {
+	if options.Policy != nil {
+		return synaraPolicyDelegationModels(options)
+	}
 	if err := validateSynaraLibrary(options.Library); err != nil {
 		return nil, err
 	}
@@ -73,6 +77,77 @@ func synaraDelegationModels(options synaraProfileOptions) (map[string]any, error
 		claude = append(claude, claudeModel)
 	}
 	return map[string]any{"codex": codex, "claudeAgent": claude, "defaultModel": options.Library.DefaultModel}, nil
+}
+
+// The same effective account libraries feed preparation, HTTP routing and
+// delegation. Claude's native picker names remain bound to exact gateway IDs;
+// other shared models keep their saved default instead of acquiring invented
+// native effort capabilities.
+func synaraPolicyDelegationModels(options synaraProfileOptions) (map[string]any, error) {
+	policy := synaraOptionsPolicy(options)
+	codex, claude, openCode := []any{}, []any{}, []any{}
+	for _, choice := range terminalLibraryChoices(policy.CodexLibrary, options.Catalog) {
+		model := map[string]any{"slug": choice.Model.ID, "name": nativeCodexDisplayName(choice)}
+		levels, initial := nativeReasoningFor(choice)
+		if len(levels) > 0 {
+			efforts := []any{}
+			for _, level := range levels {
+				efforts = append(efforts, map[string]any{"value": level, "description": level})
+			}
+			model["supportedReasoningEfforts"] = efforts
+			if initial != "" {
+				model["defaultReasoningEffort"] = initial
+			}
+		}
+		codex = append(codex, model)
+	}
+	picker := t3CodeClaudePickerLibrary(policy.ClaudeLibrary, policy.ClaudeRoutes)
+	for i, choice := range terminalLibraryChoices(policy.ClaudeLibrary, options.Catalog) {
+		id := picker.Models[i].ID
+		model := map[string]any{"slug": id, "name": nativeCodexDisplayName(choice)}
+		levels, initial := nativeReasoningFor(choice)
+		allowed, efforts, descriptors := []string{}, []any{}, []any{}
+		if id != choice.Model.ID {
+			for _, level := range levels {
+				if validClaudeEffort(choice.Model.ID, level) {
+					if !claudeEffortCompatible(choice.Model.ID, options.ClaudeCaps) {
+						return nil, managedClaudeEffortVersionError(choice.Model.ID, "Synara")
+					}
+					allowed = append(allowed, level)
+				}
+			}
+			model["kiloAllowedEfforts"] = allowed
+		} else if choice.DefaultReasoning != "" && initial != "" && validClaudeEffort(choice.Model.ID, initial) {
+			if !claudeEffortCompatible(choice.Model.ID, options.ClaudeCaps) {
+				return nil, managedClaudeEffortVersionError(choice.Model.ID, "Synara")
+			}
+			allowed = append(allowed, initial)
+			model["kiloSavedEffort"] = initial
+		}
+		for _, level := range allowed {
+			efforts = append(efforts, map[string]any{"value": level, "description": level})
+			descriptors = append(descriptors, map[string]any{"id": level, "label": level})
+		}
+		model["supportedReasoningEfforts"] = efforts
+		model["optionDescriptors"] = []any{map[string]any{"id": "effort", "label": "Reasoning effort", "type": "select", "options": descriptors}}
+		if initial != "" && slices.Contains(allowed, initial) {
+			model["defaultReasoningEffort"] = initial
+		}
+		claude = append(claude, model)
+	}
+	for _, choice := range terminalLibraryChoices(policy.OpenCodeLibrary, options.Catalog) {
+		levels, initial := nativeReasoningFor(choice)
+		model := map[string]any{"slug": "kilo-local/" + choice.Model.ID, "name": nativeCodexDisplayName(choice), "kiloAllowedVariants": append([]string{}, levels...)}
+		if slices.Contains(levels, initial) {
+			model["kiloDefaultVariant"] = initial
+		}
+		openCode = append(openCode, model)
+	}
+	openCodeDefault := ""
+	if policy.OpenCodeLibrary.DefaultModel != "" {
+		openCodeDefault = "kilo-local/" + policy.OpenCodeLibrary.DefaultModel
+	}
+	return map[string]any{"codex": codex, "claudeAgent": claude, "opencode": openCode, "defaultModels": map[string]string{"codex": policy.CodexLibrary.DefaultModel, "claudeAgent": picker.DefaultModel, "opencode": openCodeDefault}}, nil
 }
 
 func patchSynaraDelegationServer(source []byte, options synaraProfileOptions) ([]byte, error) {
@@ -123,6 +198,9 @@ func applySynaraDelegationPatches(source []byte, options synaraProfileOptions) (
 			after = strings.Replace(synaraDelegationHelpers, "__KILO_SYNARA_GATEWAY_MODELS__", string(encoded), 1) + "\n" + patch.Before
 		}
 		text = strings.ReplaceAll(text, patch.Before, after)
+	}
+	if options.Preferences != nil && synaraOpenCodeKiloEnabled(*options.Preferences) {
+		return patchSynaraDiscoveryModels([]byte(text))
 	}
 	return []byte(text), nil
 }

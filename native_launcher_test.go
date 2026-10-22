@@ -88,6 +88,10 @@ func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nat
 		u.owner.config.T3Code = normalizeT3CodePreferences(t3CodePreferences{})
 		u.owner.config.T3Code.CodexModels, u.owner.config.T3Code.ClaudeModels = "shared", "shared"
 	}
+	if key == "synara" {
+		u.owner.config.Synara = normalizeSynaraPreferences(synaraPreferences{})
+		u.owner.config.Synara.CodexModels, u.owner.config.Synara.ClaudeModels = "shared", "shared"
+	}
 	if key == "t3-code" || key == "synara" {
 		t.Setenv("CODEX_HOME", filepath.Join(u.owner.editorTestRoot, ".codex"))
 		t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(u.owner.editorTestRoot, ".claude"))
@@ -104,6 +108,13 @@ func nativeLaunchTestUI(t *testing.T, key string, delay, failPrepare bool) (*nat
 	openMausBotBinary := syntheticOpenMausBotExecutable(t, u.owner.editorTestRoot, platform)
 	t3CodeBinary := syntheticT3CodeExecutable(t, u.owner.editorTestRoot, platform)
 	synaraBinary := syntheticSynaraExecutable(t, u.owner.editorTestRoot, platform)
+	addSynaraInstalledPickerFixture(t, synaraBinary, platform)
+	addSynaraNativeDefaultsFixture(t, synaraBinary, platform)
+	if key == "synara" && platform != "macos" && platform != "darwin" {
+		// Kilo Claude needs the installed private macOS picker contract.
+		// Other accounts remain launchable on the synthetic native platform.
+		u.owner.config.Synara.KiloClaude = false
+	}
 	codexPath := filepath.Join(u.owner.editorTestRoot, "t3-codex-cli")
 	if platform == "windows" {
 		codexPath += ".exe"
@@ -419,6 +430,7 @@ func TestNativeLaunchLibrarySaveWaitPreservesRequestedSettings(t *testing.T) {
 			case "connection":
 				u.owner.mu.Lock()
 				u.owner.config.OrgID = "new-team"
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 			case "raw-limit":
 				u.setValue(nativeClientField(sharedModelKey, "vendor/one", "output"), "not a number")

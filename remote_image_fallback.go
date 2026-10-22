@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -152,7 +154,9 @@ func remoteImageURL(part map[string]any, path string) (string, bool) {
 	default:
 		return "", false
 	}
-	return value, value != "" && !strings.HasPrefix(strings.ToLower(value), "data:")
+	parsed, err := url.ParseRequestURI(value)
+	return value, err == nil && parsed.Host != "" &&
+		(strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https"))
 }
 
 func remoteImageFallbackPlaceholder(path string) map[string]any {
@@ -174,8 +178,8 @@ func (t remoteImageFallbackTransport) RoundTrip(r *http.Request) (*http.Response
 	}
 	// Never buffer successful responses: Responses, Messages, and Chat
 	// Completions commonly stream indefinitely until the client finishes. The
-	// fallback is only relevant to the gateway's 4xx download error.
-	if response.StatusCode < http.StatusBadRequest || response.StatusCode >= http.StatusInternalServerError {
+	// fallback is only relevant to the gateway's known HTTP 400 download error.
+	if response.StatusCode != http.StatusBadRequest {
 		return response, err
 	}
 
@@ -189,7 +193,10 @@ func (t remoteImageFallbackTransport) RoundTrip(r *http.Request) (*http.Response
 		response.ContentLength = int64(len(body))
 		return response, err
 	}
-	_ = response.Body.Close()
+	// The complete response body was already closed by the bounded reader.
+	if contextErr := r.Context().Err(); contextErr != nil {
+		return nil, contextErr
+	}
 
 	ctx := context.WithValue(r.Context(), remoteImageFallbackAttemptedContextKey{}, true)
 	retry := r.Clone(ctx)
@@ -203,6 +210,12 @@ func (t remoteImageFallbackTransport) RoundTrip(r *http.Request) (*http.Response
 	fallback, retryErr := t.base.RoundTrip(retry)
 	if retryErr == nil && fallback != nil {
 		return fallback, nil
+	}
+	if contextErr := r.Context().Err(); contextErr != nil {
+		return nil, contextErr
+	}
+	if errors.Is(retryErr, context.Canceled) || errors.Is(retryErr, context.DeadlineExceeded) {
+		return nil, retryErr
 	}
 
 	// If the fallback itself could not be sent, preserve the original provider
@@ -223,16 +236,40 @@ func readReplayableResponseBody(body io.ReadCloser, limit int) ([]byte, bool, io
 	}
 	data, err := io.ReadAll(io.LimitReader(body, int64(limit)+1))
 	if err != nil || len(data) > limit {
-		return nil, false, &replayableResponseBody{Reader: io.MultiReader(bytes.NewReader(data), body), Closer: body}
+		readers := []io.Reader{bytes.NewReader(data)}
+		if err != nil {
+			readers = append(readers, &replayableResponseReadError{err: err})
+		}
+		readers = append(readers, body)
+		return nil, false, &replayableResponseBody{Reader: io.MultiReader(readers...), Closer: body}
 	}
 	_ = body.Close()
 	return data, true, nil
 }
 
+// Replay an error consumed during inspection before resuming the original body.
+type replayableResponseReadError struct{ err error }
+
+func (r *replayableResponseReadError) Read([]byte) (int, error) {
+	if r.err == nil {
+		return 0, io.EOF
+	}
+	err := r.err
+	r.err = nil
+	return 0, err
+}
+
 func isRemoteImageDownloadFailure(response *http.Response, body []byte) bool {
-	if response.StatusCode < http.StatusBadRequest || response.StatusCode >= http.StatusInternalServerError || len(body) == 0 {
+	if response.StatusCode != http.StatusBadRequest {
 		return false
 	}
-	message := strings.ToLower(string(body))
-	return strings.Contains(message, "download") && (strings.Contains(message, "file") || strings.Contains(message, "image"))
+	var envelope struct {
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &envelope) != nil || envelope.Error == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(envelope.Error.Message), "Error while downloading file.")
 }

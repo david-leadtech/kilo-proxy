@@ -112,7 +112,7 @@ func (u *nativeUI) uxhAdvancedRow(title, description string, extra []layout.Widg
 
 // uxhBackLink returns to the Harnesses list.
 func (u *nativeUI) uxhBackLink() layout.Widget {
-	link := u.buttonWidget("agents.back", "← "+u.tr("Harnesses", "Harnesses"), nativeButtonLink, nil, false, false, func() { u.page = "agents" })
+	link := u.buttonWidget("agents.back", "← "+u.tr("Apps", "Apps"), nativeButtonLink, nil, false, false, func() { u.page = "agents" })
 	return func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Min.X = gtx.Constraints.Max.X
 		return layout.W.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -179,7 +179,7 @@ func (u *nativeUI) uxhFolderRow(key string) layout.Widget {
 	actions = append(actions, u.disclosure(typeID, u.tr("Type", "Escribir")))
 	rows := []layout.Widget{u.uxhKV(u.tr("Folder", "Carpeta"), value, actions...)}
 	if u.expanded[typeID] {
-		rows[0] = u.column(rows[0], uxhCell(u.field(agentProjectField(key), u.tr("Folder for this harness only (empty = the general one)", "Carpeta solo para este harness (vacía = la general)"), u.uxhGlobalFolder(), false)))
+		rows[0] = u.column(rows[0], uxhCell(u.field(agentProjectField(key), u.tr("Folder for this app only (empty = the general one)", "Carpeta solo para esta app (vacía = la general)"), u.uxhGlobalFolder(), false)))
 	}
 	return u.column(rows...)
 }

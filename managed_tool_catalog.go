@@ -56,6 +56,7 @@ func managedToolSupport(client, platform, arch string) (reason, installURL strin
 		"openmausbot":    "https://github.com/milind-soni/OpenMausBot/releases",
 		"t3-code":        "https://github.com/pingdotgg/t3code/releases",
 		"synara":         "https://www.trysynara.com/docs/getting-started/installation",
+		"omnigent":       "https://omnigent.ai/quickstart/install",
 		"zed":            "https://zed.dev/docs/installation",
 		"xcode-chat":     "https://apps.apple.com/app/xcode/id497799835",
 		"xcode-codex":    "https://apps.apple.com/app/xcode/id497799835",
@@ -67,6 +68,9 @@ func managedToolSupport(client, platform, arch string) (reason, installURL strin
 	}
 	if client == "opencode2" {
 		return "Install OpenCode 2 from its official guide. Kilo keeps its profile separate from OpenCode 1.", installURL
+	}
+	if client == "omnigent" {
+		return "Install Omnigent 0.18.0 with its Python CLI using the official guide, then select its omni executable.", installURL
 	}
 	if platform == "windows" {
 		return "Install and update this tool manually on Windows.", installURL

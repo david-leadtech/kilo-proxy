@@ -84,6 +84,7 @@ func newNativeChatGPTFixture(t *testing.T, language string, size image.Point) *n
 	u.owner.mu.Lock()
 	u.owner.apiKey = ""
 	u.owner.config.OrgID = ""
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	u.language = language
 	u.page = "setup"
@@ -120,6 +121,9 @@ func TestNativeChatGPTLoginOnboardingAndQuota(t *testing.T) {
 				if nativeUpdateHasText(h, "Organization ID") || nativeUpdateHasText(h, "ID de organización") {
 					t.Fatal("ChatGPT onboarding requires Kilo organization")
 				}
+				option := u.tr("Have ChatGPT Plus or Pro? Connect it too (optional)", "¿Tienes ChatGPT Plus o Pro? Conéctalo también (opcional)")
+				h.reveal(option, semantic.Button)
+				h.click(option, semantic.Button)
 				h.reveal(login, semantic.Button)
 				h.click(login, semantic.Button)
 				nativeTestWait(t, u, func() bool {
@@ -335,6 +339,7 @@ func TestNativeDisconnectedIntegrationHintsOfferBothAccounts(t *testing.T) {
 				u.owner.mu.Lock()
 				u.owner.apiKey = ""
 				u.owner.config.OrgID = ""
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 				u.state["chatgptReady"], u.state["chatgpt"] = false, map[string]any{"connected": false, "status": "idle"}
 				u.language = language

@@ -1,11 +1,13 @@
 import {chatGPTConnected,chatGPTReady,connectionReady,validChatGPTVerificationURL,renderChatGPT,renderSubscriptionUsage} from './chatgpt-helper.mjs';
 import {contextControls,contextModel,syncContextModels,contextError,contextPreview} from './context-policy.mjs';
 import {renderAccountUsage} from './account-usage.mjs';
+import {createUsageExplorer} from './usage-explorer.mjs';
 import {renderUpdates, updateView, packageUpdateFailureCode} from './update-helper.mjs';
 import {createOpenMausBotHelper} from './openmausbot-helper.mjs';
 import {createT3CodeHelper} from './t3-code-helper.mjs';
 import {createMuseHelper} from './muse-helper.mjs';
 import {createSynaraHelper} from './synara-helper.mjs';
+import {createOmnigentHelper} from './omnigent-helper.mjs';
 import {createOpenDesignHelper} from './open-design-helper.mjs';
 import {createEditorHelper} from './editor-helper.mjs';
 import {createOpenCodeVersionHelper} from './opencode-version-helper.mjs';
@@ -49,6 +51,7 @@ if (token && /^[a-f0-9]{64}$/.test(token)) {
   history.replaceState(null, '', '/');
 } else token = sessionStorage.getItem('kilo-local-control') || '';
 let state, client = 'generic', busy = false, stopped = false, initialized = false, toastTimer, imageTransportPending = null;
+const usageExplorer = createUsageExplorer(document.getElementById('usage-explorer'), api);
 let imageDependencyPrompt={};
 let updateCheckPending = false, updateRequestError = false;
 let updateInstall = {};
@@ -64,7 +67,7 @@ const isCodexClient = () => ['codex','codex-cli'].includes(client);
 const codexSelection = () => codexClients[client] || codexClients.codex;
 const multiClients = Object.fromEntries(['opencode','claude'].map(id=>[id,{models:new Map(),initial:'',aliases:{},signature:''}]));
 let claudeInstalled=claudeCapabilities(), claudeChecked=false, claudeSetup=null, claudeRendering='',claudePreparing=false,claudeDetecting=false;
-let launchInfo=null,launchDetecting=false,launchDetected=false,launchBusy=false,launchMessage='',launchError=false,launchDirectoryEdited=false;
+let launchInfo=null,launchDetecting=false,launchRefreshPending=false,launchDetected=false,launchBusy=false,launchMessage='',launchError=false,launchDirectoryEdited=false;
 let desktopSignature = '';
 function codexSetupSignature(selection=codexSelection()) { return JSON.stringify([state?.baseURL,contextPreview(()=>codexCatalog([...selection.models.values()],selection.initial)),selection.imageGeneration,selection===codexClients.codex?selection.queueMode:'']); }
 function renderCodexSetup() {
@@ -162,6 +165,7 @@ const descriptions = {
   openmausbot: ['OpenMausBot', '', ''],
   't3-code': ['T3 Code · Kilo', '', ''],
   synara: ['Synara · Kilo', '', ''],
+  omnigent: ['Omnigent · Kilo', '', ''],
   omp: ['Oh My Pi', '', ''],
   'claude-desktop': ['Claude Desktop · Kilo', '', ''],
   opencode: ['OpenCode, conectado directamente.', 'Configuración para OpenCode v1. En /connect → Other usa el ID kilo-local y pega la clave local. Combina este bloque con tu configuración.', 'opencode.json · v1'],
@@ -215,7 +219,8 @@ function launch(key) {
 const openMausBotHelper=createOpenMausBotHelper({api,onChange:renderClientLaunch});
 const museHelper=createMuseHelper({api,onChange:renderClientLaunch});
 const t3CodeHelper=createT3CodeHelper({api,onChange:renderClientLaunch});
-const synaraHelper=createSynaraHelper({api,onChange:renderClientLaunch});
+const omnigentHelper=createOmnigentHelper({api,onChange:renderClientLaunch,onPreferencesConfirmed:()=>{launchRefreshPending=true;if(!launchDetecting)void detectLaunchClients();}});
+const synaraHelper=createSynaraHelper({api,onChange:renderClientLaunch,onPreferencesConfirmed:()=>{launchRefreshPending=true;if(!launchDetecting)void detectLaunchClients();}});
 const openDesignHelper=createOpenDesignHelper({api,refreshCatalog:loadModels,onChange:renderClientLaunch});
 const editorHelper=createEditorHelper({api,notify,copy,refreshCatalog:loadModels,onChange:renderClientLaunch});
 const openCodeVersionHelper=createOpenCodeVersionHelper({api,notify,onPreferencesSaved:()=>{void detectLaunchClients();void openDesignHelper.reload();},onChange:()=>{if(client==='opencode'){renderOpenCodeMode();editorHelper.render({client,state,catalog,language,opencodeBlocked:()=>openCodeVersionHelper.blocked()});}renderClientLaunch();}});
@@ -232,6 +237,7 @@ function rawClientLaunchSelection(){
  if(client==='muse')return museHelper.launchState();
  if(client==='t3-code')return t3CodeHelper.launchState();
  if(client==='synara')return synaraHelper.launchState();
+ if(client==='omnigent')return omnigentHelper.launchState();
  if(client==='open-design')return openDesignHelper.launchState();
  if(client==='opencode')return openCodeVersionHelper.launchState(editorHelper.launchState());
  if(['opencode','zed','omp','claude-desktop'].includes(client))return editorHelper.launchState();
@@ -241,8 +247,8 @@ function rawClientLaunchSelection(){
 function clientLaunchSelection(){
  const selection=rawClientLaunchSelection();
  if(!selection||!cliPathClient(selection.id))return selection;
- const blocked=cliPreferencesHelper.blocked(selection.id),openCodeBlocked=selection.id==='t3-code'&&openCodeVersionHelper.pathsBlocked();
- return {...selection,reason:openCodeBlocked?(language==='en'?'Save or reload the OpenCode executable paths before opening T3 Code.':'Guarda o carga las rutas de OpenCode antes de abrir T3 Code.'):blocked?(language==='en'?'Load or finish saving executable paths in Application and CLI installations before opening.':'Carga o termina de guardar las rutas en Instalaciones de aplicaciones y CLI antes de abrir.'):selection.reason,ready:selection.ready&&cliPreferencesHelper.prepared(selection.id),valid:selection.valid!==false&&!blocked,working:selection.working||blocked,fingerprint:JSON.stringify([selection.fingerprint,cliPreferencesHelper.signature()])};
+ const blocked=cliPreferencesHelper.blocked(selection.id),openCodeBlocked=['t3-code','synara'].includes(selection.id)&&openCodeVersionHelper.pathsBlocked();
+ return {...selection,reason:openCodeBlocked?(language==='en'?'Save or reload the OpenCode executable paths before opening this workspace.':'Guarda o carga las rutas de OpenCode antes de abrir este espacio.'):blocked?(language==='en'?'Load or finish saving executable paths in Application and CLI installations before opening.':'Carga o termina de guardar las rutas en Instalaciones de aplicaciones y CLI antes de abrir.'):selection.reason,ready:selection.ready&&cliPreferencesHelper.prepared(selection.id),valid:selection.valid!==false&&!blocked,working:selection.working||blocked,fingerprint:JSON.stringify([selection.fingerprint,cliPreferencesHelper.signature()])};
 }
 function renderClientLaunch(){
  const L=(en,es)=>language==='en'?en:es,selection=clientLaunchSelection();
@@ -251,7 +257,7 @@ function renderClientLaunch(){
  if(!launchDetected&&!launchDetecting)void detectLaunchClients();
  const detected=launchInfo?.clients?.[selection.id],custom=selection.id==='codex'&&$('client-launch-app').value.trim();
  const cli=['codex-cli','claude','opencode','opencode2','omp','muse'].includes(selection.id),available=!!detected?.available||!!custom,terminal=detected?.kind==='terminal'||cli;
- const name=selection.id==='claude-desktop'?'Claude Desktop · Kilo':detected?.name||({'codex':'Codex Desktop','codex-cli':'Codex CLI',claude:'Claude Code','claude-desktop':'Claude Desktop',opencode:'OpenCode',omp:'Oh My Pi','open-design':'Open Design',openmausbot:'OpenMausBot','t3-code':'T3 Code · Kilo',synara:'Synara · Kilo',zed:'Zed'}[selection.id]||'Xcode');
+ const name=selection.id==='claude-desktop'?'Claude Desktop · Kilo':detected?.name||({'codex':'Codex Desktop','codex-cli':'Codex CLI',claude:'Claude Code','claude-desktop':'Claude Desktop',opencode:'OpenCode',omp:'Oh My Pi','open-design':'Open Design',openmausbot:'OpenMausBot','t3-code':'T3 Code · Kilo',synara:'Synara · Kilo',omnigent:'Omnigent · Kilo',zed:'Zed'}[selection.id]||'Xcode');
  $('client-launch-title').textContent=L('Open on this computer','Abrir en este ordenador');
  const checking=launchDetecting||client==='claude'&&claudeDetecting;
  $('client-launch-refresh').textContent=checking?L('Checking…','Comprobando…'):L('Check again','Volver a comprobar');
@@ -268,44 +274,46 @@ function renderClientLaunch(){
  installLink.setAttribute('aria-label',L(name+' installation guide', 'Guía de instalación de '+name));
  installLink.title=L('Open official installation instructions','Abrir las instrucciones oficiales de instalación');
  $('client-launch-directory-label').textContent=L('Project folder (optional)','Carpeta del proyecto (opcional)');
- $('client-launch-directory-field').hidden=['codex','open-design','claude-desktop','openmausbot','t3-code','synara'].includes(selection.id);
+ $('client-launch-directory-field').hidden=['codex','open-design','claude-desktop','openmausbot','t3-code','synara','omnigent'].includes(selection.id);
  $('client-launch-directory').placeholder=launchInfo?.directory||'';
  $('client-launch-custom').hidden=selection.id!=='codex';
  $('client-launch-custom-label').textContent=L('Custom Codex application','Aplicación de Codex personalizada');
  $('client-launch-app-label').textContent=L('Application path on this computer','Ruta de la aplicación en este ordenador');
  $('client-launch-app').placeholder=launchInfo?.clients?.codex?.path||L('Absolute application path','Ruta absoluta de la aplicación');
  $('client-launch').textContent=launchBusy?L('Launching…','Abriendo…'):L('Launch ',terminal?'Iniciar ':'Abrir ')+name;
- const nativeT3=['t3-code','muse'].includes(selection.id)&&selection.nativeOnly===true;
+ const nativeT3=['t3-code','synara','omnigent','muse'].includes(selection.id)&&selection.nativeOnly===true;
  $('client-launch').disabled=launchBusy||launchDetecting||selection.working||selection.valid===false||!state||(!nativeT3&&(!connectionReady(state)||!selection.count))||!available;
- $('client-launch-help').textContent=selection.id==='muse'?L('Opens the selected Muse executable in your project. Kilo models use a separate profile and require Kilo Proxy; the Meta connection keeps its own login and catalog.','Abre el ejecutable Muse seleccionado en tu proyecto. Los modelos de Kilo usan un perfil separado y requieren Kilo Proxy; la conexión de Meta conserva su sesión y catálogo propios.'):selection.id==='synara'?L('Prepares four agents and starts the proxy before opening Synara · Kilo in a separate workspace. Normal agents use existing CLI login. Start a new chat to change accounts; choose the exact prepared gateway model ID.','Prepara cuatro agentes y arranca el proxy antes de abrir Synara · Kilo en un espacio separado. Los agentes normales usan su sesión CLI existente. Inicia un chat nuevo para cambiar de cuenta; elige el ID exacto de modelo del gateway preparado.'):selection.id==='t3-code'?L('Prepares the accounts and models chosen in this T3 Code panel, then opens T3 Code · Kilo in a separate workspace. Codex and Claude use existing CLI login. Quit only the Kilo T3 window before applying changes.','Prepara las cuentas y modelos elegidos en este panel de T3 Code y abre T3 Code · Kilo en un espacio separado. Codex y Claude usan su sesión CLI existente. Cierra solo la ventana T3 Kilo antes de aplicar cambios.'):selection.id==='openmausbot'?L('Applies the saved shared models and starts the proxy before opening OpenMausBot in its separate Kilo profile.','Aplica los modelos compartidos guardados y arranca el proxy antes de abrir OpenMausBot en su perfil Kilo independiente.'):selection.id==='claude-desktop'?L('Opens Claude Desktop · Kilo with the selected models in a separate data profile. Regular Claude can stay open; open it from its usual icon. Quit only the Kilo window before changing its profile or opening it again.','Abre Claude Desktop · Kilo con los modelos seleccionados en un perfil de datos separado. Claude normal puede seguir abierto; ábrelo desde su icono habitual. Cierra solo la ventana Kilo antes de cambiar su perfil o volver a abrirla.'):selection.id==='open-design'?L('Prepares the selected CLI with your Kilo models, starts the proxy and opens Open Design in its separate Kilo profile.','Prepara el CLI elegido con tus modelos de Kilo, arranca el proxy y abre Open Design en su perfil de Kilo independiente.'):L('Opens with the current models and Kilo configuration. Changes are saved first. Command export settings below apply only to copied commands.','Abre con los modelos y la configuración de Kilo actuales. Los cambios se guardan antes. Los ajustes de exportación inferiores solo afectan a los comandos copiados.')+(selection.id==='zed'?L(' Paste the local key into Zed once using the instructions below.',' Pega la clave local en Zed una vez siguiendo las instrucciones inferiores.'):selection.id==='xcode-chat'?L(' Add the chat provider in Xcode once using the connection details below.',' Añade el proveedor de chat en Xcode una vez con la conexión indicada abajo.'):'');
- const reason=selection.reason||(!available&&!launchDetecting?(detected?.reason||(installed===true?L('The application is installed but cannot be launched on this computer.','La aplicación está instalada pero no se puede abrir en este ordenador.'):L('Application not detected. Install it, then check again.','Aplicación no detectada. Instálala y vuelve a comprobar.'))):!nativeT3&&!selection.count?L('Select at least one model.','Selecciona al menos un modelo.'):'');
+ $('client-launch-help').textContent=selection.id==='muse'?L('Opens the selected Muse executable in your project. Kilo models use a separate profile and require Kilo Proxy; the Meta connection keeps its own login and catalog.','Abre el ejecutable Muse seleccionado en tu proyecto. Los modelos de Kilo usan un perfil separado y requieren Kilo Proxy; la conexión de Meta conserva su sesión y catálogo propios.'):selection.id==='omnigent'?L('Prepares the selected Codex and Claude connections, then opens a separate local Omnigent server in your browser. Stop the Kilo workspace before changing its settings.','Prepara las conexiones elegidas de Codex y Claude y abre un servidor Omnigent local separado en tu navegador. Detén el espacio Kilo antes de cambiar sus ajustes.'):selection.id==='synara'?L('Prepares the accounts and models chosen in this Synara panel, then opens Synara · Kilo in a separate workspace. Codex and Claude use their existing CLI logins. Close only the Kilo Synara window before applying changes.','Prepara las cuentas y modelos elegidos en este panel de Synara y abre Synara · Kilo en un espacio separado. Codex y Claude usan sus sesiones CLI existentes. Cierra solo la ventana Synara Kilo antes de aplicar cambios.'):selection.id==='t3-code'?L('Prepares the accounts and models chosen in this T3 Code panel, then opens T3 Code · Kilo in a separate workspace. Codex and Claude use existing CLI login. Quit only the Kilo T3 window before applying changes.','Prepara las cuentas y modelos elegidos en este panel de T3 Code y abre T3 Code · Kilo en un espacio separado. Codex y Claude usan su sesión CLI existente. Cierra solo la ventana T3 Kilo antes de aplicar cambios.'):selection.id==='openmausbot'?L('Applies the saved shared models and starts the proxy before opening OpenMausBot in its separate Kilo profile.','Aplica los modelos compartidos guardados y arranca el proxy antes de abrir OpenMausBot en su perfil Kilo independiente.'):selection.id==='claude-desktop'?L('Opens Claude Desktop · Kilo with the selected models in a separate data profile. Regular Claude can stay open; open it from its usual icon. Quit only the Kilo window before changing its profile or opening it again.','Abre Claude Desktop · Kilo con los modelos seleccionados en un perfil de datos separado. Claude normal puede seguir abierto; ábrelo desde su icono habitual. Cierra solo la ventana Kilo antes de cambiar su perfil o volver a abrirla.'):selection.id==='open-design'?L('Prepares the selected CLI with your Kilo models, starts the proxy and opens Open Design in its separate Kilo profile.','Prepara el CLI elegido con tus modelos de Kilo, arranca el proxy y abre Open Design en su perfil de Kilo independiente.'):L('Opens with the current models and Kilo configuration. Changes are saved first. Command export settings below apply only to copied commands.','Abre con los modelos y la configuración de Kilo actuales. Los cambios se guardan antes. Los ajustes de exportación inferiores solo afectan a los comandos copiados.')+(selection.id==='zed'?L(' Paste the local key into Zed once using the instructions below.',' Pega la clave local en Zed una vez siguiendo las instrucciones inferiores.'):selection.id==='xcode-chat'?L(' Add the chat provider in Xcode once using the connection details below.',' Añade el proveedor de chat en Xcode una vez con la conexión indicada abajo.'):'');
+ const unavailableReason=!available&&!launchDetecting?(detected?.reason||(installed===true?L('The application is installed but cannot be launched on this computer.','La aplicación está instalada pero no se puede abrir en este ordenador.'):L('Application not detected. Install it, then check again.','Aplicación no detectada. Instálala y vuelve a comprobar.'))):'';
+ const reason=['synara','omnigent'].includes(selection.id)&&unavailableReason?unavailableReason:selection.reason||unavailableReason||(!nativeT3&&!selection.count?L('Select at least one model.','Selecciona al menos un modelo.'):'');
  $('client-launch-status').textContent=t(launchError?launchMessage:reason||launchMessage);
  $('client-launch-status').classList.toggle('error',launchError);
 }
 async function detectLaunchClients(){
  if(launchDetecting)return;
+ launchRefreshPending=false;
  launchDetecting=true;launchDetected=true;renderClientLaunch();
  try{
   launchInfo=await api('clients/launch');
   if(!launchDirectoryEdited)$('client-launch-directory').value=launchInfo.directory||'';
  }catch(error){launchMessage=error.message;launchError=true;}
- finally{launchDetecting=false;if(client==='muse')museHelper.render({state,language,launchInfo});if(client==='opencode')openCodeVersionHelper.render({state,language,launchInfo,launchDetecting});cliPreferencesHelper.render({language,launchInfo,launchDetecting});renderClientLaunch();}
+ finally{launchDetecting=false;if(launchRefreshPending){void detectLaunchClients();return;}if(client==='muse')museHelper.render({state,language,launchInfo});if(client==='opencode')openCodeVersionHelper.render({state,language,launchInfo,launchDetecting});cliPreferencesHelper.render({language,launchInfo,launchDetecting});renderClientLaunch();}
 }
-function launchFingerprint(){const selection=clientLaunchSelection();return JSON.stringify([selection?.id,selection?.fingerprint,['codex','open-design','claude-desktop','openmausbot','t3-code','synara'].includes(selection?.id)?'':$('client-launch-directory').value.trim(),selection?.id==='codex'?$('client-launch-app').value.trim():'']);}
+function launchFingerprint(){const selection=clientLaunchSelection();return JSON.stringify([selection?.id,selection?.fingerprint,['codex','open-design','claude-desktop','openmausbot','t3-code','synara','omnigent'].includes(selection?.id)?'':$('client-launch-directory').value.trim(),selection?.id==='codex'?$('client-launch-app').value.trim():'']);}
 async function openClient(){
  if(launchBusy||$('client-launch').disabled)return;
  const selection=clientLaunchSelection(),fingerprint=launchFingerprint();
- const body={client:selection.id,...(selection.id==='muse'?{museConnection:selection.museConnection,museExecutable:selection.museExecutable}:{}),...(selection.id==='open-design'?{engine:selection.engine}:{}),...(['codex','open-design','claude-desktop','openmausbot','t3-code','synara'].includes(selection.id)?{}:{directory:$('client-launch-directory').value.trim()}),...(selection.id==='codex'&&$('client-launch-app').value.trim()?{appPath:$('client-launch-app').value.trim()}:{})};
+ const body={client:selection.id,...(selection.id==='muse'?{museConnection:selection.museConnection,museExecutable:selection.museExecutable}:{}),...(selection.id==='open-design'?{engine:selection.engine}:{}),...(['codex','open-design','claude-desktop','openmausbot','t3-code','synara','omnigent'].includes(selection.id)?{}:{directory:$('client-launch-directory').value.trim()}),...(selection.id==='codex'&&$('client-launch-app').value.trim()?{appPath:$('client-launch-app').value.trim()}:{})};
  launchBusy=true;launchMessage='';launchError=false;renderClientLaunch();
  try{
   if(!selection.ready||selection.id==='claude-desktop')await selection.prepare();
   if(fingerprint!==launchFingerprint())throw new Error(language==='en'?'Your selection changed while preparing. Review it and open again.':'La selección cambió durante la preparación. Revísala y vuelve a abrir.');
-  const result=await api('clients/launch',body);launchMessage=result.message;await refresh();
+  const result=await api('clients/launch',body);launchMessage=result.message;if(selection.id==='omnigent')await omnigentHelper.launchConfirmed();await refresh();
  }catch(error){launchMessage=error.message;launchError=true;}
  finally{launchBusy=false;renderClientLaunch();}
 }
 $('client-launch').addEventListener('click',openClient);
-$('client-launch-refresh').addEventListener('click',()=>{launchMessage='';launchError=false;void detectLaunchClients();if(client==='claude')void detectClaude();if(client==='open-design')void openDesignHelper.reload();if(client==='openmausbot')void openMausBotHelper.reload();if(client==='muse')void museHelper.reload();if(client==='t3-code')void t3CodeHelper.reload();if(client==='synara')void synaraHelper.reload();if(client==='opencode')void openCodeVersionHelper.reload();});
+$('client-launch-refresh').addEventListener('click',()=>{launchMessage='';launchError=false;void detectLaunchClients();if(client==='claude')void detectClaude();if(client==='open-design')void openDesignHelper.reload();if(client==='openmausbot')void openMausBotHelper.reload();if(client==='muse')void museHelper.reload();if(client==='t3-code')void t3CodeHelper.reload();if(client==='synara')void synaraHelper.reload();if(client==='omnigent')void omnigentHelper.reload();if(client==='opencode')void openCodeVersionHelper.reload();});
 $('client-launch-directory').addEventListener('input',()=>{launchDirectoryEdited=true;launchMessage='';launchError=false;renderClientLaunch();});
 $('client-launch-app').addEventListener('input',()=>{launchMessage='';launchError=false;renderClientLaunch();});
 function renderSnippet() {
@@ -318,6 +326,9 @@ function renderSnippet() {
  const t3CodeActive=client==='t3-code';
  $('t3-code-helper').hidden=!t3CodeActive;
  if(t3CodeActive)t3CodeHelper.render({state,language});
+ const omnigentActive=client==='omnigent';
+ $('omnigent-helper').hidden=!omnigentActive;
+ if(omnigentActive)omnigentHelper.render({state,language});
  const synaraActive=client==='synara';
  $('synara-helper').hidden=!synaraActive;
  if(synaraActive)synaraHelper.render({state,language});
@@ -331,8 +342,8 @@ function renderSnippet() {
  renderOpenCodeMode();
  if(editorActive)editorHelper.render({client,state,catalog,language,opencodeBlocked:client==='opencode'?()=>openCodeVersionHelper.blocked():null});
  $('xcode-helper').hidden=!xcodeActive;
- document.querySelector('#client-panel > .client-instructions').hidden=xcodeActive||editorActive||openDesignActive||openMausBotActive||t3CodeActive||synaraActive||museActive;
- document.querySelector('#client-panel > .snippet-stack').hidden=xcodeActive||editorActive||openDesignActive||openMausBotActive||t3CodeActive||synaraActive||museActive;
+ document.querySelector('#client-panel > .client-instructions').hidden=xcodeActive||editorActive||openDesignActive||openMausBotActive||t3CodeActive||synaraActive||omnigentActive||museActive;
+ document.querySelector('#client-panel > .snippet-stack').hidden=xcodeActive||editorActive||openDesignActive||openMausBotActive||t3CodeActive||synaraActive||omnigentActive||museActive;
  if(xcodeActive)xcodeHelper.render({state,catalog,language});
   const isCodex = ['codex','codex-cli'].includes(client);
   $('codex-copy-help').hidden = !isCodex;
@@ -508,6 +519,7 @@ function render(s) {
   $('empty-activity-help').textContent=s.captureEnabled?t('Verás el endpoint, las cabeceras y los cuerpos capturados para depurar.'):t('Activa la captura cuando necesites inspeccionar peticiones para depurar.');
   renderUsage(s.usage);
   renderAccountUsage($('account-usage'),s,language,busy);
+  usageExplorer.update(s,language);
   if(subscription){const quota=document.createElement('section');quota.id='subscription-usage';renderSubscriptionUsage(quota,s,language,busy);$('account-usage').append(quota);}
   renderChatGPT(document,s,language,busy);
   $('diagram-routing').textContent=subscription?(language==='en'?'Local authentication':'Autenticación local'):t('Añade la organización');

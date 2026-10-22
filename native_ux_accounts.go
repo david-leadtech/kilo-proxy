@@ -120,14 +120,14 @@ func (u *nativeUI) uxsAutoField(id, label, placeholder string, secret bool, appl
 }
 
 func (u *nativeUI) uxsAccountsBlock() layout.Widget {
-	return u.uxsBlock(u.tr("Accounts", "Cuentas"), u.tr("who pays for what your harnesses ask", "quién paga lo que piden tus harnesses"), u.uxsKiloRow(), u.uxsChatGPTRow())
+	return u.uxsBlock(u.tr("Accounts", "Cuentas"), u.tr("who pays for what your apps ask", "quién paga lo que piden tus apps"), u.uxsKiloRow(), u.uxsChatGPTRow())
 }
 
 func (u *nativeUI) uxsConnectionBlock() layout.Widget {
 	base := nativeString(u.state, "baseURL")
 	row := u.uxsRow(
 		u.tr("Local address", "Dirección local"), u.tr("Any OpenAI-compatible client", "Cualquier cliente compatible con OpenAI"),
-		u.uxsValue(u.uxsMono(base), u.tr("Harnesses you open from Kilo Proxy come already configured.", "Los harnesses que abres desde Kilo Proxy ya vienen configurados.")),
+		u.uxsValue(u.uxsMono(base), u.tr("Apps you open from Kilo Proxy come already configured.", "Las apps que abres desde Kilo Proxy ya vienen configuradas.")),
 		u.uxsActions(
 			u.button("connection.copy-url", u.tr("Copy URL", "Copiar URL"), func() { u.copy(nativeString(u.state, "baseURL")) }),
 			u.button("connection.copy-key", u.tr("Copy local key", "Copiar clave local"), func() { u.copy(nativeString(u.state, "localKey")) }),

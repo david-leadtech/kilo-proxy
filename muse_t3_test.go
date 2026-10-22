@@ -330,3 +330,92 @@ func TestMuseT3NativeOnlyIgnoresDisabledProviderHomes(t *testing.T) {
 		})
 	}
 }
+
+func TestMuseT3NativeOnlyIgnoresDisabledClaudeAuthOverrides(t *testing.T) {
+	a := t3CodeTestApp(t, "linux", t3CodeNightlyVersion)
+	addMuseT3CapabilityFixture(t, a)
+	prefs := normalizeT3CodePreferences(a.config.T3Code)
+	prefs.Codex, prefs.Claude, prefs.KiloCodex, prefs.KiloClaude = false, false, false, false
+	prefs.Providers = []string{"muse"}
+	a.config.T3Code = prefs
+	previous := a.launcher.resolve
+	a.launcher.resolve = func(id, custom string) (string, error) {
+		if id == "muse" {
+			return filepath.Join(a.launcher.home, "selected-muse"), nil
+		}
+		return previous(id, custom)
+	}
+	t3CodeAuthTestEnvironment(t, "CLAUDE_SECURESTORAGE_CONFIG_DIR", nil)
+	prepareT3CodeFixture(t, a)
+	saved := mustReadT3CodePrepared(t, a)
+	binary := mustResolveT3CodeTest(t, a)
+	if !a.t3CodeReady(saved, binary, a.launchRuntime()) {
+		t.Fatal("initial Muse native preparation not ready")
+	}
+	// Presence (including an explicit empty secure-storage override) must not
+	// turn a disabled Claude descriptor into a dependency of native Muse.
+	for _, value := range []string{"", filepath.Join(a.launcher.home, "secure-custom") + string(filepath.Separator) + ".", "relative/disabled-secure", "invalid\nsecure"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("CLAUDE_SECURESTORAGE_CONFIG_DIR", value)
+			if !a.t3CodeReady(saved, binary, a.launchRuntime()) {
+				t.Fatal("disabled Claude secure-storage edit invalidated Muse")
+			}
+		})
+	}
+	for _, raw := range saved.Providers[t3CodeClaudeNormalID].(map[string]any)["environment"].([]any) {
+		variable := raw.(map[string]any)
+		if variable["name"] == "CLAUDE_CONFIG_DIR" || variable["name"] == "CLAUDE_SECURESTORAGE_CONFIG_DIR" {
+			t.Fatal("disabled native Claude retained an unrelated auth override")
+		}
+	}
+	// Opting into Claude restores strict validation instead of globally ignoring
+	// its authentication environment to make Muse's preparation look ready.
+	a.config.T3Code.Claude = true
+	t.Setenv("CLAUDE_SECURESTORAGE_CONFIG_DIR", "relative/enabled-secure")
+	if response := adminRequest(a, "clients/t3-code", `{}`); response.Code != 409 || !strings.Contains(response.Body.String(), "secure storage must be an absolute path") {
+		t.Fatal("enabled Claude accepted an invalid secure-storage override", response.Code, response.Body.String())
+	}
+}
+
+func TestT3CodeDisabledNativeClaudeKeepsAuthEnvironmentScoped(t *testing.T) {
+	options := t3ProfileTestOptions(t)
+	prefs := normalizeT3CodePreferences(t3CodePreferences{})
+	prefs.Codex, prefs.Claude, prefs.KiloCodex, prefs.KiloClaude = false, false, false, true
+	options.Preferences = &prefs
+	config := filepath.Join(options.NormalHome, "claude-custom") + string(filepath.Separator) + "."
+	options.NormalEnvironment["CLAUDE_CONFIG_DIR"] = config
+	options.NormalEnvironment["CLAUDE_SECURESTORAGE_CONFIG_DIR"] = ""
+	plan, err := planT3CodeProfiles(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	normal := plan.Providers[t3CodeClaudeNormalID].(map[string]any)
+	if normal["enabled"] != false {
+		t.Fatal("native Claude enabled unexpectedly")
+	}
+	for _, variable := range normal["environment"].([]map[string]any) {
+		if variable["name"] == "CLAUDE_CONFIG_DIR" || variable["name"] == "CLAUDE_SECURESTORAGE_CONFIG_DIR" {
+			t.Fatal("disabled native Claude retained auth overrides with Kilo enabled")
+		}
+	}
+	proxy := plan.Providers[t3CodeClaudeProxyID].(map[string]any)
+	if proxy["enabled"] != true || proxy["config"].(map[string]any)["homePath"] != plan.ClaudeHome {
+		t.Fatal("Kilo Claude profile changed")
+	}
+	for _, variable := range proxy["environment"].([]map[string]any) {
+		if variable["name"] == "CLAUDE_CONFIG_DIR" || variable["name"] == "CLAUDE_SECURESTORAGE_CONFIG_DIR" {
+			t.Fatal("native auth overrides leaked to Kilo")
+		}
+	}
+	// Disabled native auth does not remove the separate canonical protection
+	// against Kilo writing into a normal config or secure-storage directory.
+	options.NormalEnvironment["CLAUDE_CONFIG_DIR"] = plan.ClaudeHome
+	if _, err := planT3CodeProfiles(options); err == nil {
+		t.Fatal("disabled native Claude lost normal-home isolation with Kilo enabled")
+	}
+	options.NormalEnvironment["CLAUDE_CONFIG_DIR"] = config
+	options.NormalEnvironment["CLAUDE_SECURESTORAGE_CONFIG_DIR"] = plan.ClaudeHome
+	if _, err := planT3CodeProfiles(options); err == nil {
+		t.Fatal("disabled native Claude lost secure-storage isolation with Kilo enabled")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -329,5 +330,60 @@ func TestMuseExplicitPreparationRepairsOnlyItsPrivateFilePermissions(t *testing.
 	st, err := os.Stat(auth)
 	if err != nil || st.Mode().Perm() != 0600 {
 		t.Fatal("explicit preparation did not repair its private auth", err)
+	}
+}
+
+func TestMuseKiloPreparationTreatsVersionAsOptionalMetadata(t *testing.T) {
+	for _, tc := range []struct {
+		name, release string
+		err           error
+	}{
+		{name: "new-release", release: "1.4.10-R6427.1"},
+		{name: "future-format", release: "Muse future build without release syntax"},
+		{name: "version-unavailable", err: errors.New("version output unavailable")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, binary, library := museKiloTestApp(t)
+			probes := 0
+			a.museVersionProbe = func(path string) (string, error) {
+				probes++
+				if path != binary {
+					t.Fatal("selected executable substituted", path)
+				}
+				return tc.release, tc.err
+			}
+			prepareMuseTestProfile(t, a, binary, library)
+			data, err := os.ReadFile(filepath.Join(museTerminalHome(a.dir), "kilo-profile.json"))
+			var saved musePreparedProfile
+			if err != nil || json.Unmarshal(data, &saved) != nil || saved.Release != tc.release {
+				t.Fatal("optional version metadata changed", string(data), err)
+			}
+			for i := 0; i < 3; i++ {
+				if err := a.museTerminalPrepared(binary, library); err != nil {
+					t.Fatal("readiness rejected optional version", err)
+				}
+			}
+			if probes != 1 || a.proxyListener != nil {
+				t.Fatal("readiness started a process or proxy", probes, a.proxyListener)
+			}
+		})
+	}
+}
+
+func TestMuseKiloOptionalVersionStillRejectsBinaryChangedDuringProbe(t *testing.T) {
+	for _, probeErr := range []error{nil, errors.New("version unavailable")} {
+		a, binary, _ := museKiloTestApp(t)
+		a.museVersionProbe = func(string) (string, error) {
+			if err := os.WriteFile(binary, []byte("changed during optional version discovery"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			return "1.4.10-R6427.1", probeErr
+		}
+		if _, err := a.checkMuseKiloVersion(binary); err == nil || !strings.Contains(err.Error(), "changed during preparation") {
+			t.Fatal("changed executable accepted", err)
+		}
+		if _, err := os.Stat(museTerminalHome(a.dir)); !os.IsNotExist(err) {
+			t.Fatal("failed version discovery wrote a profile", err)
+		}
 	}
 }

@@ -1,9 +1,9 @@
 // Loaded only in Kilo Proxy's private, contract-checked Synara server snapshot.
 const kiloSynaraGatewayModels = __KILO_SYNARA_GATEWAY_MODELS__;
 function kiloSynaraDefaultModel(input) {
-	const managed = input.instanceId === "kilo_codex_proxy" ? kiloSynaraGatewayModels.codex : input.instanceId === "kilo_claude_proxy" ? kiloSynaraGatewayModels.claudeAgent : null;
+	const managed = input.instanceId === "kilo_codex_proxy" ? kiloSynaraGatewayModels.codex : input.instanceId === "kilo_claude_proxy" ? kiloSynaraGatewayModels.claudeAgent : input.instanceId === "kilo_opencode_proxy" ? kiloSynaraGatewayModels.opencode : null;
 	if (managed) {
-		const configured = kiloSynaraGatewayModels.defaultModel;
+		const configured = kiloSynaraGatewayModels.defaultModels?.[input.provider] ?? kiloSynaraGatewayModels.defaultModel;
 		return input.availability?.customModels?.includes(configured) && managed.some(value => value.slug === configured) ? configured : null;
 	}
 	return providerDefaultModel(input.provider);
@@ -39,17 +39,45 @@ function kiloSynaraGatewayAccount(input) {
 	// The ordinary account preflight supplies its disabled/auth message first.
 	if (account?.enabled === false || account?.available === false || account?.authStatus === "unauthenticated") return target;
 	const managed = target.instanceId === "kilo_claude_proxy" ? kiloSynaraGatewayModels.claudeAgent.find(value => value.slug === target.model) : null;
-	if (managed && target.options?.effort !== undefined && target.options.effort !== managed.kiloSavedEffort) throw new AgentGatewayTargetError("model_option_unavailable", `Claude · Kilo Proxy uses the effort saved for "${target.model}" in Kilo Proxy Models. Close and reopen its workspace after changing that default. Do not substitute a different account or model.`);
+	if (managed && target.options?.effort !== undefined) {
+		const allowed = managed.kiloAllowedEfforts ?? (managed.kiloSavedEffort ? [managed.kiloSavedEffort] : []);
+		if (!allowed.includes(target.options.effort)) throw new AgentGatewayTargetError("model_option_unavailable", `This effort is not enabled for "${target.model}" in the prepared Claude · Kilo Proxy account. Choose an advertised effort or prepare its models again. Do not substitute a different account or model.`);
+	}
+	const openCode = target.instanceId === "kilo_opencode_proxy" ? kiloSynaraGatewayModels.opencode?.find(value => value.slug === target.model) : null;
+	if (openCode && target.options?.variant !== undefined && !openCode.kiloAllowedVariants.includes(target.options.variant)) throw new AgentGatewayTargetError("model_option_unavailable", `This variant is not enabled for "${target.model}" in the prepared OpenCode Kilo account.`);
 	return target;
 }
 function kiloSynaraMergeAccountModels(input, discovered) {
 	const declared = input.availability?.customModels ?? [];
-	const managed = input.instanceId === "kilo_codex_proxy" ? kiloSynaraGatewayModels.codex : input.instanceId === "kilo_claude_proxy" ? kiloSynaraGatewayModels.claudeAgent : [];
+	const managed = input.instanceId === "kilo_codex_proxy" ? kiloSynaraGatewayModels.codex : input.instanceId === "kilo_claude_proxy" ? kiloSynaraGatewayModels.claudeAgent : input.instanceId === "kilo_opencode_proxy" ? (kiloSynaraGatewayModels.opencode ?? []) : [];
 	// Kilo account choices are the exact prepared gateway IDs. Native aliases
 	// remain confined to the normal account's discovery catalog.
-	if (managed.length > 0) return declared.flatMap(slug => {
+	if (input.instanceId === "kilo_codex_proxy" || input.instanceId === "kilo_claude_proxy" || input.instanceId === "kilo_opencode_proxy") return declared.flatMap(slug => {
 		const descriptor = managed.find(value => value.slug === slug);
-		return descriptor ? [descriptor] : [];
+		if (!descriptor) return [];
+		if (input.instanceId !== "kilo_opencode_proxy") return [descriptor];
+		const native = discovered.find(value => value.slug === slug);
+		const allowed = descriptor.kiloAllowedVariants;
+		const options = (native?.optionDescriptors ?? []).map(option => {
+			if (option.id !== "variant" || option.type !== "select") return option;
+			const copy = {...option,options:option.options.filter(value => allowed.includes(value.id)).map(value => {
+				const choice = {...value};
+				delete choice.isDefault;
+				if (value.id === descriptor.kiloDefaultVariant) choice.isDefault = true;
+				return choice;
+			})};
+			if (allowed.includes(descriptor.kiloDefaultVariant)) copy.currentValue = descriptor.kiloDefaultVariant;
+			else delete copy.currentValue;
+			return copy;
+		});
+		const model = {...native,...descriptor};
+		// OpenCode normally exposes legacy reasoning metadata only. An empty
+		// descriptor array would suppress Synara's native variant-menu fallback.
+		if (native?.optionDescriptors !== undefined) model.optionDescriptors = options;
+		if (Array.isArray(model.supportedReasoningEfforts)) model.supportedReasoningEfforts = model.supportedReasoningEfforts.filter(value => allowed.includes(value.value));
+		if (allowed.includes(descriptor.kiloDefaultVariant)) model.defaultReasoningEffort = descriptor.kiloDefaultVariant;
+		else delete model.defaultReasoningEffort;
+		return [model];
 	});
 	const bySlug = new Map(discovered.map(value => [value.slug, value]));
 	for (const slug of declared) {
@@ -58,6 +86,17 @@ function kiloSynaraMergeAccountModels(input, discovered) {
 		else if (!bySlug.has(slug)) bySlug.set(slug, { slug, name: slug });
 	}
 	return [...bySlug.values()];
+}
+function kiloSynaraDiscoveryModels(input, result) {
+	if (input.provider !== "opencode" || input.instanceId !== "kilo_opencode_proxy") return result;
+	const declared = (kiloSynaraGatewayModels.opencode ?? []).map(model => model.slug);
+	return {...result, models:kiloSynaraMergeAccountModels({instanceId:input.instanceId,availability:{customModels:declared}}, result.models)};
+}
+function kiloSynaraOpenCodeSelectionError(instanceId, selection) {
+	if (instanceId !== "kilo_opencode_proxy") return;
+	const model = selection?.provider === "opencode" ? kiloSynaraGatewayModels.opencode?.find(row => row.slug === selection.model) : null;
+	if (!model) return "Choose a model from the prepared Kilo OpenCode library before starting this chat. The previous model was not substituted.";
+	if (selection.options?.variant !== undefined && !model.kiloAllowedVariants.includes(selection.options.variant)) return "Choose an enabled reasoning level for this Kilo OpenCode model, or prepare its models again.";
 }
 function kiloSynaraGatewayCatalogs(availabilities, discovery, cwd) {
 	const accounts = [...availabilities.values()].filter(value => !value.isDefault || !value.accountRequired);

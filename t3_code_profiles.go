@@ -111,8 +111,23 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 	if kiloClaude {
 		privateHomes = append(privateHomes, result.ClaudeHome)
 	}
-	for index, normal := range []string{normalCodex, normalClaude} {
-		if !t3CodeNormalProviderEnabled(options, index) {
+	normalHomes := []string{normalCodex, normalClaude}
+	// The native Claude environment retains its literal path. Keep the
+	// historical normalized home check as well as the actual alias traversal.
+	if t3CodeNormalProviderEnabled(options, 1) {
+		if literal := options.NormalEnvironment["CLAUDE_CONFIG_DIR"]; literal != "" {
+			normalHomes = append(normalHomes, literal)
+		}
+	}
+	secure, err := t3CodeNormalClaudeSecureStorageHome(options)
+	if err != nil {
+		return result, err
+	}
+	if secure != "" {
+		normalHomes = append(normalHomes, secure)
+	}
+	for index, normal := range normalHomes {
+		if index < 2 && !t3CodeNormalProviderEnabled(options, index) {
 			continue
 		}
 		normal, err = t3CodeCanonicalPath(normal)
@@ -133,6 +148,7 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 		// Retain stable account IDs so T3 conversations and saved native model
 		// selections survive. Disabled Kilo slots need no profiles or secrets.
 		result.Providers = t3CodeProviderInstances(options, result, nil, claudeSelection{})
+		t3CodeNativeClaudeAuthEnvironment(options, result.Providers)
 		for _, id := range []string{t3CodeCodexProxyID, t3CodeClaudeProxyID} {
 			instance := result.Providers[id].(map[string]any)
 			env := []map[string]any{}
@@ -291,6 +307,7 @@ func planT3CodeProfiles(options t3CodeProfileOptions) (t3CodeProfiles, error) {
 		}
 	}
 	result.Providers = t3CodeProviderInstances(options, result, choices, selection)
+	t3CodeNativeClaudeAuthEnvironment(options, result.Providers)
 	if err := addT3CodeOpenCodeProfile(options, &result); err != nil {
 		return t3CodeProfiles{}, err
 	}
@@ -337,25 +354,47 @@ func t3CodeCanonicalPath(path string) (string, error) {
 		if !errors.Is(err, os.ErrNotExist) {
 			return "", err
 		}
-		if info, statErr := os.Lstat(path); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
-			target, linkErr := os.Readlink(path)
+		parent, base := t3CodeLiteralPathParent(path)
+		if base == "" {
+			return "", err
+		}
+		if info, statErr := os.Lstat(parent + base); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+			target, linkErr := os.Readlink(parent + base)
 			if linkErr != nil {
 				return "", linkErr
 			}
 			if !filepath.IsAbs(target) {
-				target = filepath.Join(filepath.Dir(path), target)
+				target = parent + target
 			}
-			path = filepath.Clean(target)
+			path = target
 			continue
 		}
-		parent := filepath.Dir(path)
-		if parent == path {
+		if parent == "" || parent == path {
 			return "", err
 		}
-		tail = append(tail, filepath.Base(path))
+		tail = append(tail, base)
 		path = parent
 	}
 	return "", errors.New("Too many directory aliases in T3 Code provider homes.")
+}
+
+// Split only the final lexical component. filepath.Dir/Clean would collapse
+// a preceding symlink/.. before the filesystem has resolved that alias.
+func t3CodeLiteralPathParent(path string) (string, string) {
+	volume := len(filepath.VolumeName(path))
+	end := len(path)
+	for end > volume && os.IsPathSeparator(path[end-1]) {
+		end--
+	}
+	if end == volume {
+		return path, ""
+	}
+	for i := end - 1; i >= volume; i-- {
+		if os.IsPathSeparator(path[i]) {
+			return path[:i+1], path[i+1 : end]
+		}
+	}
+	return "", path[:end]
 }
 
 func t3CodeNormalProviderHomes(options t3CodeProfileOptions) (string, string, error) {
@@ -372,6 +411,22 @@ func t3CodeNormalProviderHomes(options t3CodeProfileOptions) (string, string, er
 		}
 	}
 	return homes[0], homes[1], nil
+}
+
+// Return only the filesystem identity used for isolation checks. Provider
+// descriptors retain the original override, including explicit empty values.
+func t3CodeNormalClaudeSecureStorageHome(options t3CodeProfileOptions) (string, error) {
+	secure, exists := options.NormalEnvironment["CLAUDE_SECURESTORAGE_CONFIG_DIR"]
+	if !exists || !t3CodeNormalProviderEnabled(options, 1) {
+		return "", nil
+	}
+	if secure != "" && !filepath.IsAbs(secure) || strings.ContainsAny(secure, "\x00\r\n") {
+		return "", errors.New("T3 Code normal Claude secure storage must be an absolute path.")
+	}
+	if secure == "" {
+		secure = filepath.Join(options.NormalHome, ".claude")
+	}
+	return secure, nil
 }
 
 func t3CodeNormalProviderEnabled(options t3CodeProfileOptions, index int) bool {
@@ -433,7 +488,10 @@ func removeT3CodeClaudeToken(data []byte) ([]byte, error) {
 // Sensitive values belong to its server secret store; the registration layer
 // replaces their payload here with valueRedacted markers before writing JSON.
 func t3CodeProviderInstances(options t3CodeProfileOptions, profiles t3CodeProfiles, choices []nativeModelChoice, selection claudeSelection) map[string]any {
-	normalCodex, normalClaude, _ := t3CodeNormalProviderHomes(options) // Validated before any profile is planned.
+	normalCodex, _, _ := t3CodeNormalProviderHomes(options) // Validated before any profile is planned.
+	// T3 resolves a nonempty homePath before exporting CLAUDE_CONFIG_DIR.
+	// Keep the native descriptor unset; intentional overrides belong to its
+	// per-instance environment so their authentication namespace stays literal.
 	baseEnv := []map[string]any{}
 	allowed := []string{"USERPROFILE", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR"}
 	normalEnv := map[string]string{}
@@ -502,7 +560,7 @@ func t3CodeProviderInstances(options t3CodeProfileOptions, profiles t3CodeProfil
 	instances := map[string]any{
 		t3CodeCodexNormalID:  provider("codex", "Codex · Normal", map[string]any{"setupMode": "existing", "binaryPath": options.CodexBinary, "homePath": normalCodex, "shadowHomePath": "", "launchArgs": "", "customModels": []any{}}, ""),
 		t3CodeCodexProxyID:   provider("codex", "Kilo Proxy · Codex", codex, "KILO_LOCAL_API_KEY"),
-		t3CodeClaudeNormalID: provider("claudeAgent", "Claude · Normal", map[string]any{"binaryPath": options.ClaudeBinary, "homePath": normalClaude, "launchArgs": "", "customModels": []any{}}, ""),
+		t3CodeClaudeNormalID: provider("claudeAgent", "Claude · Normal", map[string]any{"binaryPath": options.ClaudeBinary, "homePath": "", "launchArgs": "", "customModels": []any{}}, ""),
 		t3CodeClaudeProxyID:  provider("claudeAgent", "Kilo Proxy · Claude", claude, "ANTHROPIC_AUTH_TOKEN"),
 	}
 	claudeInstance := instances[t3CodeClaudeProxyID].(map[string]any)
@@ -537,6 +595,20 @@ func t3CodeProviderInstances(options t3CodeProfileOptions, profiles t3CodeProfil
 		}
 	}
 	return instances
+}
+
+// Synara shares provider construction but owns its separate secure-storage
+// descriptor. Apply this environment only to profiles planned for T3 itself.
+func t3CodeNativeClaudeAuthEnvironment(options t3CodeProfileOptions, instances map[string]any) {
+	if options.Preferences != nil && !normalizeT3CodePreferences(*options.Preferences).Claude {
+		return
+	}
+	instance := instances[t3CodeClaudeNormalID].(map[string]any)
+	for _, name := range []string{"CLAUDE_CONFIG_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR"} {
+		if value, exists := options.NormalEnvironment[name]; exists {
+			instance["environment"] = append(instance["environment"].([]map[string]any), map[string]any{"name": name, "value": value, "sensitive": false})
+		}
+	}
 }
 
 func t3CodeCustomModels(choices []nativeModelChoice, claude bool, caps claudeCapabilities) []map[string]any {

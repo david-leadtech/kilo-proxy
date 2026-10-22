@@ -27,6 +27,7 @@ func nativeFreshOnboarding(t *testing.T) *nativeUI {
 	u.owner.apiKey, u.owner.config.OrgID = "", ""
 	u.owner.keySaved, u.owner.config.Remember = false, false
 	u.owner.organizations, u.owner.accountEmail = nil, ""
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	u.refreshState()
 	nativeTestWait(t, u, func() bool { return !u.busy["GET/api/state"] && nativeString(u.state, "orgId") == "" })
@@ -169,7 +170,7 @@ func TestNativeOnboardingManualPointerWalkthrough(t *testing.T) {
 	u := nativeFreshOnboarding(t)
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 820), now: time.Now()}
 	h.frame()
-	if !h.selected("Accounts", semantic.Button) {
+	if !h.selected("Sign in", semantic.Button) {
 		t.Fatal("account step is not marked as the current setup step")
 	}
 	modelsDisabled := false
@@ -182,7 +183,7 @@ func TestNativeOnboardingManualPointerWalkthrough(t *testing.T) {
 	if !modelsDisabled {
 		t.Fatal("models step was clickable before saving an account and team")
 	}
-	h.click("Use an API key or team ID instead", semantic.Button)
+	h.click("Did your company give you a key? Use it here", semantic.Button)
 	h.click("Leave blank to keep the current key", semantic.Editor)
 	h.typeText("synthetic-kilo-personal-key")
 	h.click("org_…", semantic.Editor)
@@ -190,7 +191,7 @@ func TestNativeOnboardingManualPointerWalkthrough(t *testing.T) {
 	if !u.checked("connection.remember") {
 		t.Fatal("remember must start checked for a first login")
 	}
-	h.click("Save & choose models", semantic.Button)
+	h.click("Continue", semantic.Button)
 	nativeTestWait(t, u, func() bool {
 		return u.setupStep == setupModels && !u.busy["GET/api/state"] && !u.busy["POST/api/models"] && len(u.models) == 2
 	})
@@ -198,7 +199,7 @@ func TestNativeOnboardingManualPointerWalkthrough(t *testing.T) {
 	if !h.selected("Models", semantic.Button) {
 		t.Fatal("models step is not marked as current after saving the connection")
 	}
-	h.click("Accounts", semantic.Button)
+	h.click("Sign in", semantic.Button)
 	if u.setupStep != setupConnect {
 		t.Fatal("reachable account step could not be reopened from the stepper")
 	}
@@ -225,10 +226,10 @@ func TestNativeOnboardingManualPointerWalkthrough(t *testing.T) {
 	if u.setupStep != setupReady {
 		t.Fatalf("pointer Continue did not finish model selection: %s", u.notice)
 	}
-	if !h.selected("Start", semantic.Button) {
+	if !h.selected("Ready", semantic.Button) {
 		t.Fatal("ready step is not marked as current")
 	}
-	h.click("Start proxy and go to agents", semantic.Button)
+	h.click("Get started", semantic.Button)
 	nativeTestWait(t, u, func() bool { return u.page == "agents" && nativeBool(u.state, "running") })
 	listener := nativeOnboardingListener(t, u)
 	saved, err := readSettings(u.owner.dir)
@@ -239,7 +240,7 @@ func TestNativeOnboardingManualPointerWalkthrough(t *testing.T) {
 		t.Fatal("pointer model selection did not reach the persisted shared library")
 	}
 	h.frame()
-	h.click("Stop proxy", semantic.Button)
+	h.click("Pause", semantic.Button)
 	nativeTestWait(t, u, func() bool { return !u.busy["POST/api/stop"] && !nativeBool(u.state, "running") })
 	nativeOnboardingStopped(t, u, listener)
 }
@@ -319,7 +320,7 @@ func TestNativeOnboardingLateStartPreservesReviewModels(t *testing.T) {
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 820), now: time.Now()}
 	h.frame()
 	armed.Store(true)
-	h.click("Start proxy and go to agents", semantic.Button)
+	h.click("Get started", semantic.Button)
 	nativeTestWait(t, u, func() bool {
 		select {
 		case <-started:
@@ -402,6 +403,7 @@ func TestNativeOnboardingFailedStartKeepsReadyStepAndVisibleError(t *testing.T) 
 	port := occupied.Addr().(*net.TCPAddr).Port
 	u.owner.mu.Lock()
 	u.owner.config.Port = port
+	u.owner.publishUIProjectionLocked()
 	u.owner.mu.Unlock()
 	u.setValue("connection.port", strconv.Itoa(port))
 	u.refreshState()
@@ -423,7 +425,7 @@ func TestNativeOnboardingFailedStartKeepsReadyStepAndVisibleError(t *testing.T) 
 	if !visible {
 		t.Fatalf("start failure is not visible in the setup screen: %s", u.notice)
 	}
-	h.target("Start proxy and go to agents", semantic.Button)
+	h.target("Get started", semantic.Button)
 }
 
 func TestNativeOnboardingAgentsProxyPointerControls(t *testing.T) {
@@ -437,11 +439,11 @@ func TestNativeOnboardingAgentsProxyPointerControls(t *testing.T) {
 				u.page = "agents"
 				h := &nativePointerHarness{t: t, u: u, size: size, now: time.Now()}
 				h.frame()
-				h.click(u.tr("Start proxy", "Arrancar proxy"), semantic.Button)
+				h.click(u.tr("Turn on", "Activar"), semantic.Button)
 				nativeTestWait(t, u, func() bool { return nativeBool(u.state, "running") })
 				listener := nativeOnboardingListener(t, u)
 				h.frame()
-				h.click(u.tr("Stop proxy", "Detener proxy"), semantic.Button)
+				h.click(u.tr("Pause", "Pausar"), semantic.Button)
 				nativeTestWait(t, u, func() bool { return !u.busy["POST/api/stop"] && !nativeBool(u.state, "running") })
 				nativeOnboardingStopped(t, u, listener)
 				h.now = h.now.Add(time.Second)
@@ -449,6 +451,7 @@ func TestNativeOnboardingAgentsProxyPointerControls(t *testing.T) {
 				nativeGridCapture(t, h, "onboarding-agents-stopped-"+fmtSize(size)+"-"+lang)
 				u.owner.mu.Lock()
 				u.owner.apiKey = ""
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 				h.frame()
 				h.click(u.tr("Connect an account", "Conectar una cuenta"), semantic.Button)
@@ -517,11 +520,12 @@ func TestNativeOnboardingProxyControlsIgnoreOlderState(t *testing.T) {
 			c.LaunchChecked, c.LaunchDetectStarted = true, true
 			c.OpenDesignChecked, c.OpenDesignDetectStarted = true, true
 			u.agentsState().T3Code.PreferencesState.Requested = true
+			u.agentsState().Synara.PreferencesState.Requested = true
 			u.page = "agents"
 			h := &nativePointerHarness{t: t, u: u, size: image.Pt(720, 700), now: time.Now()}
 			h.frame()
 			release := nativeOnboardingHoldStateSnapshot(t, u)
-			h.click(u.tr("Start proxy", "Arrancar proxy"), semantic.Button)
+			h.click(u.tr("Turn on", "Activar"), semantic.Button)
 			nativeTestWait(t, u, func() bool { return !u.busy["POST/api/start"] && nativeBool(u.state, "running") })
 			listener := nativeOnboardingListener(t, u)
 			release()
@@ -530,9 +534,9 @@ func TestNativeOnboardingProxyControlsIgnoreOlderState(t *testing.T) {
 			if !nativeBool(u.state, "running") {
 				t.Fatal("older stopped snapshot erased the completed start")
 			}
-			h.target(u.tr("Stop proxy", "Detener proxy"), semantic.Button)
+			h.target(u.tr("Pause", "Pausar"), semantic.Button)
 			release = nativeOnboardingHoldStateSnapshot(t, u)
-			h.click(u.tr("Stop proxy", "Detener proxy"), semantic.Button)
+			h.click(u.tr("Pause", "Pausar"), semantic.Button)
 			nativeTestWait(t, u, func() bool { return !u.busy["POST/api/stop"] && !nativeBool(u.state, "running") })
 			nativeOnboardingStopped(t, u, listener)
 			release()
@@ -541,7 +545,7 @@ func TestNativeOnboardingProxyControlsIgnoreOlderState(t *testing.T) {
 			if nativeBool(u.state, "running") {
 				t.Fatal("older running snapshot erased the completed stop")
 			}
-			h.target(u.tr("Start proxy", "Arrancar proxy"), semantic.Button)
+			h.target(u.tr("Turn on", "Activar"), semantic.Button)
 		})
 	}
 }
@@ -568,7 +572,7 @@ func TestNativeOnboardingDeviceLoginPendingCancelledAndApproved(t *testing.T) {
 	})
 	h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 820), now: time.Now()}
 	h.frame()
-	h.click("Sign in with Kilo / SSO", semantic.Button)
+	h.click("Sign in with Kilo", semantic.Button)
 	nativeTestWait(t, u, func() bool { return nativeString(nativeMap(u.state["auth"]), "status") == "pending" })
 	bridge := u.owner.desktop.(*nativeRecordingBridge)
 	nativeTestWait(t, u, func() bool {
@@ -592,7 +596,7 @@ func TestNativeOnboardingDeviceLoginPendingCancelledAndApproved(t *testing.T) {
 		t.Fatal("cancelled SSO discarded the existing manual key draft")
 	}
 	h.frame()
-	h.click("Sign in with Kilo / SSO", semantic.Button)
+	h.click("Sign in with Kilo", semantic.Button)
 	nativeTestWait(t, u, func() bool { return nativeString(nativeMap(u.state["auth"]), "status") == "pending" })
 	approve.Store(true)
 	waitLogin(t, u.owner, "approved")
@@ -613,7 +617,7 @@ func TestNativeOnboardingDeviceLoginPendingCancelledAndApproved(t *testing.T) {
 		t.Fatal("leaving and resuming setup bypassed saving the SSO connection")
 	}
 	h.click("Engineering", semantic.Button)
-	h.click("Save & choose models", semantic.Button)
+	h.click("Continue", semantic.Button)
 	nativeTestWait(t, u, func() bool { return u.setupStep == setupModels && !u.busy["GET/api/state"] })
 	saved, err := readSettings(u.owner.dir)
 	if err != nil || saved.OrgID != "e2e-team" || !saved.Remember {
@@ -698,6 +702,7 @@ func TestNativeOnboardingVisualSnapshots(t *testing.T) {
 				capture("welcome")
 				u.owner.mu.Lock()
 				u.owner.apiKey = "synthetic-kilo-personal-key"
+				u.owner.publishUIProjectionLocked()
 				u.owner.mu.Unlock()
 				u.call("POST", "/api/auth/organizations", map[string]any{}, u.acceptState)
 				nativeTestWait(t, u, func() bool { return len(nativeArray(u.state, "organizations")) == 2 })

@@ -17,7 +17,7 @@ import (
 // than inside it so the redesign does not churn the shared UI struct.
 type uxaState struct {
 	period       string // today, 7, 14 or 30 days
-	tab          string // summary, requests or conversations
+	tab          string // summary, requests, conversations or history
 	errorsOnly   bool
 	selected     string // request ID open in the inspector
 	pickedDay    string // day pinned by clicking a bar

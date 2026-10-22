@@ -21,6 +21,14 @@ The interface embeds the unmodified Regular, Medium, SemiBold and Bold fonts fro
 
 The native frontend uses the existing authenticated loopback API, keeping configuration validation, safe file updates, credentials and proxy accounting in one backend. External HTTPS links, including Kilo's sign-in page, open in the system browser. Copy controls use the OS clipboard. Agent **Open** controls use the authenticated backend to prepare profiles from the shared library and open installed agents on this computer, with a remembered folder for each agent. See [client launch behavior](clients.md#launch-installed-clients). The optional browser interface retains its older per-client model pickers and explicit preparation. It does not edit the native shared library.
 
+## Responsiveness during inference
+
+From 0.67.0, the native window reads immutable connection and preference snapshots. Rendering does not wait for the mutex that protects proxy state. Snapshots are published when settings or authentication change, so preparation still rejects a connection or model selection changed while an operation was pending.
+
+The tray controller handles opening and closing the window independently of collecting tray status and performing proxy Start/Stop operations. Start and Stop remain ordered, and Stop retains its existing cancellation behavior. These workers and the window run in separate Go goroutines within the same application process.
+
+T3 Code request validation reads the prepared profile and verifies the installed package outside the shared state mutex. Executable routes and configuration are checked again before accepting the result. The package's complete inspected source bytes and index are hashed on every check; only analysis of identical content is reused, in a bounded cache. Changing content invalidates that analysis even if the package version, file size and modification time stay the same.
+
 ## Native workflow
 
 The main navigation is **Harnesses**, **Models**, **Activity** and **Settings**. An unconfigured launch opens a three-step guide: **Account & team → Models → Start**. Existing installations with a connected account, selected organization and saved model library open Harnesses directly.

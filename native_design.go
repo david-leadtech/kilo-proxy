@@ -291,7 +291,7 @@ func (u *nativeUI) sidebar(gtx layout.Context) layout.Dimensions {
 					)
 				}),
 				layout.Rigid(layout.Spacer{Height: 28}.Layout),
-				layout.Rigid(u.column(u.navButton("agents", u.tr("Harnesses", "Harnesses"), nativeIconAgents), u.navButton("models", u.tr("Models", "Modelos"), nativeIconModels), u.navButton("activity", u.tr("Activity", "Actividad"), nativeIconActivity), u.navButton("settings", u.tr("Settings", "Ajustes"), nativeIconSettings))),
+				layout.Rigid(u.column(u.navButton("agents", u.tr("Apps", "Apps"), nativeIconAgents), u.navButton("models", u.tr("Models", "Modelos"), nativeIconModels), u.navButton("activity", u.tr("Activity", "Actividad"), nativeIconActivity), u.navButton("settings", u.tr("Settings", "Ajustes"), nativeIconSettings))),
 				layout.Flexed(1, layout.Spacer{}.Layout),
 				// Navigation stays under the brand; the proxy status is pinned above the footer.
 				layout.Rigid(u.proxyStatusBlock()),
@@ -306,15 +306,16 @@ func (u *nativeUI) sidebar(gtx layout.Context) layout.Dimensions {
 func (u *nativeUI) proxyState() (nativeTone, string) {
 	switch {
 	case u.setupNeeded() || !u.agentConnectionReady():
-		return nativeToneWarning, u.tr("Setup needed", "Configuración necesaria")
+		return nativeToneWarning, u.tr("One step left", "Falta un paso")
 	case u.busy["POST/api/start"]:
-		return nativeToneInfo, u.tr("Starting…", "Arrancando…")
+		return nativeToneInfo, u.tr("Turning on…", "Activando…")
 	case u.busy["POST/api/stop"]:
-		return nativeToneInfo, u.tr("Stopping…", "Deteniendo…")
+		return nativeToneInfo, u.tr("Pausing…", "Pausando…")
 	case nativeBool(u.state, "running"):
-		return nativeToneSuccess, u.tr("Running", "En marcha")
+		return nativeToneSuccess, u.tr("Active", "Activa")
 	}
-	return nativeToneNeutral, u.tr("Stopped", "Detenido")
+	// Stopped is not a problem: opening any app starts the connection.
+	return nativeToneNeutral, u.tr("Ready", "Lista")
 }
 
 // proxyTeam names the organization that pays for requests.
@@ -373,8 +374,9 @@ func (u *nativeUI) requestTeamName(id string) {
 	}()
 }
 
-// proxyStatusBlock keeps the proxy state, billed team, local endpoint and the
-// start/stop action permanently visible in the sidebar.
+// proxyStatusBlock keeps the connection state, billed team and the
+// start/pause action visible in the sidebar. The local endpoint is technical
+// and lives in Settings → Accounts.
 func (u *nativeUI) proxyStatusBlock() layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		tone, label := u.proxyState()
@@ -409,15 +411,12 @@ func (u *nativeUI) proxyStatusBlock() layout.Widget {
 				})
 			})
 		}
-		children := []layout.Widget{u.monoStyle(11, u.tr("PROXY", "PROXY"), nativeTextSubtle, font.Bold), pill}
-		if team := u.proxyTeam(); team != "" {
-			children = append(children, u.column(u.textStyle(11, u.tr("Billed to", "Se factura a"), nativeTextSubtle, font.Normal), u.textStyle(13, nativeEllipsis(team, 40), nativeInk, font.SemiBold)))
+		children := []layout.Widget{u.monoStyle(11, u.tr("KILO CONNECTION", "CONEXIÓN CON KILO"), nativeTextSubtle, font.Bold), pill}
+		if tone == nativeToneNeutral {
+			children = append(children, u.textStyle(12, u.tr("Turns on by itself when you open an app.", "Se activa sola al abrir una app."), nativeTextMuted, font.Normal))
 		}
-		if base := nativeString(u.state, "baseURL"); base != "" {
-			children = append(children, u.column(
-				u.textStyle(11, u.tr("Local endpoint", "Endpoint local"), nativeTextSubtle, font.Normal),
-				u.buttonWidget("sidebar.copy-url", strings.TrimPrefix(base, "http://"), nativeButtonLink, nativeIconCopy, true, false, func() { u.copy(base) }),
-			))
+		if team := u.proxyTeam(); team != "" {
+			children = append(children, u.column(u.textStyle(11, u.tr("Team", "Equipo"), nativeTextSubtle, font.Normal), u.textStyle(13, nativeEllipsis(team, 40), nativeInk, font.SemiBold)))
 		}
 		children = append(children, func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min.X = gtx.Constraints.Max.X
@@ -433,7 +432,7 @@ func (u *nativeUI) proxyControl() layout.Widget {
 	return func(gtx layout.Context) layout.Dimensions {
 		tone, label := u.proxyState()
 		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-			layout.Rigid(u.statusBadge(tone, u.tr("Proxy: ", "Proxy: ")+label)),
+			layout.Rigid(u.statusBadge(tone, u.tr("Kilo: ", "Kilo: ")+label)),
 			layout.Rigid(layout.Spacer{Width: 8}.Layout),
 			layout.Rigid(u.proxyButton()),
 		)
@@ -442,11 +441,8 @@ func (u *nativeUI) proxyControl() layout.Widget {
 func (u *nativeUI) pageTop(gtx layout.Context) layout.Dimensions {
 	gtx.Constraints.Min.Y = 0
 	gtx.Constraints.Max.Y = min(gtx.Constraints.Max.Y, gtx.Dp(128))
-	titles := map[string][2]string{"settings": {"Settings", "Ajustes"}, "connection": {"Settings", "Ajustes"}, "agents": {"Harnesses", "Harnesses"}, "models": {"Models", "Modelos"}, "clients": {"Harnesses", "Harnesses"}, "activity": {"Activity", "Actividad"}, "setup": {"Welcome to Kilo Proxy", "Bienvenido a Kilo Proxy"}}
-	descriptions := map[string][2]string{"settings": {"Your Kilo and ChatGPT accounts, appearance and connection.", "Tus cuentas de Kilo y ChatGPT, apariencia y conexión."}, "connection": {"Your Kilo and ChatGPT accounts, appearance and connection.", "Tus cuentas de Kilo y ChatGPT, apariencia y conexión."}, "agents": {"Your harnesses, ready with the same model library.", "Tus harnesses, con la misma biblioteca de modelos."}, "models": {"Choose once. Use them across your harnesses.", "Elige una vez. Úsalos en todos tus harnesses."}, "clients": {"What it opens with, its models and advanced options.", "Con qué abre, sus modelos y opciones avanzadas."}, "activity": {"Requests, reported costs and cache reuse.", "Peticiones, costes informados y reutilización de caché."}, "setup": {"Connect Kilo or ChatGPT. Choose models. Open your harnesses.", "Conecta Kilo o ChatGPT. Elige modelos. Abre tus harnesses."}}
-	if u.page == "agents" && !nativeBool(u.state, "running") && u.agentConnectionReady() {
-		descriptions["agents"] = [2]string{"Opening a harness starts the proxy automatically. You can also start it here.", "Abrir un harness arranca el proxy automáticamente. También puedes arrancarlo aquí."}
-	}
+	titles := map[string][2]string{"settings": {"Settings", "Ajustes"}, "connection": {"Settings", "Ajustes"}, "agents": {"Your apps", "Tus apps"}, "models": {"Models", "Modelos"}, "clients": {"Your apps", "Tus apps"}, "activity": {"Activity", "Actividad"}, "setup": {"Welcome to Kilo Proxy", "Bienvenido a Kilo Proxy"}}
+	descriptions := map[string][2]string{"settings": {"Your Kilo and ChatGPT accounts, appearance and connection.", "Tus cuentas de Kilo y ChatGPT, apariencia y conexión."}, "connection": {"Your Kilo and ChatGPT accounts, appearance and connection.", "Tus cuentas de Kilo y ChatGPT, apariencia y conexión."}, "agents": {"Open an app and it will use your Kilo models automatically.", "Abre una app y usará tus modelos de Kilo automáticamente."}, "models": {"The models you will see in all your apps.", "Los modelos que verás en todas tus apps."}, "clients": {"What it opens with, its models and advanced options.", "Con qué abre, sus modelos y opciones avanzadas."}, "activity": {"What your apps used and what it cost.", "Lo que han usado tus apps y lo que ha costado."}, "setup": {"Three quick steps: sign in, choose models and open your apps.", "Tres pasos rápidos: inicia sesión, elige modelos y abre tus apps."}}
 	title, description := titles[u.page], descriptions[u.page]
 	if lead, ok := u.uxsPageLead(); ok {
 		description = lead
@@ -519,7 +515,7 @@ func (u *nativeUI) Layout(gtx layout.Context) layout.Dimensions {
 					if wide {
 						return layout.Dimensions{}
 					}
-					choices := []nativeChoice{{Value: "agents", Label: u.tr("Harnesses", "Harnesses")}, {Value: "models", Label: u.tr("Models", "Modelos")}, {Value: "activity", Label: u.tr("Activity", "Actividad")}, {Value: "settings", Label: u.tr("Settings", "Ajustes")}}
+					choices := []nativeChoice{{Value: "agents", Label: u.tr("Apps", "Apps")}, {Value: "models", Label: u.tr("Models", "Modelos")}, {Value: "activity", Label: u.tr("Activity", "Actividad")}, {Value: "settings", Label: u.tr("Settings", "Ajustes")}}
 					selected := u.page
 					if selected == "clients" {
 						selected = "agents"

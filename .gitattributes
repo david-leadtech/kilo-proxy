@@ -6,3 +6,9 @@ third_party/gio/*.patch -whitespace
 third_party/fyne-systray/*.patch -whitespace
 ui/icon.svg text eol=lf
 ui/logo-mark.svg text eol=lf
+
+# Preserve the authenticated recovery inputs on every checkout platform.
+/scripts/prepare_apt_site.py text eol=lf
+/scripts/build_apt_repository.py text eol=lf
+/scripts/apt_recovery_0675_golden.json text eol=lf
+/VERSION text eol=lf
