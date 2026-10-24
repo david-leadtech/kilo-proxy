@@ -239,6 +239,7 @@ func (u *nativeUI) terminalInstalledWidgets(installing, checking bool) []layout.
 	children := []layout.Widget{
 		u.note(u.tr("Run these from any project terminal. They pass arguments through to the installed CLI. Codex CLI, Claude Code, Oh My Pi and OpenCode use your latest saved Kilo models and start the saved connection if the proxy is stopped.", "Ejecútalos desde cualquier terminal de proyecto. Pasan los argumentos a la CLI instalada. Codex CLI, Claude Code, Oh My Pi y OpenCode usan tus últimos modelos Kilo guardados e inician la conexión guardada si el proxy está detenido.")),
 		u.note(u.tr("kilo-muse uses the selected Muse executable and connection, including custom versions. Kilo mode uses saved shared models and requires Kilo Proxy open; the native Meta mode uses its own login and catalog.", "kilo-muse usa el ejecutable y la conexión Muse seleccionados, incluidas las versiones personalizadas. El modo Kilo usa los modelos compartidos guardados y requiere Kilo Proxy abierto; el modo nativo de Meta usa su sesión y catálogo propios.")),
+		u.note(u.tr("kilo-opencode follows the OpenCode version selected in Apps → OpenCode, so switching versions does not require reinstalling these commands.", "kilo-opencode sigue la versión de OpenCode seleccionada en Apps → OpenCode, así que cambiar de versión no requiere reinstalar estos comandos.")),
 	}
 	label := u.tr("Update terminal commands", "Actualizar comandos de terminal")
 	if powerShell {

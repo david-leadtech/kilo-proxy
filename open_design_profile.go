@@ -38,15 +38,12 @@ func prepareOpenDesignEngineProfile(dir, engine string, library modelLibrary, ca
 	if engine == "opencode" {
 		selection := editorSelection{Initial: library.DefaultModel}
 		for i, model := range library.Models {
-			name := model.DisplayName
-			if name == "" {
-				name = model.ID
-			}
 			context, err := contextPolicyForChoice(choices[i])
 			if err != nil {
 				return err
 			}
-			selection.Models = append(selection.Models, editorModel{ID: model.ID, Name: name, Context: context.ContextWindow, Output: context.MaxOutputTokens})
+			levels, initial := nativeReasoningFor(choices[i])
+			selection.Models = append(selection.Models, editorModel{ID: model.ID, Name: nativeCodexDisplayName(choices[i]), Context: context.ContextWindow, Output: context.MaxOutputTokens, Variants: levels, ReasoningEffort: initial})
 		}
 		if err := validateEditorSelection(selection); err != nil {
 			return err

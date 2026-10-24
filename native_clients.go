@@ -222,15 +222,15 @@ func nativeClientPayload(key string, s *nativeClientSelection) (any, error) {
 	if key == "opencode" || key == "zed" {
 		selection := editorSelection{Initial: s.Initial}
 		for _, m := range s.Models {
-			name := m.DisplayName
-			if name == "" {
-				name = m.Model.Name
-			}
 			limits, err := contextPolicyForChoice(m)
 			if err != nil {
 				return nil, err
 			}
-			selection.Models = append(selection.Models, editorModel{ID: m.Model.ID, Name: name, Context: limits.ContextWindow, Output: limits.MaxOutputTokens})
+			entry := editorModel{ID: m.Model.ID, Name: nativeCodexDisplayName(m), Context: limits.ContextWindow, Output: limits.MaxOutputTokens}
+			if key == "opencode" {
+				entry.Variants, entry.ReasoningEffort = nativeReasoningFor(m)
+			}
+			selection.Models = append(selection.Models, entry)
 		}
 		return selection, validateEditorSelection(selection)
 	}
@@ -1575,6 +1575,22 @@ func (u *nativeUI) loadClient(key string) {
 	})
 }
 
+func sameEditorLevels(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, level := range a {
+		seen[level] = true
+	}
+	for _, level := range b {
+		if !seen[level] {
+			return false
+		}
+	}
+	return true
+}
+
 func decodeNativeClientSelection(key string, data []byte, catalog []modelInfo) (*nativeClientSelection, error) {
 	if key == "omp" {
 		return decodeNativeOMPSelection(data, catalog)
@@ -1675,7 +1691,11 @@ func decodeNativeClientSelection(key string, data []byte, catalog []modelInfo) (
 			}
 			maximumOutput := model.MaxOutputTokens
 			model.MaxOutputTokens = m.Output
-			s.Models = append(s.Models, nativeModelChoice{Model: model, DisplayName: m.Name, ContextPreset: contextPresetCustom, ContextTokens: m.Context, MaximumOutputTokens: maximumOutput})
+			choice := nativeModelChoice{Model: model, DisplayName: m.Name, DefaultReasoning: m.ReasoningEffort, ContextPreset: contextPresetCustom, ContextTokens: m.Context, MaximumOutputTokens: maximumOutput}
+			if len(m.Variants) > 0 && !sameEditorLevels(m.Variants, model.ReasoningEfforts) {
+				choice.ReasoningLevels, choice.ReasoningCustom = append([]string(nil), m.Variants...), true
+			}
+			s.Models = append(s.Models, choice)
 		}
 		return s, nil
 	}

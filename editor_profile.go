@@ -15,10 +15,12 @@ import (
 )
 
 type editorModel struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Context int    `json:"contextWindow"`
-	Output  int    `json:"maxOutputTokens,omitempty"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Context         int      `json:"contextWindow"`
+	Output          int      `json:"maxOutputTokens,omitempty"`
+	Variants        []string `json:"variants,omitempty"`
+	ReasoningEffort string   `json:"reasoningEffort,omitempty"`
 }
 type editorSelection struct {
 	Models  []editorModel `json:"models"`
@@ -33,6 +35,16 @@ func validateEditorSelection(s editorSelection) error {
 	for _, m := range s.Models {
 		if !catalogID.MatchString(m.ID) || seen[m.ID] || len([]rune(m.Name)) > 80 || strings.IndexFunc(m.Name, func(r rune) bool { return r < 32 || r == 127 }) >= 0 || m.Context < 1024 || m.Context > 100000000 || m.Output < 0 || m.Output > m.Context {
 			return errors.New("Invalid model ID, name, or context/output limit.")
+		}
+		levels := map[string]bool{}
+		for _, level := range m.Variants {
+			if !effortNames[level] || levels[level] {
+				return errors.New("Invalid model reasoning levels.")
+			}
+			levels[level] = true
+		}
+		if m.ReasoningEffort != "" && !levels[m.ReasoningEffort] {
+			return errors.New("Invalid model reasoning levels.")
 		}
 		seen[m.ID] = true
 	}
@@ -118,13 +130,29 @@ func mergeEditorSettings(old []byte, client string, s editorSelection, baseURL, 
 		for _, m := range s.Models {
 			entry := map[string]any{"id": m.ID, "name": m.Name}
 			entry["provider"] = map[string]any{"npm": "@ai-sdk/openai-compatible", "api": baseURL}
-			entry["options"] = map[string]any{"baseURL": baseURL, "apiKey": key, "headers": map[string]string{"Authorization": "Bearer " + key}}
-			entry["headers"] = map[string]string{"Authorization": "Bearer " + key}
+			if m.ReasoningEffort != "" {
+				entry["options"] = map[string]any{"reasoningEffort": m.ReasoningEffort}
+			}
 			limits := map[string]int{"context": m.Context}
 			if m.Output > 0 {
 				limits["output"] = m.Output
 			}
 			entry["limit"] = limits
+			if len(m.Variants) > 0 {
+				variants := []byte{'{'}
+				for i, level := range m.Variants {
+					if i > 0 {
+						variants = append(variants, ',')
+					}
+					name, _ := json.Marshal(level)
+					value, _ := json.Marshal(map[string]any{"model": m.ID, "reasoningEffort": level})
+					variants = append(variants, name...)
+					variants = append(variants, ':')
+					variants = append(variants, value...)
+				}
+				variants = append(variants, '}')
+				entry["variants"] = json.RawMessage(variants)
+			}
 			models[m.ID] = entry
 		}
 		fields = []struct {

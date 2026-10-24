@@ -13,7 +13,7 @@ import (
 const terminalAgentFlag = "--terminal-agent"
 
 func terminalClientSupported(client string) bool {
-	return client == "codex-cli" || client == "claude" || client == "omp" || client == "opencode" || client == "muse"
+	return client == "codex-cli" || client == "claude" || client == "omp" || client == "opencode" || client == "opencode2" || client == "muse"
 }
 
 func terminalPlatformSupported(platform string) bool {
@@ -89,6 +89,20 @@ func (a *app) terminalPrepareAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer a.launchMu.Unlock()
+	// Saving the OpenCode version also holds launchMu, so the selection cannot
+	// change between this check and preparation.
+	if input.Client == "opencode" || input.Client == "opencode2" {
+		a.mu.Lock()
+		expected := "opencode"
+		if a.config.OpenCodeMajor == 2 {
+			expected = "opencode2"
+		}
+		a.mu.Unlock()
+		if input.Client != expected {
+			jsonError(w, 409, "The OpenCode version changed in Kilo settings. Try again.")
+			return
+		}
+	}
 	rt := a.launchRuntime()
 	if !terminalPlatformSupported(rt.platform) {
 		jsonError(w, 409, "Terminal commands are available on macOS, Linux and Windows.")
@@ -174,7 +188,7 @@ func (a *app) terminalPrepareAPI(w http.ResponseWriter, r *http.Request) {
 	err = a.prepareTerminalProfile(input.Client, rt.home, library, claudeCaps(input.ClaudeVersion))
 	if err == nil {
 		err = a.launchProfile(&plan, rt.home)
-		if input.Client == "opencode" {
+		if input.Client == "opencode" || input.Client == "opencode2" {
 			// The profile already names the default model. Unlike the GUI's TUI
 			// launch, terminal commands also support subcommands such as models,
 			// which reject --model. Forward only the user's OpenCode arguments.
@@ -216,6 +230,9 @@ func (a *app) prepareTerminalProfile(client, home string, library modelLibrary, 
 	}
 	if client == "opencode" {
 		return a.prepareTerminalOpenCodeProfile(library)
+	}
+	if client == "opencode2" {
+		return a.prepareOpenCode2Profile(library)
 	}
 	if client == "omp" {
 		selection, err := ompSelectionFromChoices(terminalLibraryChoices(library, readNativeCatalogCache(a.dir, a.catalogScopeLocked())), library.DefaultModel)

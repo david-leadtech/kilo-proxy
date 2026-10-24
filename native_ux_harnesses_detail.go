@@ -187,11 +187,11 @@ func (u *nativeUI) uxhFolderRow(key string) layout.Widget {
 // uxhModelsRow is the "Models" row of "When opening".
 func (u *nativeUI) uxhModelsRow(key string, summary string) layout.Widget {
 	actions := []layout.Widget{u.buttonWidget("agents.models.edit", u.tr("Edit in Models", "Editar en Modelos"), nativeButtonLink, nil, false, false, func() { u.page = "models" })}
-	if _, supported := packAgentNames[key]; supported {
+	if _, supported := packAgentNames[packAgentKey(key)]; supported {
 		actions = append(actions, u.buttonWidget("agent:"+key+":pack", u.tr("Choose model pack", "Elegir pack de modelos"), nativeButtonLink, nil, false, false, func() {
 			u.page = "models"
 			u.packsState().tab = "packs"
-			u.setValue("packs.agent", key)
+			u.setValue("packs.agent", packAgentKey(key))
 		}))
 	}
 	value := []layout.Widget{u.uxhValue(summary)}

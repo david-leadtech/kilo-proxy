@@ -235,7 +235,7 @@ func TestTerminalClientProcessHelper(t *testing.T) {
 	}
 	input, _ := io.ReadAll(os.Stdin)
 	directory, _ := os.Getwd()
-	_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"args": args, "input": string(input), "cwd": directory, "codexHome": os.Getenv("CODEX_HOME"), "localKey": os.Getenv("KILO_LOCAL_API_KEY"), "claudeHome": os.Getenv("CLAUDE_CONFIG_DIR"), "anthropicKey": os.Getenv("ANTHROPIC_API_KEY"), "anthropicBase": os.Getenv("ANTHROPIC_BASE_URL"), "ompHome": os.Getenv("PI_CODING_AGENT_DIR"), "ompProfile": os.Getenv("OMP_PROFILE"), "piProfile": os.Getenv("PI_PROFILE"), "stateful": os.Getenv("PI_OPENAI_STATEFUL"), "openCodeConfig": os.Getenv("OPENCODE_CONFIG"), "openCodeContent": os.Getenv("OPENCODE_CONFIG_CONTENT"), "managedTool": os.Getenv("KILO_TERMINAL_MANAGED_CLIENT"), "metaKey": os.Getenv("META_API_KEY"), "museAuthPath": os.Getenv("MUSE_AUTH_PATH"), "museNoAutoUpdate": os.Getenv("MUSE_NO_AUTO_UPDATE")})
+	_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"args": args, "input": string(input), "cwd": directory, "codexHome": os.Getenv("CODEX_HOME"), "localKey": os.Getenv("KILO_LOCAL_API_KEY"), "claudeHome": os.Getenv("CLAUDE_CONFIG_DIR"), "anthropicKey": os.Getenv("ANTHROPIC_API_KEY"), "anthropicBase": os.Getenv("ANTHROPIC_BASE_URL"), "ompHome": os.Getenv("PI_CODING_AGENT_DIR"), "ompProfile": os.Getenv("OMP_PROFILE"), "piProfile": os.Getenv("PI_PROFILE"), "stateful": os.Getenv("PI_OPENAI_STATEFUL"), "openCodeConfig": os.Getenv("OPENCODE_CONFIG"), "openCodeContent": os.Getenv("OPENCODE_CONFIG_CONTENT"), "managedTool": os.Getenv("KILO_TERMINAL_MANAGED_CLIENT"), "metaKey": os.Getenv("META_API_KEY"), "museAuthPath": os.Getenv("MUSE_AUTH_PATH"), "museNoAutoUpdate": os.Getenv("MUSE_NO_AUTO_UPDATE"), "home": os.Getenv("HOME"), "openCode2Key": os.Getenv("KILO_OPENCODE2_API_KEY")})
 	os.Exit(23)
 }
 
@@ -410,5 +410,129 @@ func TestTerminalAgentRunsInCurrentTerminal(t *testing.T) {
 		if stderr.Len() != 0 {
 			t.Fatal(fmt.Sprintf("unexpected launcher stderr: %s", stderr.String()))
 		}
+	}
+}
+
+// The installed kilo-opencode wrapper follows the saved OpenCode version: the
+// private OpenCode 2 home, its own key and --standalone placed after the
+// subcommand, without touching OpenCode 1 settings.
+func TestTerminalAgentRunsOpenCode2WithStandalonePlacement(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix console commands")
+	}
+	a := terminalTestApp(t)
+	next, err := readSettings(a.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next.OpenCodeMajor = 2
+	if err := writeSettings(a.dir, next); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	a.config.OpenCodeMajor = 2
+	a.mu.Unlock()
+	server := httptest.NewServer(a.adminHandler())
+	defer server.Close()
+	a.adminHost = strings.TrimPrefix(server.URL, "http://")
+	cleanup, err := a.publishTerminalRuntime()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if info, err := readTerminalRuntime(a.dir); err != nil || info.OpenCode2Home == "" {
+		t.Fatal("terminal runtime did not publish the OpenCode 2 home", err)
+	}
+	bin := filepath.Join(t.TempDir(), "tools with ' quotes")
+	if err := os.Mkdir(bin, 0700); err != nil {
+		t.Fatal(err)
+	}
+	self, _ := os.Executable()
+	script := "#!/bin/sh\nif [ \"$1\" = --version ]; then printf '%s\\n' '2.0.27 (synthetic OpenCode 2)'; exit 0; fi\nexec " + helperShellQuote(self) + " -test.run='^TestTerminalClientProcessHelper$' -- \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "opencode2"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(bin, "kilo-proxy")
+	entrypoint := "#!/bin/sh\nshift\nexec " + helperShellQuote(self) + " -test.run='^TestTerminalAgentProcessHelper$' -- \"$@\"\n"
+	if err := os.WriteFile(binary, []byte(entrypoint), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if built := os.Getenv("KILO_TEST_TERMINAL_BINARY"); built != "" {
+		if !filepath.IsAbs(built) {
+			t.Fatal("KILO_TEST_TERMINAL_BINARY must be absolute")
+		}
+		binary = built
+	}
+	t.Setenv("ZDOTDIR", "")
+	installed, err := installTerminalCommands(a.launcher.home, a.dir, binary, "zsh", runtime.GOOS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	// A folder named like a subcommand must not change its placement.
+	if err := os.Mkdir(filepath.Join(project, "models"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	home, _, _ := a.openCode2Paths()
+	large := strings.Repeat("large prompt ", 1000)
+	many := []string{"run", "--standalone-not-a-flag"}
+	for i := 0; i < 120; i++ {
+		many = append(many, fmt.Sprintf("file-%d.go", i))
+	}
+	for _, test := range []struct {
+		args       []string
+		wantArgs   []string
+		wantStderr string
+	}{
+		{nil, []string{"--standalone"}, ""},
+		{[]string{"models", "kilo-local"}, []string{"models", "--standalone", "kilo-local"}, ""},
+		{[]string{"models"}, []string{"models", "--standalone"}, ""},
+		{[]string{"run", "-m", "kilo-local/vendor/one", "hello"}, []string{"run", "--standalone", "-m", "kilo-local/vendor/one", "hello"}, ""},
+		{[]string{"run", large}, []string{"run", "--standalone", large}, ""},
+		{many, append([]string{"run", "--standalone"}, many[1:]...), ""},
+		{[]string{"mcp", "list"}, []string{"mcp", "list"}, "does not accept --standalone"},
+		{[]string{"frobnicate"}, []string{"frobnicate"}, "may not accept --standalone"},
+	} {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		command := exec.CommandContext(ctx, installed.Commands["kilo-opencode"], test.args...)
+		command.Dir = project
+		command.Env = clientChildEnvironment(os.Environ(), map[string]string{"KILO_TERMINAL_PROCESS_TEST": "1", "PATH": bin + string(os.PathListSeparator) + os.Getenv("PATH"), "OPENCODE_CONFIG": "/wrong-opencode", "OPENCODE_CONFIG_CONTENT": `{"model":"wrong/model"}`}, nil, runtime.GOOS)
+		var output, stderr bytes.Buffer
+		command.Stdout, command.Stderr = &output, &stderr
+		err := command.Run()
+		cancel()
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) || exit.ExitCode() != 23 {
+			t.Fatalf("%v: exit=%v, stderr=%s, out=%s", test.args, err, stderr.String(), output.String())
+		}
+		var got struct {
+			Args                            []string
+			Home, OpenCode2Key              string
+			OpenCodeConfig, OpenCodeContent string
+		}
+		if err := json.Unmarshal(output.Bytes(), &got); err != nil {
+			t.Fatal(err, output.String())
+		}
+		if !reflect.DeepEqual(got.Args, test.wantArgs) {
+			t.Fatalf("%v: unexpected OpenCode 2 argv: %v", test.args, got.Args)
+		}
+		if got.Home != home || got.OpenCode2Key != a.config.LocalKey {
+			t.Fatalf("%v: OpenCode 2 did not use its private home and key: %+v", test.args, got)
+		}
+		if got.OpenCodeConfig != "" || got.OpenCodeContent != "" {
+			t.Fatalf("%v: OpenCode 2 inherited an OpenCode 1 override", test.args)
+		}
+		if test.wantStderr == "" && stderr.Len() != 0 {
+			t.Fatalf("%v: unexpected launcher stderr: %s", test.args, stderr.String())
+		}
+		if test.wantStderr != "" && !strings.Contains(stderr.String(), test.wantStderr) {
+			t.Fatalf("%v: missing OpenCode 2 warning: %s", test.args, stderr.String())
+		}
+	}
+	// The OpenCode 1 profile stays untouched.
+	if _, config, _, err := a.editorPaths("opencode"); err != nil {
+		t.Fatal(err)
+	} else if _, err := os.Stat(config); !os.IsNotExist(err) {
+		t.Fatal("OpenCode 2 preparation wrote the OpenCode 1 profile", err)
 	}
 }

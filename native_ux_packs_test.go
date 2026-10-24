@@ -95,6 +95,37 @@ func TestUxmPersonalPackDuplicateReorderAndRole(t *testing.T) {
 	}
 }
 
+// The "Use in…" menu names the single OpenCode entry for both versions.
+func TestUxmPackAgentsNamesOpenCodeForBothVersions(t *testing.T) {
+	u := nativeTestUI(t)
+	u.page = "models"
+	u.models = nativePackModelsForTest()
+	nativeSeedSharedForTest(t, u, u.models[0])
+	p := u.packsState()
+	p.tab, p.selected = "packs", "full-stack-dev"
+	nativeTestFrame(t, u)
+	entries := 0
+	for _, agent := range uxmPackAgents {
+		if agent.key == "opencode" {
+			entries++
+			if agent.name != "OpenCode 1 & 2" {
+				t.Fatalf("OpenCode pack entry label: %q", agent.name)
+			}
+		}
+	}
+	if entries != 1 {
+		t.Fatalf("expected one OpenCode pack entry, found %d", entries)
+	}
+	menu := "packs.use.full-stack-dev"
+	uxmClickMenuItem(t, u, menu, menu+".opencode")
+	if p.file.Assignments["opencode"] != "full-stack-dev" {
+		t.Fatalf("OpenCode pack assignment: %v", p.file.Assignments)
+	}
+	if users := u.uxmPackUsers("full-stack-dev"); len(users) != 1 || users[0] != "OpenCode 1 & 2" {
+		t.Fatalf("pack users: %v", users)
+	}
+}
+
 // A personal pack holds at most 50 models and only catalog models.
 func TestUxmPersonalPackLimitAndCatalogOnly(t *testing.T) {
 	u := nativeTestUI(t)

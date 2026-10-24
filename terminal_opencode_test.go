@@ -85,6 +85,76 @@ func TestTerminalOpenCodeRefreshesSharedModelsAndPreservesMCP(t *testing.T) {
 	}
 }
 
+func TestTerminalOpenCodeDeclaresCatalogReasoningVariants(t *testing.T) {
+	a := terminalTestApp(t)
+	a.config.Port = 8899
+	catalog, _ := json.Marshal(nativeCachedCatalog{SchemaVersion: 1, OrgID: a.config.OrgID, Models: []modelInfo{
+		{ID: "vendor/one", Name: "One", ContextWindow: 128000, ReasoningEfforts: []string{"low", "medium", "high"}},
+		{ID: "vendor/two", Name: "Two", ContextWindow: 128000},
+	}})
+	if err := atomicCatalogFile(filepath.Join(a.dir, "model-catalog.json"), catalog); err != nil {
+		t.Fatal(err)
+	}
+	state := a.modelLibrary.snapshot()
+	state.Library.Models = append(state.Library.Models, modelLibraryItem{ID: "vendor/three", DisplayName: "Three", ContextWindow: 128000})
+	if _, err := a.modelLibrary.save(state.Library, state.Revision, false); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	err := a.prepareTerminalProfile("opencode", a.launcher.home, a.modelLibrary.snapshot().Library, claudeCapabilities{})
+	a.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, path, _, _ := a.editorPaths("opencode")
+	var config struct {
+		Provider map[string]struct {
+			Options map[string]any `json:"options"`
+			Models  map[string]struct {
+				Options  map[string]any `json:"options"`
+				Variants map[string]struct {
+					Model, ReasoningEffort string
+				} `json:"variants"`
+			} `json:"models"`
+		} `json:"provider"`
+	}
+	raw := terminalInstallerRead(t, path)
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	provider := config.Provider["kilo-local"]
+	baseURL, key := "http://127.0.0.1:8899/v1", a.config.LocalKey
+	if provider.Options["baseURL"] != baseURL || provider.Options["apiKey"] != key || len(provider.Options) != 2 {
+		t.Fatalf("provider options must carry only the routed credentials: %v", provider.Options)
+	}
+	variants := provider.Models["vendor/one"].Variants
+	if len(variants) != 3 {
+		t.Fatalf("catalog reasoning variants missing: %v", variants)
+	}
+	for _, level := range []string{"low", "medium", "high"} {
+		v, ok := variants[level]
+		if !ok || v.Model != "vendor/one" || v.ReasoningEffort != level {
+			t.Fatalf("bad %s variant: %+v", level, v)
+		}
+	}
+	low, medium, high := bytes.Index(raw, []byte(`"low":`)), bytes.Index(raw, []byte(`"medium":`)), bytes.Index(raw, []byte(`"high":`))
+	if low < 0 || medium < 0 || high < 0 || !(low < medium && medium < high) {
+		t.Fatalf("catalog reasoning levels were not serialized in declaration order: %s", raw)
+	}
+	if got := config.Provider["kilo-local"].Models["vendor/one"].Options["reasoningEffort"]; got != "medium" {
+		t.Fatalf("default reasoning effort was not emitted: %v", got)
+	}
+	if got := config.Provider["kilo-local"].Models["vendor/two"].Variants; len(got) != 2 || got["low"].ReasoningEffort != "low" || got["high"].ReasoningEffort != "high" {
+		t.Fatalf("custom reasoning levels were not preserved: %v", got)
+	}
+	if got := config.Provider["kilo-local"].Models["vendor/two"].Options["reasoningEffort"]; got != "high" {
+		t.Fatalf("saved default reasoning effort was not emitted: %v", got)
+	}
+	if got := config.Provider["kilo-local"].Models["vendor/three"].Variants; got != nil {
+		t.Fatalf("model without reasoning levels declared variants: %v", got)
+	}
+}
+
 func TestTerminalOpenCodeRejectsUntrustedExecutionParameters(t *testing.T) {
 	a := terminalTestApp(t)
 	cleanup, err := a.publishTerminalRuntime()
@@ -132,6 +202,133 @@ func TestTerminalOpenCodeRejectsUntrustedExecutionParameters(t *testing.T) {
 		invalid.OpenCodeConfig = path
 		if validateTerminalRuntime(invalid) == nil {
 			t.Fatal("invalid trusted path accepted", path)
+		}
+	}
+}
+
+func TestTerminalOpenCode2UsesOwnProfileAndOpenCodePackSlot(t *testing.T) {
+	a := openCode2TestApp(t)
+	a.config.Port = 8899
+	a.config.ImageGeneration = imageGenerationSettings{Enabled: true, Model: "vendor/image"}
+	root, v1path, _, err := a.editorPaths("opencode")
+	if err != nil || safeEditorDir(root, filepath.Dir(v1path)) != nil {
+		t.Fatal("cannot prepare temporary OpenCode 1 profile", err)
+	}
+	v1 := []byte("OpenCode 1 retained\n")
+	if err := os.WriteFile(v1path, v1, 0600); err != nil {
+		t.Fatal(err)
+	}
+	_, config, selection := a.openCode2Paths()
+	if err := safeEditorDir(a.dir, filepath.Dir(config)); err != nil {
+		t.Fatal(err)
+	}
+	original := []byte(`{
+ // Keep this comment and the user's own servers.
+ "mcp":{"docs":{"type":"local","command":["my-mcp","with spaces"]}},
+ "providers":{"personal":{"name":"Personal"}}
+}`)
+	if err := os.WriteFile(config, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	catalog, _ := json.Marshal(nativeCachedCatalog{SchemaVersion: 1, OrgID: a.config.OrgID, Models: []modelInfo{
+		{ID: "vendor/pack", Name: "Pack pick", ContextWindow: 128000, MaxOutputTokens: 4096},
+		{ID: "vendor/one", Name: "Shared pick", ContextWindow: 200000, MaxOutputTokens: 32000},
+	}})
+	if err := atomicCatalogFile(filepath.Join(a.dir, "model-catalog.json"), catalog); err != nil {
+		t.Fatal(err)
+	}
+	file := emptyModelPacksFile()
+	file.Personal = []personalModelPack{{ID: "mine-opencode", Name: "OpenCode pick", Library: modelLibrary{
+		SchemaVersion: 1, DefaultModel: "vendor/pack", Models: []modelLibraryItem{{ID: "vendor/pack", ContextPreset: contextPresetRecommended}},
+	}}}
+	file.Assignments["opencode"] = "mine-opencode"
+	if err := newModelPacksStore(a.dir).save(file, false); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	library, libraryErr := a.terminalModelLibrary("opencode2", a.modelLibrary.snapshot().Library)
+	if libraryErr == nil {
+		libraryErr = a.prepareTerminalProfile("opencode2", a.launcher.home, library, claudeCapabilities{})
+	}
+	a.mu.Unlock()
+	if libraryErr != nil {
+		t.Fatal(libraryErr)
+	}
+	prepared := terminalInstallerRead(t, config)
+	for _, expected := range []string{"Keep this comment", "my-mcp", "Personal", "vendor/pack", "kilo-local/vendor/pack"} {
+		if !bytes.Contains(prepared, []byte(expected)) {
+			t.Fatalf("OpenCode 2 profile lost %q", expected)
+		}
+	}
+	if bytes.Contains(prepared, []byte(`"vendor/one"`)) {
+		t.Fatal("OpenCode 2 ignored the pack assigned to the OpenCode slot")
+	}
+	saved := terminalInstallerRead(t, selection)
+	if !bytes.Contains(saved, []byte("vendor/pack")) || bytes.Contains(saved, []byte("vendor/one")) {
+		t.Fatal("OpenCode 2 selection did not use the assigned pack", string(saved))
+	}
+	if data := terminalInstallerRead(t, v1path); !bytes.Equal(data, v1) {
+		t.Fatal("OpenCode 2 preparation changed the OpenCode 1 profile")
+	}
+}
+
+func TestTerminalOpenCode2RejectsUntrustedExecutionParameters(t *testing.T) {
+	a := terminalTestApp(t)
+	cleanup, err := a.publishTerminalRuntime()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	info, err := readTerminalRuntime(a.dir)
+	home, _, _ := a.openCode2Paths()
+	if err != nil || info.OpenCode2Home != home {
+		t.Fatal("missing trusted OpenCode 2 home", err)
+	}
+	valid := func() clientLaunchPlan {
+		env := map[string]string{"HOME": home, "KILO_OPENCODE2_API_KEY": "synthetic-opencode2-key"}
+		for _, entry := range t3CodeOptionalProviderEnvironment(home, nil, runtime.GOOS) {
+			env[entry["name"].(string)] = entry["value"].(string)
+		}
+		return clientLaunchPlan{Client: "opencode2", Name: "OpenCode 2", Kind: "terminal", Env: env, Unset: openCode2UnsetEnvironment(nil)}
+	}
+	if err := validateTerminalProfile(valid(), info); err != nil {
+		t.Fatal(err)
+	}
+	for name, mutate := range map[string]func(*clientLaunchPlan){
+		"executable":           func(p *clientLaunchPlan) { p.Executable = "/bin/sh" },
+		"extra argument":       func(p *clientLaunchPlan) { p.Args = append(p.Args, "models") },
+		"standalone argument":  func(p *clientLaunchPlan) { p.Args = []string{"--standalone"} },
+		"wrong home":           func(p *clientLaunchPlan) { p.Env["HOME"] = "/other" },
+		"home outside profile": func(p *clientLaunchPlan) { p.Env["HOME"] = filepath.Join(home, "..", "outside") },
+		"extra environment":    func(p *clientLaunchPlan) { p.Env["LD_PRELOAD"] = "/tmp/injected.so" },
+		"missing key":          func(p *clientLaunchPlan) { delete(p.Env, "KILO_OPENCODE2_API_KEY") },
+		"missing isolation": func(p *clientLaunchPlan) {
+			delete(p.Env, map[bool]string{true: "APPDATA", false: "XDG_DATA_HOME"}[runtime.GOOS == "windows"])
+		},
+		"isolation elsewhere": func(p *clientLaunchPlan) {
+			p.Env[map[bool]string{true: "APPDATA", false: "XDG_CONFIG_HOME"}[runtime.GOOS == "windows"]] = filepath.Join(home, "other")
+		},
+		"duplicate reset":  func(p *clientLaunchPlan) { p.Unset = append(p.Unset, p.Unset[0]) },
+		"disallowed reset": func(p *clientLaunchPlan) { p.Unset = append(p.Unset, "PATH") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			plan := valid()
+			mutate(&plan)
+			if validateTerminalProfile(plan, info) == nil {
+				t.Fatal("untrusted response accepted")
+			}
+		})
+	}
+	older := info
+	older.OpenCode2Home = ""
+	if validateTerminalRuntime(older) != nil || validateTerminalProfile(valid(), older) == nil {
+		t.Fatal("older descriptors must remain valid but cannot authorize OpenCode 2")
+	}
+	for _, path := range []string{"relative", home + "/../other", home + "/\n"} {
+		invalid := info
+		invalid.OpenCode2Home = path
+		if validateTerminalRuntime(invalid) == nil {
+			t.Fatal("invalid trusted OpenCode 2 home accepted", path)
 		}
 	}
 }

@@ -323,6 +323,56 @@ func TestInstalledOpenCode2UsesV2ConfigAndExactLocalGateway(t *testing.T) {
 	}
 }
 
+func TestOpenCode2ProfileUsesOpenCodePackSlotAndSharedFallback(t *testing.T) {
+	a := openCode2TestApp(t)
+	catalog, _ := json.Marshal(nativeCachedCatalog{SchemaVersion: 1, OrgID: a.config.OrgID, Models: []modelInfo{
+		{ID: "vendor/pack", Name: "Pack pick", ContextWindow: 128000, MaxOutputTokens: 4096},
+		{ID: "vendor/one", Name: "Shared pick", ContextWindow: 200000, MaxOutputTokens: 32000},
+		{ID: "vendor/two", Name: "Shared fast", ContextWindow: 128000, MaxOutputTokens: 4096},
+	}})
+	if err := atomicCatalogFile(filepath.Join(a.dir, "model-catalog.json"), catalog); err != nil {
+		t.Fatal(err)
+	}
+	file := emptyModelPacksFile()
+	file.Personal = []personalModelPack{{ID: "mine-opencode", Name: "OpenCode pick", Library: modelLibrary{
+		SchemaVersion: 1, DefaultModel: "vendor/pack", Models: []modelLibraryItem{{ID: "vendor/pack", ContextPreset: contextPresetRecommended}},
+	}}}
+	file.Assignments["opencode"] = "mine-opencode"
+	if err := newModelPacksStore(a.dir).save(file, false); err != nil {
+		t.Fatal(err)
+	}
+	_, config, _ := a.openCode2Paths()
+	if w := adminRequest(a, "clients/opencode2", `{}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	prepared, _ := os.ReadFile(config)
+	if !bytes.Contains(prepared, []byte(`"modelID":"vendor/pack"`)) || !bytes.Contains(prepared, []byte(`"model":"kilo-local/vendor/pack"`)) || bytes.Contains(prepared, []byte(`"vendor/one"`)) {
+		t.Fatal("OpenCode 2 version-only preparation ignored the OpenCode pack slot", string(prepared))
+	}
+	delete(file.Assignments, "opencode")
+	if err := newModelPacksStore(a.dir).save(file, false); err != nil {
+		t.Fatal(err)
+	}
+	if w := adminRequest(a, "clients/opencode2", `{}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	prepared, _ = os.ReadFile(config)
+	if !bytes.Contains(prepared, []byte(`"vendor/one"`)) || !bytes.Contains(prepared, []byte(`"vendor/two"`)) || bytes.Contains(prepared, []byte(`"vendor/pack"`)) {
+		t.Fatal("OpenCode 2 did not fall back to the shared library", string(prepared))
+	}
+	// An assigned pack that no longer resolves is reported instead of silently
+	// preparing other models.
+	file.Personal[0].Library.Models[0].ID = "vendor/missing"
+	file.Personal[0].Library.DefaultModel = "vendor/missing"
+	file.Assignments["opencode"] = "mine-opencode"
+	if err := newModelPacksStore(a.dir).save(file, false); err != nil {
+		t.Fatal(err)
+	}
+	if w := adminRequest(a, "clients/opencode2", `{}`); w.Code != 409 || !strings.Contains(w.Body.String(), "vendor/missing") {
+		t.Fatal("unresolvable OpenCode pack was not reported", w.Code, w.Body.String())
+	}
+}
+
 func TestOpenCode2PreservesUserConfigurationAndRejectsOwnedChanges(t *testing.T) {
 	a := openCode2TestApp(t)
 	_, config, _ := a.openCode2Paths()
@@ -417,6 +467,218 @@ func TestOpenCode2DoesNotInventToolCapabilities(t *testing.T) {
 	data, err = a.openCode2Config(testModelLibrary())
 	if err != nil || bytes.Contains(data, []byte(`"tools"`)) {
 		t.Fatal("invented tool support for an unknown model", err)
+	}
+}
+
+func TestOpenCode2DeclaresReasoningVariantsAndNames(t *testing.T) {
+	a := openCode2TestApp(t)
+	levels := []string{"none", "low", "medium", "high", "xhigh", "max"}
+	library := modelLibrary{SchemaVersion: 1, DefaultModel: "vendor/luna", Models: []modelLibraryItem{
+		{ID: "vendor/luna", ReasoningEffort: "high"},
+		{ID: "vendor/plain"},
+		{ID: "vendor/named", DisplayName: "Library name"},
+	}}
+	if _, err := a.modelLibrary.save(library, a.modelLibrary.snapshot().Revision, false); err != nil {
+		t.Fatal(err)
+	}
+	catalog, _ := json.Marshal(nativeCachedCatalog{SchemaVersion: 1, OrgID: a.catalogScopeLocked(), Models: []modelInfo{
+		{ID: "vendor/luna", Name: "OpenAI: GPT-6 Luna", ContextWindow: 128000, MaxOutputTokens: 4096, ReasoningEfforts: levels},
+		{ID: "vendor/plain", Name: "Plain model", ContextWindow: 128000, MaxOutputTokens: 4096},
+		{ID: "vendor/named", ContextWindow: 128000, MaxOutputTokens: 4096},
+	}})
+	if err := atomicCatalogFile(filepath.Join(a.dir, "model-catalog.json"), catalog); err != nil {
+		t.Fatal(err)
+	}
+	if w := adminRequest(a, "clients/opencode2", `{}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	_, config, _ := a.openCode2Paths()
+	data, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct {
+		Providers map[string]struct {
+			Models map[string]struct {
+				Name string `json:"name"`
+				Body struct {
+					ReasoningEffort string `json:"reasoning_effort"`
+				} `json:"body"`
+				Variants []struct {
+					ID       string          `json:"id"`
+					Settings json.RawMessage `json:"settings"`
+					Headers  json.RawMessage `json:"headers"`
+					Body     struct {
+						Model           string `json:"model"`
+						ReasoningEffort string `json:"reasoning_effort"`
+					} `json:"body"`
+				} `json:"variants"`
+			} `json:"models"`
+		} `json:"providers"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	models := parsed.Providers["kilo-local"].Models
+	luna := models["vendor/luna"]
+	if luna.Name != "OpenAI: GPT-6 Luna" || luna.Body.ReasoningEffort != "high" {
+		t.Fatal("wrong reasoning model name or default", luna.Name, luna.Body.ReasoningEffort)
+	}
+	if len(luna.Variants) != len(levels) {
+		t.Fatal("wrong variant count", len(luna.Variants))
+	}
+	for i, level := range levels {
+		variant := luna.Variants[i]
+		if variant.ID != level || variant.Body.ReasoningEffort != level || variant.Body.Model != "vendor/luna" || variant.Settings != nil || variant.Headers != nil {
+			t.Fatal("invalid reasoning variant", level, variant)
+		}
+	}
+	plain := models["vendor/plain"]
+	if plain.Name != "Plain model" || len(plain.Variants) != 0 {
+		t.Fatal("invented variants or name for a model without declared efforts", plain.Name, len(plain.Variants))
+	}
+	if models["vendor/named"].Name != "Library name" {
+		t.Fatal("library display name fallback lost", models["vendor/named"].Name)
+	}
+}
+
+func TestOpenCode2UsesResolvedReasoningWhenSavedDefaultUnavailable(t *testing.T) {
+	a := openCode2TestApp(t)
+	catalog, _ := json.Marshal(nativeCachedCatalog{SchemaVersion: 1, OrgID: a.catalogScopeLocked(), Models: []modelInfo{
+		{ID: "vendor/luna", Name: "Luna", ReasoningEfforts: []string{"low", "medium"}},
+	}})
+	if err := atomicCatalogFile(filepath.Join(a.dir, "model-catalog.json"), catalog); err != nil {
+		t.Fatal(err)
+	}
+	library := modelLibrary{SchemaVersion: 1, DefaultModel: "vendor/luna", Models: []modelLibraryItem{
+		{ID: "vendor/luna", ReasoningEffort: "high"},
+	}}
+	data, err := a.openCode2Config(library)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct {
+		Providers map[string]struct {
+			Models map[string]struct {
+				Body struct {
+					Model           string `json:"model"`
+					ReasoningEffort string `json:"reasoning_effort"`
+				} `json:"body"`
+				Variants []struct {
+					ID   string `json:"id"`
+					Body struct {
+						Model           string `json:"model"`
+						ReasoningEffort string `json:"reasoning_effort"`
+					} `json:"body"`
+				} `json:"variants"`
+			} `json:"models"`
+		} `json:"providers"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	luna := parsed.Providers["kilo-local"].Models["vendor/luna"]
+	// The saved default ("high") is not a declared level, so the Default option
+	// must use the level nativeReasoningFor resolved instead.
+	if luna.Body.Model != "vendor/luna" || luna.Body.ReasoningEffort != "medium" {
+		t.Fatal("default body did not use the resolved reasoning level", luna.Body)
+	}
+	if len(luna.Variants) != 2 || luna.Variants[0].ID != "low" || luna.Variants[1].ID != "medium" {
+		t.Fatal("variants are not the declared levels", luna.Variants)
+	}
+	for _, variant := range luna.Variants {
+		if variant.Body.Model != "vendor/luna" || variant.Body.ReasoningEffort != variant.ID {
+			t.Fatal("invalid reasoning variant", variant)
+		}
+	}
+}
+
+func TestOpenCode2OmitsReasoningEffortWhenReasoningDisabled(t *testing.T) {
+	a := openCode2TestApp(t)
+	library := modelLibrary{SchemaVersion: 1, DefaultModel: "vendor/quiet", Models: []modelLibraryItem{
+		{ID: "vendor/quiet", ReasoningCustom: true, ReasoningLevels: []string{}},
+	}}
+	data, err := a.openCode2Config(library)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	models := config["providers"].(map[string]any)["kilo-local"].(map[string]any)["models"].(map[string]any)
+	model := models["vendor/quiet"].(map[string]any)
+	body := model["body"].(map[string]any)
+	if _, present := body["reasoning_effort"]; present {
+		t.Fatal("emitted reasoning_effort for a model with reasoning disabled", body)
+	}
+	if body["model"] != "vendor/quiet" {
+		t.Fatal("wrong default body model", body["model"])
+	}
+	variants, ok := model["variants"].([]any)
+	if !ok || len(variants) != 0 {
+		t.Fatal("invented variants for a model with reasoning disabled", model["variants"])
+	}
+}
+
+func TestOpenCode2DisplayNameUsesSharedHelper(t *testing.T) {
+	a := openCode2TestApp(t)
+	// 80 astral runes pass the library's 80-rune limit while exceeding the
+	// helper's 80 UTF-16-unit display limit, so the helper truncates them.
+	astralName := strings.Repeat("😀", 80)
+	catalogName := "catalog\x07name " + strings.Repeat("x", 90)
+	catalog, _ := json.Marshal(nativeCachedCatalog{SchemaVersion: 1, OrgID: a.catalogScopeLocked(), Models: []modelInfo{
+		{ID: "vendor/precedence", Name: catalogName},
+		{ID: "vendor/truncated", Name: "Catalog name"},
+		{ID: "vendor/catalog-name", Name: catalogName},
+	}})
+	if err := atomicCatalogFile(filepath.Join(a.dir, "model-catalog.json"), catalog); err != nil {
+		t.Fatal(err)
+	}
+	library := modelLibrary{SchemaVersion: 1, DefaultModel: "vendor/precedence", Models: []modelLibraryItem{
+		{ID: "vendor/precedence", DisplayName: "Library name"},
+		{ID: "vendor/truncated", DisplayName: astralName},
+		{ID: "vendor/catalog-name"},
+	}}
+	data, err := a.openCode2Config(library)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct {
+		Providers map[string]struct {
+			Models map[string]struct {
+				Name string `json:"name"`
+			} `json:"models"`
+		} `json:"providers"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	models := parsed.Providers["kilo-local"].Models
+	if models["vendor/precedence"].Name != "Library name" {
+		t.Fatal("library display name was not preferred", models["vendor/precedence"].Name)
+	}
+	if models["vendor/truncated"].Name != strings.Repeat("😀", 40) {
+		t.Fatal("display name was not truncated by the shared helper", models["vendor/truncated"].Name)
+	}
+	wantFallback := nativeCodexDisplayName(nativeModelChoice{Model: modelInfo{ID: "vendor/catalog-name", Name: catalogName}})
+	if models["vendor/catalog-name"].Name != wantFallback {
+		t.Fatal("catalog name fallback did not use the shared helper", models["vendor/catalog-name"].Name)
+	}
+}
+
+func TestOpenCode2ConfigIsDeterministic(t *testing.T) {
+	a := openCode2TestApp(t)
+	first, err := a.openCode2Config(testModelLibrary())
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := a.openCode2Config(testModelLibrary())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Fatal("identical libraries produced different configurations")
 	}
 }
 

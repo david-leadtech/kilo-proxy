@@ -46,6 +46,126 @@ func TestEditorJSONCPreservation(t *testing.T) {
 		}
 	}
 }
+func TestEditorOpenCodeDeclaresReasoningVariants(t *testing.T) {
+	selection := editorSelection{Models: []editorModel{
+		{ID: "vendor/one", Name: "One", Context: 64000, Output: 4000, Variants: []string{"low", "high", "max"}, ReasoningEffort: "high"},
+		{ID: "vendor/two", Name: "Two", Context: 128000},
+	}, Initial: "vendor/one"}
+	baseURL, key := "http://127.0.0.1:8877/v1", "local-test-key"
+	type variant struct {
+		Model           string  `json:"model"`
+		BaseURL         *string `json:"baseURL"`
+		APIKey          *string `json:"apiKey"`
+		Headers         any     `json:"headers"`
+		ReasoningEffort string  `json:"reasoningEffort"`
+	}
+	var config struct {
+		Provider map[string]struct {
+			Options map[string]any `json:"options"`
+			Models  map[string]struct {
+				Options  map[string]any     `json:"options"`
+				Headers  any                `json:"headers"`
+				Variants map[string]variant `json:"variants"`
+			} `json:"models"`
+		} `json:"provider"`
+	}
+	updated, err := mergeEditorSettings(nil, "opencode", selection, baseURL, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(updated, &config); err != nil {
+		t.Fatal(err)
+	}
+	provider := config.Provider["kilo-local"]
+	if provider.Options["baseURL"] != baseURL || provider.Options["apiKey"] != key || len(provider.Options) != 2 {
+		t.Fatalf("provider options must carry only the routed credentials: %v", provider.Options)
+	}
+	variants := provider.Models["vendor/one"].Variants
+	if len(variants) != 3 {
+		t.Fatalf("reasoning variants missing: %s", updated)
+	}
+	for _, level := range []string{"low", "high", "max"} {
+		v, ok := variants[level]
+		if !ok || v.Model != "vendor/one" || v.ReasoningEffort != level || v.BaseURL != nil || v.APIKey != nil || v.Headers != nil {
+			t.Fatalf("bad %s variant: %+v", level, v)
+		}
+	}
+	if provider.Models["vendor/one"].Headers != nil || len(provider.Models["vendor/one"].Options) != 1 {
+		t.Fatalf("model-level provider options leak credentials into the request body: %+v", provider.Models["vendor/one"])
+	}
+	if config.Provider["kilo-local"].Models["vendor/two"].Variants != nil {
+		t.Fatal("model without variants declared reasoning levels")
+	}
+	if got := config.Provider["kilo-local"].Models["vendor/one"].Options["reasoningEffort"]; got != "high" {
+		t.Fatalf("default reasoning effort was not emitted: %v", got)
+	}
+	low, high, max := bytes.Index(updated, []byte(`"low":`)), bytes.Index(updated, []byte(`"high":`)), bytes.Index(updated, []byte(`"max":`))
+	if low < 0 || high < 0 || max < 0 || !(low < high && high < max) {
+		t.Fatalf("variant levels were not serialized in declaration order: %s", updated)
+	}
+	zed, err := mergeEditorSettings(nil, "zed", selection, baseURL, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(zed, []byte(`"variants"`)) {
+		t.Fatal("Zed settings declared OpenCode reasoning variants")
+	}
+	twice, err := mergeEditorSettings(updated, "opencode", selection, baseURL, key)
+	if err != nil || !bytes.Equal(twice, updated) {
+		t.Fatal("reasoning variants are not idempotent")
+	}
+	if err := validateEditorSelection(selection); err != nil {
+		t.Fatal(err)
+	}
+	for _, levels := range [][]string{{"bogus"}, {"low", "low"}} {
+		bad := editorSelection{Models: append([]editorModel{}, selection.Models...), Initial: selection.Initial}
+		bad.Models[0].Variants = levels
+		if validateEditorSelection(bad) == nil {
+			t.Fatalf("accepted reasoning levels %v", levels)
+		}
+	}
+	bad := editorSelection{Models: append([]editorModel{}, selection.Models...), Initial: selection.Initial}
+	bad.Models[0].ReasoningEffort = "medium"
+	if validateEditorSelection(bad) == nil {
+		t.Fatal("accepted a default reasoning effort outside the declared variants")
+	}
+}
+func TestEditorOpenCodeRewritesLegacyModelCredentials(t *testing.T) {
+	legacy := []byte(`{
+		"provider":{"kilo-local":{"options":{"baseURL":"http://127.0.0.1:1/v1","apiKey":"old-key"},
+			"models":{"vendor/one":{"options":{"baseURL":"http://127.0.0.1:1/v1","apiKey":"old-key","headers":{"Authorization":"Bearer old-key"}},
+				"headers":{"Authorization":"Bearer old-key"},
+				"variants":{"low":{"model":"vendor/one","baseURL":"http://127.0.0.1:1/v1","apiKey":"old-key","reasoningEffort":"low"}}}}}}
+	}`)
+	selection := editorSelection{Models: []editorModel{
+		{ID: "vendor/one", Name: "One", Context: 64000, Variants: []string{"low", "high"}, ReasoningEffort: "high"},
+	}, Initial: "vendor/one"}
+	updated, err := mergeEditorSettings(legacy, "opencode", selection, "http://127.0.0.1:8877/v1", "new-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, leaked := range []string{"old-key", "Bearer ", `"Authorization"`} {
+		if bytes.Contains(updated, []byte(leaked)) {
+			t.Fatalf("legacy model credentials survived re-prepare (%s): %s", leaked, updated)
+		}
+	}
+	var parsed struct {
+		Provider map[string]struct {
+			Options map[string]any `json:"options"`
+			Models  map[string]struct {
+				Options map[string]any `json:"options"`
+				Headers any            `json:"headers"`
+			} `json:"models"`
+		} `json:"provider"`
+	}
+	if err := json.Unmarshal(updated, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	provider := parsed.Provider["kilo-local"]
+	if provider.Options["apiKey"] != "new-key" || provider.Models["vendor/one"].Headers != nil || len(provider.Models["vendor/one"].Options) != 1 || provider.Models["vendor/one"].Options["reasoningEffort"] != "high" {
+		t.Fatalf("re-prepare did not normalise the provider credentials: %s", updated)
+	}
+}
 func TestEditorPrepareLoadBackupsAndIsolation(t *testing.T) {
 	a := testApp(t)
 	a.editorTestRoot = t.TempDir()

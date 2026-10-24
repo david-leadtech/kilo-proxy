@@ -22,6 +22,77 @@ import (
 	"gioui.org/io/semantic"
 )
 
+// OpenCode 2 posts the pack assigned to OpenCode, not the shared library.
+func TestNativeOpenCode2PreparationUsesOpenCodePack(t *testing.T) {
+	u, _ := nativeLaunchTestUI(t, "opencode2", false, false)
+	version2 := syntheticOpenCodeExecutable(t, filepath.Join(u.owner.editorTestRoot, "version-two"))
+	u.owner.openCodeVersionProbe = func(binary string) (string, error) {
+		if binary == version2 {
+			return "2.0.27", nil
+		}
+		return "1.19.0", nil
+	}
+	previous := u.owner.launcher.resolve
+	u.owner.launcher.resolve = func(client, custom string) (string, error) {
+		if client == "opencode2" {
+			return version2, nil
+		}
+		return previous(client, custom)
+	}
+	// Replace the admin host before any background request can read it.
+	upstream, _ := url.Parse("http://" + u.owner.adminHost)
+	proxy := httputil.NewSingleHostReverseProxy(upstream)
+	var mu sync.Mutex
+	var libraries []modelLibrary
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == nativeClientEndpoint("opencode2") && r.Method == http.MethodPost {
+			body, _ := io.ReadAll(r.Body)
+			var payload struct {
+				Library modelLibrary `json:"library"`
+			}
+			if json.Unmarshal(body, &payload) == nil {
+				mu.Lock()
+				libraries = append(libraries, payload.Library)
+				mu.Unlock()
+			}
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			r.ContentLength = int64(len(body))
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	t.Cleanup(server.Close)
+	u.owner.adminHost = strings.TrimPrefix(server.URL, "http://")
+	u.detectLaunchers()
+	nativeTestWait(t, u, func() bool { return u.clientState().LaunchChecked })
+	u.models = nativePackModelsForTest()
+	nativeSeedSharedForTest(t, u, u.models[0])
+	u.assignPack("qa-bug-hunter", "opencode")
+	u.saveOpenCodePreferences(openCodePreferences{Version: 1, Major: 2})
+	nativeTestWait(t, u, func() bool {
+		s := &u.clientState().OpenCodePreferences
+		return s.Pending == nil && s.Preferences.Major == 2 && !u.openCodePreferencesBusy()
+	})
+	if u.openCodeClientKey() != "opencode2" {
+		t.Fatalf("OpenCode 2 was not selected: %+v", u.clientState().OpenCodePreferences)
+	}
+	finished := false
+	var failure error
+	u.prepareClientAfter("opencode2", func(err error) { failure, finished = err, true })
+	nativeTestWait(t, u, func() bool { return finished })
+	if failure != nil {
+		t.Fatalf("OpenCode 2 preparation failed: %v", failure)
+	}
+	mu.Lock()
+	sent := append([]modelLibrary(nil), libraries...)
+	mu.Unlock()
+	if len(sent) != 1 || len(sent[0].Models) != 3 || sent[0].DefaultModel != "deepseek/deepseek-v4.1-flash" {
+		t.Fatalf("OpenCode 2 profile did not carry the OpenCode pack: %+v", sent)
+	}
+	if shared := u.owner.modelLibrary.snapshot().Library; len(shared.Models) != 1 || shared.DefaultModel != "vendor/one" {
+		t.Fatalf("pack preparation rewrote the shared library: %+v", shared)
+	}
+}
+
 func TestNativeOpenCodeVersionSaveFailureRetryAndSeparateProfile(t *testing.T) {
 	u, recorder := nativeLaunchTestUI(t, "opencode2", false, false)
 	u.client = "opencode"

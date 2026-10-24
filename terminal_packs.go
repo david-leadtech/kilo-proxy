@@ -14,7 +14,7 @@ func (a *app) terminalModelLibrary(client string, shared modelLibrary) (modelLib
 	if packs.recovery {
 		return modelLibrary{}, errors.New("Saved packs need recovery. Open Models → Packs in Kilo Proxy before launching this agent.")
 	}
-	id := packs.value.Assignments[client]
+	id := packs.value.Assignments[packAgentKey(client)]
 	if id == "" {
 		return shared, nil
 	}

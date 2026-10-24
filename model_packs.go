@@ -68,6 +68,15 @@ var packAgentNames = map[string]string{
 	"claude-desktop": "Claude Desktop", "opencode": "OpenCode", "omp": "Oh My Pi", "zed": "Zed",
 }
 
+// packAgentKey returns the model-pack assignment key for a client. OpenCode 2
+// shares the single "OpenCode" pack slot with OpenCode 1.
+func packAgentKey(client string) string {
+	if client == "opencode2" {
+		return "opencode"
+	}
+	return client
+}
+
 func validPackText(text string, limit int) bool {
 	return text != "" && utf8.ValidString(text) && utf8.RuneCountInString(text) <= limit && strings.IndexFunc(text, unicode.IsControl) < 0
 }

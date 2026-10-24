@@ -342,6 +342,44 @@ func TestNativePackUiPointerNavigationAndOwnCopy(t *testing.T) {
 	}
 }
 
+// OpenCode 2 shares OpenCode's single pack slot while keeping its own profile
+// and prepared selection state.
+func TestNativeOpenCode2UsesOpenCodePack(t *testing.T) {
+	u := nativeTestUI(t)
+	u.page = "models"
+	u.models = nativePackModelsForTest()
+	shared := nativeSeedSharedForTest(t, u, u.models[0])
+	u.assignPack("qa-bug-hunter", "opencode")
+	p := u.packsState()
+	if p.file.Assignments["opencode"] != "qa-bug-hunter" || p.file.Assignments["opencode2"] != "" {
+		t.Fatalf("OpenCode pack assignment did not use the OpenCode key: %v", p.file.Assignments)
+	}
+	for _, key := range []string{"opencode", "opencode2"} {
+		if got := u.sharedClientSelection(key); len(got.Models) != 3 || got.Initial != "deepseek/deepseek-v4.1-flash" {
+			t.Fatalf("%s did not use the OpenCode pack: %+v", key, got)
+		}
+		if name := u.assignedPackName(key); name != "QA · Bug Hunter" {
+			t.Fatalf("%s did not report the OpenCode pack: %q", key, name)
+		}
+	}
+	u.models = u.models[:2]
+	one, two := u.packReadinessError("opencode"), u.packReadinessError("opencode2")
+	if one == nil || two == nil || one.Error() != two.Error() || !strings.Contains(two.Error(), "Refresh the catalog") {
+		t.Fatalf("OpenCode 2 did not report the same missing-catalog error: %v, %v", one, two)
+	}
+	u.models = nativePackModelsForTest()
+	u.clearPackAssignment("opencode")
+	if p.file.Assignments["opencode"] != "" {
+		t.Fatal("clearing the OpenCode pack left its assignment")
+	}
+	if got := u.sharedClientSelection("opencode2"); len(got.Models) != 1 || got.Initial != shared.Initial {
+		t.Fatalf("OpenCode 2 did not fall back to the shared library: %+v", got)
+	}
+	if err := validateModelPacksFile(modelPacksFile{SchemaVersion: 1, Assignments: map[string]string{"opencode2": "qa-bug-hunter"}}); err == nil {
+		t.Fatal("a saved OpenCode 2 pack assignment was accepted")
+	}
+}
+
 func TestNativePacksExternalEditDoesNotUseUnsavedAssignment(t *testing.T) {
 	u := nativeTestUI(t)
 	u.page = "models"

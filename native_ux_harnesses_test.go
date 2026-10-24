@@ -173,6 +173,29 @@ func TestNativeHarnessesPerHarnessFolderOverride(t *testing.T) {
 	}
 }
 
+// OpenCode 2 shows the pack assigned to OpenCode on its detail page.
+func TestNativeHarnessesOpenCode2ShowsOpenCodePack(t *testing.T) {
+	u, _ := nativeLaunchTestUI(t, "opencode2", false, false)
+	u.page = "clients"
+	u.models = nativePackModelsForTest()
+	nativeSeedSharedForTest(t, u, u.models[0])
+	u.assignPack("qa-bug-hunter", "opencode")
+	h := &nativePointerHarness{t: t, u: u, size: image.Pt(1180, 1500), now: time.Now()}
+	h.frame()
+	h.reveal("Choose model pack", semantic.Button)
+	if !nativeUpdateHasText(h, "Choose model pack") {
+		t.Fatal("OpenCode 2 detail did not offer the model pack action")
+	}
+	if !nativeUpdateHasText(h, "Model pack: QA · Bug Hunter · applied on next open") {
+		t.Fatal("OpenCode 2 detail did not show the assigned pack")
+	}
+	u.list("page." + u.page).Position.Offset = 1 << 20
+	h.frame()
+	if !nativeUpdateHasText(h, "Terminal commands") {
+		t.Fatal("OpenCode 2 detail did not offer the terminal commands action")
+	}
+}
+
 func TestNativeHarnessesListGroupsAndMissingHarnesses(t *testing.T) {
 	for _, lang := range []string{"en", "es"} {
 		t.Run(lang, func(t *testing.T) {

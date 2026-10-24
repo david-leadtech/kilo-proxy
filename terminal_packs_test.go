@@ -36,12 +36,20 @@ func TestTerminalModelLibraryUsesAssignedPackAndSharedFallback(t *testing.T) {
 		ID: "mine-qa", Name: "My QA", Library: modelLibrary{SchemaVersion: 1, DefaultModel: "vendor/qa", Models: []modelLibraryItem{{ID: "vendor/qa", ContextPreset: contextPresetRecommended}}},
 	}}
 	packs.Assignments["codex-cli"] = "mine-qa"
+	packs.Assignments["opencode"] = "mine-qa"
 	if err := newModelPacksStore(dir).save(packs, false); err != nil {
 		t.Fatal(err)
 	}
 	got, err := a.terminalModelLibrary("codex-cli", shared)
 	if err != nil || got.DefaultModel != "vendor/qa" || len(got.Models) != 1 || got.Models[0].ID != "vendor/qa" {
 		t.Fatalf("terminal command ignored assigned pack: %+v, %v", got, err)
+	}
+	// OpenCode 2 shares the OpenCode pack slot with OpenCode 1.
+	for _, client := range []string{"opencode", "opencode2"} {
+		got, err := a.terminalModelLibrary(client, shared)
+		if err != nil || got.DefaultModel != "vendor/qa" || len(got.Models) != 1 || got.Models[0].ID != "vendor/qa" {
+			t.Fatalf("%s ignored the pack assigned to the OpenCode slot: %+v, %v", client, got, err)
+		}
 	}
 	fallback, err := a.terminalModelLibrary("claude", shared)
 	if err != nil || !reflect.DeepEqual(fallback, shared) {

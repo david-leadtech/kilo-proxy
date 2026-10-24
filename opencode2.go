@@ -134,15 +134,12 @@ func (a *app) openCode2Config(library modelLibrary) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		model := map[string]any{"modelID": choice.Model.ID, "name": choice.DisplayName}
+		model := map[string]any{"modelID": choice.Model.ID, "name": nativeCodexDisplayName(choice)}
 		model["package"] = "@opencode/ai/providers/openai-compatible"
 		model["settings"] = map[string]any{"baseURL": "http://127.0.0.1:" + strconv.Itoa(a.config.Port) + "/v1", "apiKey": "{env:KILO_OPENCODE2_API_KEY}"}
 		model["headers"] = map[string]string{"Authorization": "Bearer {env:KILO_OPENCODE2_API_KEY}"}
 		if capabilities := t3CodeOpenCodeCapabilities(choice.Model); capabilities != nil {
 			model["capabilities"] = capabilities
-		}
-		if choice.DisplayName == "" {
-			model["name"] = choice.Model.ID
 		}
 		limit := map[string]int{}
 		if limits.ContextWindow > 0 {
@@ -154,11 +151,22 @@ func (a *app) openCode2Config(library modelLibrary) ([]byte, error) {
 		if len(limit) > 0 {
 			model["limit"] = limit
 		}
+		levels, initial := nativeReasoningFor(choice)
 		body := map[string]any{"model": choice.Model.ID}
-		if choice.DefaultReasoning != "" {
+		if helperContains(levels, choice.DefaultReasoning) {
 			body["reasoning_effort"] = choice.DefaultReasoning
+		} else if initial != "" {
+			// The saved default is not one of the model's declared levels, so
+			// use the level nativeReasoningFor resolved for the Default option.
+			body["reasoning_effort"] = initial
 		}
 		model["body"] = body
+		variants := []map[string]any{}
+		for _, level := range levels {
+			variants = append(variants, map[string]any{"id": level,
+				"body": map[string]any{"model": choice.Model.ID, "reasoning_effort": level}})
+		}
+		model["variants"] = variants
 		models[choice.Model.ID] = model
 	}
 	return json.MarshalIndent(map[string]any{
@@ -168,6 +176,71 @@ func (a *app) openCode2Config(library modelLibrary) ([]byte, error) {
 			"settings": map[string]any{"baseURL": "http://127.0.0.1:" + strconv.Itoa(a.config.Port) + "/v1"}, "models": models,
 		}},
 	}, "", "  ")
+}
+
+// openCode2LibraryError marks a model-library or configuration problem, which
+// the profile API reports as a bad request rather than a conflict.
+type openCode2LibraryError struct{ err error }
+
+func (e openCode2LibraryError) Error() string { return e.err.Error() }
+
+// Caller holds a.mu. Prepare the isolated OpenCode 2 profile without touching
+// OpenCode 1 settings.
+func (a *app) prepareOpenCode2Profile(library modelLibrary) error {
+	_, config, selection := a.openCode2Paths()
+	data, err := a.openCode2Config(library)
+	if err != nil {
+		return openCode2LibraryError{err}
+	}
+	if err := safeEditorDir(a.dir, filepath.Dir(config)); err != nil {
+		return errors.New("Cannot prepare the private OpenCode 2 directory.")
+	}
+	old, readErr := readCatalogFile(config)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return errors.New("Cannot read the private OpenCode 2 configuration.")
+	}
+	data, err = mergeOpenCode2Config(old, data)
+	if err != nil {
+		return err
+	}
+	file, err := prepareProfileFile(config, data)
+	if err != nil {
+		return errors.New("Cannot prepare the private OpenCode 2 configuration.")
+	}
+	saved, _ := json.Marshal(library)
+	record, err := prepareProfileFile(selection, saved)
+	if err != nil {
+		return errors.New("Cannot prepare the private OpenCode 2 selection.")
+	}
+	if _, err := saveEditorFiles([]profileFile{file, record}); err != nil {
+		return errors.New("Cannot save the private OpenCode 2 profile.")
+	}
+	return nil
+}
+
+// openCode2UnsetEnvironment removes every inherited OpenCode override so the
+// isolated profile is the only configuration OpenCode 2 reads.
+func openCode2UnsetEnvironment(parent []string) []string {
+	names := t3CodeUnsetEnvironment(parent)
+	for _, entry := range parent {
+		key, _, _ := strings.Cut(entry, "=")
+		// Windows environment names are case-insensitive.
+		if strings.HasPrefix(strings.ToUpper(key), "OPENCODE_") {
+			names = append(names, key)
+		}
+	}
+	// The trusted-plan check rejects duplicates, and a caller's own T3CODE_*
+	// overrides can already appear in the fixed list.
+	seen := make(map[string]bool, len(names))
+	unique := names[:0]
+	for _, name := range names {
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		unique = append(unique, name)
+	}
+	return unique
 }
 
 func (a *app) openCode2ProfileAPI(w http.ResponseWriter, r *http.Request) {
@@ -198,10 +271,18 @@ func (a *app) openCode2ProfileAPI(w http.ResponseWriter, r *http.Request) {
 	} else if r.Method == http.MethodPost && (state.RecoveryRequired || state.Warning != "") {
 		jsonError(w, 409, "Recover and save your shared models first.")
 		return
+	} else if r.Method == http.MethodPost {
+		// A request without a library uses the pack assigned to the shared
+		// OpenCode slot, like kilo-opencode, or the shared models.
+		var err error
+		if library, err = a.terminalModelLibrary("opencode2", library); err != nil {
+			jsonError(w, 409, err.Error())
+			return
+		}
 	}
 	rt := a.launchRuntime()
 	binary, resolveErr := rt.resolve("opencode2", "")
-	message := "Prepare OpenCode 2 with the shared model library and a separate profile."
+	message := "Prepare OpenCode 2 with your OpenCode models and a separate profile."
 	if r.Method == http.MethodPost {
 		if !a.connectionReadyLocked() {
 			jsonError(w, 409, "Connect the selected provider first.")
@@ -215,38 +296,13 @@ func (a *app) openCode2ProfileAPI(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, 409, err.Error())
 			return
 		}
-		data, err := a.openCode2Config(library)
-		if err != nil {
-			jsonError(w, 400, err.Error())
-			return
-		}
-		if err := safeEditorDir(a.dir, filepath.Dir(config)); err != nil {
-			jsonError(w, 409, "Cannot prepare the private OpenCode 2 directory.")
-			return
-		}
-		old, readErr := readCatalogFile(config)
-		if readErr != nil && !os.IsNotExist(readErr) {
-			jsonError(w, 409, "Cannot read the private OpenCode 2 configuration.")
-			return
-		}
-		data, err = mergeOpenCode2Config(old, data)
-		if err != nil {
-			jsonError(w, 409, err.Error())
-			return
-		}
-		file, err := prepareProfileFile(config, data)
-		if err != nil {
-			jsonError(w, 409, "Cannot prepare the private OpenCode 2 configuration.")
-			return
-		}
-		saved, _ := json.Marshal(library)
-		record, err := prepareProfileFile(selection, saved)
-		if err != nil {
-			jsonError(w, 409, "Cannot prepare the private OpenCode 2 selection.")
-			return
-		}
-		if _, err := saveEditorFiles([]profileFile{file, record}); err != nil {
-			jsonError(w, 409, "Cannot save the private OpenCode 2 profile.")
+		if err := a.prepareOpenCode2Profile(library); err != nil {
+			var libraryErr openCode2LibraryError
+			if errors.As(err, &libraryErr) {
+				jsonError(w, 400, err.Error())
+			} else {
+				jsonError(w, 409, err.Error())
+			}
 			return
 		}
 		message = "OpenCode 2 prepared. Its accounts and chats stay separate from OpenCode 1."
@@ -265,8 +321,10 @@ func (a *app) openCode2ProfileAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) applyOpenCode2Launch(plan *clientLaunchPlan, platform string) error {
-	if err := a.checkOpenCodeVersion(plan.Executable, 2); err != nil {
-		return err
+	if plan.Executable != "" {
+		if err := a.checkOpenCodeVersion(plan.Executable, 2); err != nil {
+			return err
+		}
 	}
 	home, config, selection := a.openCode2Paths()
 	if !safeLaunchDir(filepath.Dir(config), a.dir) {
@@ -287,14 +345,15 @@ func (a *app) applyOpenCode2Launch(plan *clientLaunchPlan, platform string) erro
 		plan.Env[entry["name"].(string)] = entry["value"].(string)
 	}
 	plan.Env["KILO_OPENCODE2_API_KEY"] = a.config.LocalKey
-	plan.Unset = append(plan.Unset, t3CodeUnsetEnvironment(os.Environ())...)
-	for _, entry := range os.Environ() {
-		key, _, _ := strings.Cut(entry, "=")
-		if strings.HasPrefix(key, "OPENCODE_") {
-			plan.Unset = append(plan.Unset, key)
-		}
+	plan.Unset = append(plan.Unset, openCode2UnsetEnvironment(os.Environ())...)
+	if plan.Kind == "terminal" && plan.Executable == "" {
+		// The terminal wrapper inserts --standalone after the subcommand, where
+		// OpenCode 2 accepts it. GUI launches set an executable and pass it
+		// directly.
+		plan.Args = nil
+	} else {
+		plan.Args = []string{"--standalone"}
 	}
-	plan.Args = []string{"--standalone"}
 	return nil
 }
 

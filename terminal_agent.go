@@ -62,7 +62,18 @@ func runTerminalAgentMode(args []string) int {
 		fmt.Fprintln(os.Stderr, "The Kilo Proxy configuration directory must be absolute.")
 		return 1
 	}
-	executable, err := resolveTerminalExecutable(*dir, args[0])
+	client := args[0]
+	if client == "opencode" {
+		config, configErr := readSettings(*dir)
+		if configErr != nil {
+			fmt.Fprintln(os.Stderr, "Cannot read Kilo Proxy settings.")
+			return 1
+		}
+		if config.OpenCodeMajor == 2 {
+			client = "opencode2"
+		}
+	}
+	executable, err := resolveTerminalExecutable(*dir, client)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -72,7 +83,7 @@ func runTerminalAgentMode(args []string) int {
 		fmt.Fprintln(os.Stderr, "Cannot read the current project directory.")
 		return 1
 	}
-	input := terminalPrepareRequest{Client: args[0], Directory: directory}
+	input := terminalPrepareRequest{Client: client, Directory: directory}
 	if input.Client == "claude" {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		installedVersion, _, err := managedToolInstalledVersion(ctx, "claude", executable, runtime.GOOS, runtime.GOARCH)
@@ -139,13 +150,31 @@ func runTerminalAgentMode(args []string) int {
 		}
 	}
 	plan.Executable = executable
+	if input.Client == "opencode2" {
+		// The wrapper may run in a terminal whose OPENCODE_* overrides were not
+		// present when the app produced its plan.
+		plan.Unset = openCode2UnsetEnvironment(os.Environ())
+	}
 	if err := validateClientProcessPlan(plan); err != nil {
 		fmt.Fprintln(os.Stderr, "Invalid terminal launch parameters.")
 		return 1
 	}
 	// The user's original arguments are already an argv vector. Preserve them
 	// without applying the GUI launch-ticket size limits to prompts or lists.
-	plan.Args = append(plan.Args, arguments...)
+	if input.Client == "opencode2" {
+		var unsupported string
+		var known bool
+		plan.Args, unsupported, known = openCode2Arguments(arguments)
+		if unsupported != "" {
+			verb := "may not accept"
+			if known {
+				verb = "does not accept"
+			}
+			fmt.Fprintf(os.Stderr, "kilo-opencode: OpenCode 2 %s --standalone for %q; it may wait for or conflict with your regular OpenCode background service.\n", verb, unsupported)
+		}
+	} else {
+		plan.Args = append(plan.Args, arguments...)
+	}
 	if err := execTerminalAgent(plan); err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) && exit.ExitCode() >= 0 {
@@ -167,12 +196,21 @@ func resolveTerminalExecutable(dir, client string) (string, error) {
 	}
 	a := &app{dir: dir, cliExecutables: [2]string{config.CodexCLIExecutable, config.ClaudeCodeExecutable}, museExecutable: config.MuseCodeExecutable,
 		openCodeExecutables: [2]string{config.OpenCode1Executable, config.OpenCode2Executable}}
-	executable, err := a.launchRuntime().resolve(client, "")
+	resolved, major := client, 0
+	if client == "opencode" || client == "opencode2" {
+		// The installed kilo-opencode wrapper passes the OpenCode 1 client name;
+		// the saved major decides which installation and version check apply.
+		resolved, major = "opencode", 1
+		if client == "opencode2" || config.OpenCodeMajor == 2 {
+			resolved, major = "opencode2", 2
+		}
+	}
+	executable, err := a.launchRuntime().resolve(resolved, "")
 	if err != nil {
 		return "", err
 	}
-	if client == "opencode" {
-		if err := a.checkOpenCodeVersion(executable, 1); err != nil {
+	if major != 0 {
+		if err := a.checkOpenCodeVersion(executable, major); err != nil {
 			return "", err
 		}
 	}

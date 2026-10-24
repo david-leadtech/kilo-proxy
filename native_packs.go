@@ -47,6 +47,7 @@ func (u *nativeUI) packName(id string) string {
 }
 
 func (u *nativeUI) assignedPackName(key string) string {
+	key = packAgentKey(key)
 	if _, ok := packAgentNames[key]; !ok {
 		return ""
 	}
@@ -84,6 +85,7 @@ func (u *nativeUI) missingPackModels(id string) []string {
 // A pack is resolved when the agent is prepared. It never rewrites models.json
 // or silently changes another agent's selected models.
 func (u *nativeUI) packSelectionForAgent(key string) *nativeClientSelection {
+	key = packAgentKey(key)
 	if _, allowed := packAgentNames[key]; !allowed {
 		return nil
 	}
@@ -207,6 +209,7 @@ func (u *nativeUI) changePersonalPack(id string, change func(*personalModelPack)
 }
 
 func (u *nativeUI) assignPack(id, key string) {
+	key = packAgentKey(key)
 	if _, ok := packAgentNames[key]; !ok {
 		u.noticeError(errors.New("Unknown agent"))
 		return
@@ -230,6 +233,7 @@ func (u *nativeUI) assignPack(id, key string) {
 }
 
 func (u *nativeUI) packReadinessError(key string) error {
+	key = packAgentKey(key)
 	if _, supported := packAgentNames[key]; !supported {
 		return nil
 	}
@@ -257,6 +261,7 @@ func (u *nativeUI) packReadinessError(key string) error {
 }
 
 func (u *nativeUI) clearPackAssignment(key string) {
+	key = packAgentKey(key)
 	u.changePacks(func(file *modelPacksFile) error { delete(file.Assignments, key); return nil })
 }
 
