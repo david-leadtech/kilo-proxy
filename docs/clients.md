@@ -128,7 +128,7 @@ The OpenCode card derives IDs, names, limits and the default from the shared lib
 
 The single **OpenCode** pack assignment covers OpenCode 1 and OpenCode 2, for the desktop card and `kilo-opencode`. Without an assigned pack, both versions use the shared library.
 
-On macOS, Linux and Windows PowerShell, `kilo-opencode` follows the version selected in **Apps → OpenCode** and uses the matching profile in your current terminal and project directory. Each launch refreshes the assigned pack if present, otherwise shared models, names, default, context limits and the managed image MCP setting. Use `kilo-opencode --continue` to resume or pass other OpenCode arguments normally. OpenCode's global/project configuration still applies, while OpenCode 2 keeps its own session storage and accounts. [Command setup and examples](terminal-commands.md).
+On macOS, Linux and Windows PowerShell, `kilo-opencode` follows the version selected in **Apps → OpenCode** and uses the matching profile in your current terminal and project directory. Each launch refreshes the assigned pack if present, otherwise shared models, names, default and context limits; OpenCode 1 also refreshes the managed image MCP setting. Use `kilo-opencode --continue` to resume or pass other OpenCode arguments normally. OpenCode's global/project configuration still applies, while OpenCode 2 keeps its own session storage and accounts. [Command setup and examples](terminal-commands.md).
 
 ## Claude Code: automatic isolated setup
 

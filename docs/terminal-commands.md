@@ -112,7 +112,14 @@ No additional terminal window opens. The CLI uses the current working directory 
 
 `kilo-opencode` follows the version selected in **Apps → OpenCode**; you do not need to reinstall the terminal command when switching. OpenCode 1 keeps the `~/.opencode-kilo` profile described above and is launched through `OPENCODE_CONFIG`. OpenCode 2 uses a private home and XDG directories at `<Kilo data>/opencode2/home`, so its accounts and chats stay separate from OpenCode 1. Only the local proxy key is passed to the OpenCode 2 child, through `KILO_OPENCODE2_API_KEY`.
 
-OpenCode 2 starts with `--standalone` for a root or TUI launch (no arguments, only flags, or a project folder) and for `run`, `models`, `stats`, `mini`, `reload`, `api`, `session` and `auth`, where it is inserted after the command name. OpenCode 2 does not accept this flag for `mcp`, `debug`, `plugin`, `acp`, `serve`, `service`, `pair`, `upgrade` or `uninstall`. For those and unknown subcommands, `kilo-opencode` passes the arguments through unchanged and prints a warning on stderr that the flag may conflict with the regular OpenCode background service.
+OpenCode 2 treats `--standalone` as a per-command flag, so `kilo-opencode` places it where each command accepts it:
+
+- **TUI launch** (no arguments, root flags such as `--continue`, or a project folder): first, as in `opencode --standalone --continue`.
+- **`run`, `models`, `stats`, `mini`, `reload`, `api`**: after the command, as in `opencode models --standalone kilo-local`. A folder with the same name in your project does not change this.
+- **`session <subcommand>`, `auth <subcommand>`**: after both words, as in `opencode session list --standalone`. A bare `session` or `auth`, which only prints help, is passed through unchanged.
+- **Global logging flags** (`--print-logs`, `--log-level`) before a command are kept in place, and the flag follows the command.
+
+OpenCode 2 does not accept this flag for `mcp`, `debug`, `plugin`, `acp`, `serve`, `service`, `pair`, `upgrade` or `uninstall`. For those and unknown subcommands, `kilo-opencode` passes the arguments through unchanged and prints a warning on stderr: without the flag, the command may wait for or conflict with your regular OpenCode background service.
 
 The single **OpenCode** model pack slot applies to both versions, for the desktop card and `kilo-opencode`. Without an assigned pack, both use the shared model library.
 

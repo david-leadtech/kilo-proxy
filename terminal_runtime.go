@@ -235,22 +235,23 @@ func validateTerminalProfile(plan clientLaunchPlan, info terminalRuntime) error 
 			return invalid
 		}
 		key := plan.Env["KILO_OPENCODE2_API_KEY"]
-		if plan.Env["HOME"] != info.OpenCode2Home || len(key) < 1 || len(key) > 1024 || strings.ContainsAny(key, "\x00\r\n") {
+		if len(key) < 1 || len(key) > 1024 || strings.ContainsAny(key, "\x00\r\n") {
 			return invalid
 		}
-		optionalPaths := map[string]bool{"USERPROFILE": true, "APPDATA": true, "LOCALAPPDATA": true, "XDG_CONFIG_HOME": true, "XDG_DATA_HOME": true, "XDG_CACHE_HOME": true, "XDG_STATE_HOME": true, "XDG_RUNTIME_DIR": true}
-		for name, value := range plan.Env {
-			if name == "HOME" || name == "KILO_OPENCODE2_API_KEY" {
-				continue
-			}
-			if !optionalPaths[name] || !filepath.IsAbs(value) || filepath.Clean(value) != value || strings.ContainsAny(value, "\x00\r\n") || value != info.OpenCode2Home && !strings.HasPrefix(value, info.OpenCode2Home+string(filepath.Separator)) {
-				return invalid
-			}
+		// Require the complete private HOME/XDG set; a missing entry would let
+		// OpenCode 2 inherit the user's normal OpenCode data.
+		want := map[string]string{"KILO_OPENCODE2_API_KEY": key}
+		for _, entry := range t3CodeOptionalProviderEnvironment(info.OpenCode2Home, nil, runtime.GOOS) {
+			want[entry["name"].(string)] = entry["value"].(string)
+		}
+		if !reflect.DeepEqual(plan.Env, want) {
+			return invalid
 		}
 		reset := t3CodeUnsetEnvironment(nil)
 		seen := map[string]bool{}
 		for _, name := range plan.Unset {
-			if name == "" || strings.ContainsAny(name, "=\x00\r\n") || seen[name] || !(helperContains(reset, name) || strings.HasPrefix(name, "OPENCODE_") || strings.HasPrefix(name, "T3CODE_")) {
+			upper := strings.ToUpper(name)
+			if name == "" || strings.ContainsAny(name, "=\x00\r\n") || seen[name] || !(helperContains(reset, name) || strings.HasPrefix(upper, "OPENCODE_") || strings.HasPrefix(upper, "T3CODE_")) {
 				return invalid
 			}
 			seen[name] = true

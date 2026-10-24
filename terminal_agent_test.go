@@ -469,7 +469,16 @@ func TestTerminalAgentRunsOpenCode2WithStandalonePlacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	project := t.TempDir()
+	// A folder named like a subcommand must not change its placement.
+	if err := os.Mkdir(filepath.Join(project, "models"), 0700); err != nil {
+		t.Fatal(err)
+	}
 	home, _, _ := a.openCode2Paths()
+	large := strings.Repeat("large prompt ", 1000)
+	many := []string{"run", "--standalone-not-a-flag"}
+	for i := 0; i < 120; i++ {
+		many = append(many, fmt.Sprintf("file-%d.go", i))
+	}
 	for _, test := range []struct {
 		args       []string
 		wantArgs   []string
@@ -477,8 +486,12 @@ func TestTerminalAgentRunsOpenCode2WithStandalonePlacement(t *testing.T) {
 	}{
 		{nil, []string{"--standalone"}, ""},
 		{[]string{"models", "kilo-local"}, []string{"models", "--standalone", "kilo-local"}, ""},
+		{[]string{"models"}, []string{"models", "--standalone"}, ""},
 		{[]string{"run", "-m", "kilo-local/vendor/one", "hello"}, []string{"run", "--standalone", "-m", "kilo-local/vendor/one", "hello"}, ""},
+		{[]string{"run", large}, []string{"run", "--standalone", large}, ""},
+		{many, append([]string{"run", "--standalone"}, many[1:]...), ""},
 		{[]string{"mcp", "list"}, []string{"mcp", "list"}, "does not accept --standalone"},
+		{[]string{"frobnicate"}, []string{"frobnicate"}, "may not accept --standalone"},
 	} {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		command := exec.CommandContext(ctx, installed.Commands["kilo-opencode"], test.args...)

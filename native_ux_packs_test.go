@@ -108,7 +108,7 @@ func TestUxmPackAgentsNamesOpenCodeForBothVersions(t *testing.T) {
 	for _, agent := range uxmPackAgents {
 		if agent.key == "opencode" {
 			entries++
-			if agent.name != "OpenCode (1 and 2)" {
+			if agent.name != "OpenCode 1 & 2" {
 				t.Fatalf("OpenCode pack entry label: %q", agent.name)
 			}
 		}
@@ -121,7 +121,7 @@ func TestUxmPackAgentsNamesOpenCodeForBothVersions(t *testing.T) {
 	if p.file.Assignments["opencode"] != "full-stack-dev" {
 		t.Fatalf("OpenCode pack assignment: %v", p.file.Assignments)
 	}
-	if users := u.uxmPackUsers("full-stack-dev"); len(users) != 1 || users[0] != "OpenCode (1 and 2)" {
+	if users := u.uxmPackUsers("full-stack-dev"); len(users) != 1 || users[0] != "OpenCode 1 & 2" {
 		t.Fatalf("pack users: %v", users)
 	}
 }

@@ -23,7 +23,7 @@ import (
 // uxmPackAgents lists the harnesses a pack can be given to, in menu order.
 var uxmPackAgents = []struct{ key, name string }{
 	{"codex", "Codex"}, {"claude", "Claude Code"}, {"codex-cli", "Codex CLI"},
-	{"opencode", "OpenCode (1 and 2)"}, {"omp", "Oh My Pi"}, {"zed", "Zed"}, {"claude-desktop", "Claude Desktop"},
+	{"opencode", "OpenCode 1 & 2"}, {"omp", "Oh My Pi"}, {"zed", "Zed"}, {"claude-desktop", "Claude Desktop"},
 }
 
 // uxmPackUsers returns the harness names that use pack id.

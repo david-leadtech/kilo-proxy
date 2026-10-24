@@ -360,6 +360,17 @@ func TestOpenCode2ProfileUsesOpenCodePackSlotAndSharedFallback(t *testing.T) {
 	if !bytes.Contains(prepared, []byte(`"vendor/one"`)) || !bytes.Contains(prepared, []byte(`"vendor/two"`)) || bytes.Contains(prepared, []byte(`"vendor/pack"`)) {
 		t.Fatal("OpenCode 2 did not fall back to the shared library", string(prepared))
 	}
+	// An assigned pack that no longer resolves is reported instead of silently
+	// preparing other models.
+	file.Personal[0].Library.Models[0].ID = "vendor/missing"
+	file.Personal[0].Library.DefaultModel = "vendor/missing"
+	file.Assignments["opencode"] = "mine-opencode"
+	if err := newModelPacksStore(a.dir).save(file, false); err != nil {
+		t.Fatal(err)
+	}
+	if w := adminRequest(a, "clients/opencode2", `{}`); w.Code != 409 || !strings.Contains(w.Body.String(), "vendor/missing") {
+		t.Fatal("unresolvable OpenCode pack was not reported", w.Code, w.Body.String())
+	}
 }
 
 func TestOpenCode2PreservesUserConfigurationAndRejectsOwnedChanges(t *testing.T) {

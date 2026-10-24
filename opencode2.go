@@ -210,42 +210,14 @@ func (a *app) prepareOpenCode2Profile(library modelLibrary) error {
 	return nil
 }
 
-// A version-only preparation request carries no explicit library. OpenCode 2
-// shares the OpenCode pack slot, so use its assigned pack when the saved catalog
-// resolves it and fall back to the shared models otherwise.
-func (a *app) openCode2ModelLibrary(shared modelLibrary) modelLibrary {
-	packs := newModelPacksStore(a.dir)
-	if packs.recovery {
-		return shared
-	}
-	id := packs.value.Assignments[packAgentKey("opencode2")]
-	if id == "" {
-		return shared
-	}
-	catalog := readNativeCatalogCache(a.dir, a.catalogScopeLocked())
-	library, err := modelPackLibrary(packs.value, id, catalog)
-	if err != nil || len(library.Models) == 0 {
-		return shared
-	}
-	known := make(map[string]bool, len(catalog))
-	for _, model := range catalog {
-		known[model.ID] = true
-	}
-	for _, item := range library.Models {
-		if !known[item.ID] {
-			return shared
-		}
-	}
-	return library
-}
-
 // openCode2UnsetEnvironment removes every inherited OpenCode override so the
 // isolated profile is the only configuration OpenCode 2 reads.
 func openCode2UnsetEnvironment(parent []string) []string {
 	names := t3CodeUnsetEnvironment(parent)
 	for _, entry := range parent {
 		key, _, _ := strings.Cut(entry, "=")
-		if strings.HasPrefix(key, "OPENCODE_") {
+		// Windows environment names are case-insensitive.
+		if strings.HasPrefix(strings.ToUpper(key), "OPENCODE_") {
 			names = append(names, key)
 		}
 	}
@@ -292,7 +264,13 @@ func (a *app) openCode2ProfileAPI(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, 409, "Recover and save your shared models first.")
 		return
 	} else if r.Method == http.MethodPost {
-		library = a.openCode2ModelLibrary(library)
+		// A request without a library uses the pack assigned to the shared
+		// OpenCode slot, like kilo-opencode, or the shared models.
+		var err error
+		if library, err = a.terminalModelLibrary("opencode2", library); err != nil {
+			jsonError(w, 409, err.Error())
+			return
+		}
 	}
 	rt := a.launchRuntime()
 	binary, resolveErr := rt.resolve("opencode2", "")

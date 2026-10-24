@@ -154,19 +154,25 @@ func runTerminalAgentMode(args []string) int {
 		// The wrapper may run in a terminal whose OPENCODE_* overrides were not
 		// present when the app produced its plan.
 		plan.Unset = openCode2UnsetEnvironment(os.Environ())
-		args, unsupported := openCode2Arguments(arguments)
-		plan.Args = args
-		if unsupported != "" {
-			fmt.Fprintf(os.Stderr, "kilo-opencode: OpenCode 2 does not accept --standalone for %q; it may wait for or conflict with your regular OpenCode background service.\n", unsupported)
-		}
 	}
 	if err := validateClientProcessPlan(plan); err != nil {
 		fmt.Fprintln(os.Stderr, "Invalid terminal launch parameters.")
 		return 1
 	}
-	if input.Client != "opencode2" {
-		// The user's original arguments are already an argv vector. Preserve them
-		// without applying the GUI launch-ticket size limits to prompts or lists.
+	// The user's original arguments are already an argv vector. Preserve them
+	// without applying the GUI launch-ticket size limits to prompts or lists.
+	if input.Client == "opencode2" {
+		var unsupported string
+		var known bool
+		plan.Args, unsupported, known = openCode2Arguments(arguments)
+		if unsupported != "" {
+			verb := "may not accept"
+			if known {
+				verb = "does not accept"
+			}
+			fmt.Fprintf(os.Stderr, "kilo-opencode: OpenCode 2 %s --standalone for %q; it may wait for or conflict with your regular OpenCode background service.\n", verb, unsupported)
+		}
+	} else {
 		plan.Args = append(plan.Args, arguments...)
 	}
 	if err := execTerminalAgent(plan); err != nil {
@@ -192,9 +198,8 @@ func resolveTerminalExecutable(dir, client string) (string, error) {
 		openCodeExecutables: [2]string{config.OpenCode1Executable, config.OpenCode2Executable}}
 	resolved, major := client, 0
 	if client == "opencode" || client == "opencode2" {
-		// The installed kilo-opencode wrapper always passes the OpenCode 1 client
-		// identity. The saved major decides which installation and validation
-		// apply, while the wrapper keeps its original name.
+		// The installed kilo-opencode wrapper passes the OpenCode 1 client name;
+		// the saved major decides which installation and version check apply.
 		resolved, major = "opencode", 1
 		if client == "opencode2" || config.OpenCodeMajor == 2 {
 			resolved, major = "opencode2", 2

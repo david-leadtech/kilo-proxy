@@ -280,7 +280,7 @@ func (u *nativeUI) agentCompatibility(key string) string {
 	case "opencode":
 		return u.tr("Uses Chat Completions with shared names and default model; reasoning stays automatic. Opens a terminal in your project. Local OpenCode settings can override this profile.", "Usa Chat Completions con nombres y modelo inicial compartidos; el razonamiento sigue automático. Abre una terminal en tu proyecto. Los ajustes de OpenCode pueden prevalecer.")
 	case "opencode2":
-		return u.tr("Uses OpenCode's model pack in an isolated OpenCode 2 profile and opens a project terminal. Requires a separately installed OpenCode 2.0.18 or newer within major version 2.", "Usa el pack de modelos de OpenCode en un perfil aislado de OpenCode 2 y abre una terminal del proyecto. Requiere OpenCode 2.0.18 o posterior de la versión 2 instalado por separado.")
+		return u.tr("Uses your OpenCode models (its assigned pack or the shared library) in an isolated OpenCode 2 profile and opens a project terminal. Requires a separately installed OpenCode 2.0.18 or newer within major version 2.", "Usa tus modelos de OpenCode (su pack asignado o la biblioteca compartida) en un perfil aislado de OpenCode 2 y abre una terminal del proyecto. Requiere OpenCode 2.0.18 o posterior de la versión 2 instalado por separado.")
 	case "omp":
 		return u.tr("Uses Responses with your shared models in an isolated Oh My Pi profile. Opens a terminal in your project; choose another model with /model. Reasoning follows each model's supported levels.", "Usa Responses con tus modelos compartidos en un perfil separado de Oh My Pi. Abre una terminal en tu proyecto; cambia de modelo con /model. El razonamiento sigue los niveles compatibles de cada modelo.")
 	case "zed":

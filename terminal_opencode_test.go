@@ -216,7 +216,7 @@ func TestTerminalOpenCode2RejectsUntrustedExecutionParameters(t *testing.T) {
 	}
 	valid := func() clientLaunchPlan {
 		env := map[string]string{"HOME": home, "KILO_OPENCODE2_API_KEY": "synthetic-opencode2-key"}
-		for _, entry := range t3CodeOptionalProviderEnvironment(home, nil, "linux") {
+		for _, entry := range t3CodeOptionalProviderEnvironment(home, nil, runtime.GOOS) {
 			env[entry["name"].(string)] = entry["value"].(string)
 		}
 		return clientLaunchPlan{Client: "opencode2", Name: "OpenCode 2", Kind: "terminal", Env: env, Unset: openCode2UnsetEnvironment(nil)}
@@ -232,8 +232,14 @@ func TestTerminalOpenCode2RejectsUntrustedExecutionParameters(t *testing.T) {
 		"home outside profile": func(p *clientLaunchPlan) { p.Env["HOME"] = filepath.Join(home, "..", "outside") },
 		"extra environment":    func(p *clientLaunchPlan) { p.Env["LD_PRELOAD"] = "/tmp/injected.so" },
 		"missing key":          func(p *clientLaunchPlan) { delete(p.Env, "KILO_OPENCODE2_API_KEY") },
-		"duplicate reset":      func(p *clientLaunchPlan) { p.Unset = append(p.Unset, p.Unset[0]) },
-		"disallowed reset":     func(p *clientLaunchPlan) { p.Unset = append(p.Unset, "PATH") },
+		"missing isolation": func(p *clientLaunchPlan) {
+			delete(p.Env, map[bool]string{true: "APPDATA", false: "XDG_DATA_HOME"}[runtime.GOOS == "windows"])
+		},
+		"isolation elsewhere": func(p *clientLaunchPlan) {
+			p.Env[map[bool]string{true: "APPDATA", false: "XDG_CONFIG_HOME"}[runtime.GOOS == "windows"]] = filepath.Join(home, "other")
+		},
+		"duplicate reset":  func(p *clientLaunchPlan) { p.Unset = append(p.Unset, p.Unset[0]) },
+		"disallowed reset": func(p *clientLaunchPlan) { p.Unset = append(p.Unset, "PATH") },
 	} {
 		t.Run(name, func(t *testing.T) {
 			plan := valid()

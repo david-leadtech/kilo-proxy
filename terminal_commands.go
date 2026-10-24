@@ -84,23 +84,25 @@ func (a *app) terminalPrepareAPI(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, 400, "Choose kilo-codex, kilo-claude, kilo-omp, kilo-opencode or kilo-muse.")
 		return
 	}
-	if input.Client == "opencode" || input.Client == "opencode2" {
-		a.mu.Lock()
-		major := a.config.OpenCodeMajor
-		a.mu.Unlock()
-		if major == 0 {
-			major = 1
-		}
-		if expected := map[int]string{1: "opencode", 2: "opencode2"}[major]; input.Client != expected {
-			jsonError(w, 409, "The OpenCode version changed in Kilo settings. Try again.")
-			return
-		}
-	}
 	if !a.launchMu.TryLock() {
 		jsonError(w, 409, "Another agent is being prepared. Try again.")
 		return
 	}
 	defer a.launchMu.Unlock()
+	// Saving the OpenCode version also holds launchMu, so the selection cannot
+	// change between this check and preparation.
+	if input.Client == "opencode" || input.Client == "opencode2" {
+		a.mu.Lock()
+		expected := "opencode"
+		if a.config.OpenCodeMajor == 2 {
+			expected = "opencode2"
+		}
+		a.mu.Unlock()
+		if input.Client != expected {
+			jsonError(w, 409, "The OpenCode version changed in Kilo settings. Try again.")
+			return
+		}
+	}
 	rt := a.launchRuntime()
 	if !terminalPlatformSupported(rt.platform) {
 		jsonError(w, 409, "Terminal commands are available on macOS, Linux and Windows.")
