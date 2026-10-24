@@ -10,6 +10,8 @@ Choose **OpenCode 1** in the OpenCode harness settings to use this integration. 
 
 Each major version has its own optional absolute executable path in Kilo Settings. Leave it empty for automatic detection: OpenCode 1 uses Kilo's verified installed copy before the system installation, while OpenCode 2 uses its separately installed executable. An explicit path takes priority and never falls back silently when unavailable. Updating a Kilo copy preserves the explicit choice. The actual major version is checked before preparing or opening. T3 shares these paths but keeps its own major-version selector.
 
+`kilo-opencode` follows this version selection and uses the profile for the selected version, so switching versions does not require reinstalling the command. The single **OpenCode** pack assignment covers OpenCode 1 and OpenCode 2, for the desktop card and the terminal command; without an assigned pack, both use the shared library.
+
 1. Install OpenCode separately and configure Kilo Proxy in **Settings**.
 2. Choose models, names, a default and any token limits in **Models**. These library changes save automatically.
 3. On **Harnesses**, use the general **Project folder** or OpenCode's settings page under **When opening → Folder** to override it, then **Open OpenCode**. It prepares `~/.opencode-kilo/opencode.json` and `kilo-models.json` (`%USERPROFILE%\.opencode-kilo` on Windows), then opens an interactive terminal.
@@ -32,6 +34,8 @@ Opening prepares the saved shared Models library in a separate home at `<Kilo da
 The separate HOME and XDG directories prevent OpenCode 2 from migrating OpenCode 1's normal database. Accounts and chats are separate; changing the selector does not move either version's chats. Project configuration can still merge, so this is not an operating-system sandbox.
 
 Adding OpenCode to T3 is a separate choice under **Settings → T3 Code**. Its native T3 driver uses its own authentication and model catalog. Select its major version there independently of this standalone Kilo connection.
+
+`kilo-opencode` follows the selected major version and prepares this same private home and XDG directories, so terminal launches share the separate accounts and chats. With no pack assigned to **OpenCode**, OpenCode 2 uses the shared library; an assigned pack applies to both major versions and to the terminal command.
 
 The official OpenCode 2.0.27 CLI completed a streaming request against a synthetic local gateway using the generated v2 config, exact model ID and local bearer key. No paid inference or personal account was used.
 

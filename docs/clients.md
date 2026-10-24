@@ -124,9 +124,11 @@ Reference: [OpenAI configuration reference: model_catalog_json](https://learn.ch
 
 ## OpenCode
 
-The OpenCode card derives IDs, names, limits and the default from the shared library or its assigned model pack, then creates or updates `~/.opencode-kilo/opencode.json` with the local proxy credential. Click **Open OpenCode** to open it in a terminal, and use `/models` to switch models; `/connect` is not needed for this prepared profile. JSONC settings are preserved with exact backups. Global/project OpenCode configuration still merges. See [OpenCode and Zed setup](opencode-and-zed.md).
+The OpenCode card derives IDs, names, limits and the default from the shared library or its assigned model pack, then creates or updates the profile for the selected version: `~/.opencode-kilo/opencode.json` for OpenCode 1, or `<Kilo data>/opencode2/home/.config/opencode/opencode.json` for OpenCode 2, with the local proxy credential. Click **Open OpenCode** to open it in a terminal, and use `/models` to switch models; `/connect` is not needed for this prepared profile. JSONC settings are preserved with exact backups. Global/project OpenCode configuration still merges. See [OpenCode and Zed setup](opencode-and-zed.md).
 
-On macOS, Linux and Windows PowerShell, `kilo-opencode` uses this same configuration in your current terminal and project directory. Each launch refreshes the assigned pack if present, otherwise shared models, names, default, context limits and the managed image MCP setting. Use `kilo-opencode --continue` to resume or pass other OpenCode arguments normally. OpenCode's global/project configuration and session storage still apply. [Command setup and examples](terminal-commands.md).
+The single **OpenCode** pack assignment covers OpenCode 1 and OpenCode 2, for the desktop card and `kilo-opencode`. Without an assigned pack, both versions use the shared library.
+
+On macOS, Linux and Windows PowerShell, `kilo-opencode` follows the version selected in **Apps → OpenCode** and uses the matching profile in your current terminal and project directory. Each launch refreshes the assigned pack if present, otherwise shared models, names, default, context limits and the managed image MCP setting. Use `kilo-opencode --continue` to resume or pass other OpenCode arguments normally. OpenCode's global/project configuration still applies, while OpenCode 2 keeps its own session storage and accounts. [Command setup and examples](terminal-commands.md).
 
 ## Claude Code: automatic isolated setup
 

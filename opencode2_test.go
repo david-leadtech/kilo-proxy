@@ -323,6 +323,45 @@ func TestInstalledOpenCode2UsesV2ConfigAndExactLocalGateway(t *testing.T) {
 	}
 }
 
+func TestOpenCode2ProfileUsesOpenCodePackSlotAndSharedFallback(t *testing.T) {
+	a := openCode2TestApp(t)
+	catalog, _ := json.Marshal(nativeCachedCatalog{SchemaVersion: 1, OrgID: a.config.OrgID, Models: []modelInfo{
+		{ID: "vendor/pack", Name: "Pack pick", ContextWindow: 128000, MaxOutputTokens: 4096},
+		{ID: "vendor/one", Name: "Shared pick", ContextWindow: 200000, MaxOutputTokens: 32000},
+		{ID: "vendor/two", Name: "Shared fast", ContextWindow: 128000, MaxOutputTokens: 4096},
+	}})
+	if err := atomicCatalogFile(filepath.Join(a.dir, "model-catalog.json"), catalog); err != nil {
+		t.Fatal(err)
+	}
+	file := emptyModelPacksFile()
+	file.Personal = []personalModelPack{{ID: "mine-opencode", Name: "OpenCode pick", Library: modelLibrary{
+		SchemaVersion: 1, DefaultModel: "vendor/pack", Models: []modelLibraryItem{{ID: "vendor/pack", ContextPreset: contextPresetRecommended}},
+	}}}
+	file.Assignments["opencode"] = "mine-opencode"
+	if err := newModelPacksStore(a.dir).save(file, false); err != nil {
+		t.Fatal(err)
+	}
+	_, config, _ := a.openCode2Paths()
+	if w := adminRequest(a, "clients/opencode2", `{}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	prepared, _ := os.ReadFile(config)
+	if !bytes.Contains(prepared, []byte(`"modelID":"vendor/pack"`)) || !bytes.Contains(prepared, []byte(`"model":"kilo-local/vendor/pack"`)) || bytes.Contains(prepared, []byte(`"vendor/one"`)) {
+		t.Fatal("OpenCode 2 version-only preparation ignored the OpenCode pack slot", string(prepared))
+	}
+	delete(file.Assignments, "opencode")
+	if err := newModelPacksStore(a.dir).save(file, false); err != nil {
+		t.Fatal(err)
+	}
+	if w := adminRequest(a, "clients/opencode2", `{}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	prepared, _ = os.ReadFile(config)
+	if !bytes.Contains(prepared, []byte(`"vendor/one"`)) || !bytes.Contains(prepared, []byte(`"vendor/two"`)) || bytes.Contains(prepared, []byte(`"vendor/pack"`)) {
+		t.Fatal("OpenCode 2 did not fall back to the shared library", string(prepared))
+	}
+}
+
 func TestOpenCode2PreservesUserConfigurationAndRejectsOwnedChanges(t *testing.T) {
 	a := openCode2TestApp(t)
 	_, config, _ := a.openCode2Paths()

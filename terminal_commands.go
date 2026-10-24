@@ -13,7 +13,7 @@ import (
 const terminalAgentFlag = "--terminal-agent"
 
 func terminalClientSupported(client string) bool {
-	return client == "codex-cli" || client == "claude" || client == "omp" || client == "opencode" || client == "muse"
+	return client == "codex-cli" || client == "claude" || client == "omp" || client == "opencode" || client == "opencode2" || client == "muse"
 }
 
 func terminalPlatformSupported(platform string) bool {
@@ -83,6 +83,18 @@ func (a *app) terminalPrepareAPI(w http.ResponseWriter, r *http.Request) {
 	if !terminalClientSupported(input.Client) || len(input.ClaudeVersion) > 64 || strings.ContainsAny(input.ClaudeVersion, "\r\n\x00") {
 		jsonError(w, 400, "Choose kilo-codex, kilo-claude, kilo-omp, kilo-opencode or kilo-muse.")
 		return
+	}
+	if input.Client == "opencode" || input.Client == "opencode2" {
+		a.mu.Lock()
+		major := a.config.OpenCodeMajor
+		a.mu.Unlock()
+		if major == 0 {
+			major = 1
+		}
+		if expected := map[int]string{1: "opencode", 2: "opencode2"}[major]; input.Client != expected {
+			jsonError(w, 409, "The OpenCode version changed in Kilo settings. Try again.")
+			return
+		}
 	}
 	if !a.launchMu.TryLock() {
 		jsonError(w, 409, "Another agent is being prepared. Try again.")
@@ -174,7 +186,7 @@ func (a *app) terminalPrepareAPI(w http.ResponseWriter, r *http.Request) {
 	err = a.prepareTerminalProfile(input.Client, rt.home, library, claudeCaps(input.ClaudeVersion))
 	if err == nil {
 		err = a.launchProfile(&plan, rt.home)
-		if input.Client == "opencode" {
+		if input.Client == "opencode" || input.Client == "opencode2" {
 			// The profile already names the default model. Unlike the GUI's TUI
 			// launch, terminal commands also support subcommands such as models,
 			// which reject --model. Forward only the user's OpenCode arguments.
@@ -216,6 +228,9 @@ func (a *app) prepareTerminalProfile(client, home string, library modelLibrary, 
 	}
 	if client == "opencode" {
 		return a.prepareTerminalOpenCodeProfile(library)
+	}
+	if client == "opencode2" {
+		return a.prepareOpenCode2Profile(library)
 	}
 	if client == "omp" {
 		selection, err := ompSelectionFromChoices(terminalLibraryChoices(library, readNativeCatalogCache(a.dir, a.catalogScopeLocked())), library.DefaultModel)

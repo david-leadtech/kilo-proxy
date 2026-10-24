@@ -29,6 +29,7 @@ type terminalRuntime struct {
 	ClaudeProfile  string `json:"claudeProfile"`
 	OMPProfile     string `json:"ompProfile,omitempty"`
 	OpenCodeConfig string `json:"openCodeConfig,omitempty"`
+	OpenCode2Home  string `json:"opencode2Home,omitempty"`
 	MuseProfile    string `json:"museProfile,omitempty"`
 }
 
@@ -49,6 +50,9 @@ func validateTerminalRuntime(info terminalRuntime) error {
 	}
 	if info.OpenCodeConfig != "" {
 		paths = append(paths, info.OpenCodeConfig)
+	}
+	if info.OpenCode2Home != "" {
+		paths = append(paths, info.OpenCode2Home)
 	}
 	if info.MuseProfile != "" {
 		paths = append(paths, info.MuseProfile)
@@ -95,6 +99,7 @@ func (a *app) publishTerminalRuntime() (func(), error) {
 	if err != nil {
 		return func() {}, err
 	}
+	info.OpenCode2Home, _, _ = a.openCode2Paths()
 	if err := validateTerminalRuntime(info); err != nil {
 		return func() {}, err
 	}
@@ -224,6 +229,31 @@ func validateTerminalProfile(plan clientLaunchPlan, info terminalRuntime) error 
 	case "opencode":
 		if info.OpenCodeConfig == "" || len(plan.Args) != 0 || !reflect.DeepEqual(plan.Env, map[string]string{"OPENCODE_CONFIG": info.OpenCodeConfig}) || !reflect.DeepEqual(plan.Unset, []string{"OPENCODE_CONFIG_CONTENT"}) {
 			return invalid
+		}
+	case "opencode2":
+		if info.OpenCode2Home == "" || len(plan.Args) != 0 || len(plan.Unset) == 0 || len(plan.Unset) > 512 {
+			return invalid
+		}
+		key := plan.Env["KILO_OPENCODE2_API_KEY"]
+		if plan.Env["HOME"] != info.OpenCode2Home || len(key) < 1 || len(key) > 1024 || strings.ContainsAny(key, "\x00\r\n") {
+			return invalid
+		}
+		optionalPaths := map[string]bool{"USERPROFILE": true, "APPDATA": true, "LOCALAPPDATA": true, "XDG_CONFIG_HOME": true, "XDG_DATA_HOME": true, "XDG_CACHE_HOME": true, "XDG_STATE_HOME": true, "XDG_RUNTIME_DIR": true}
+		for name, value := range plan.Env {
+			if name == "HOME" || name == "KILO_OPENCODE2_API_KEY" {
+				continue
+			}
+			if !optionalPaths[name] || !filepath.IsAbs(value) || filepath.Clean(value) != value || strings.ContainsAny(value, "\x00\r\n") || value != info.OpenCode2Home && !strings.HasPrefix(value, info.OpenCode2Home+string(filepath.Separator)) {
+				return invalid
+			}
+		}
+		reset := t3CodeUnsetEnvironment(nil)
+		seen := map[string]bool{}
+		for _, name := range plan.Unset {
+			if name == "" || strings.ContainsAny(name, "=\x00\r\n") || seen[name] || !(helperContains(reset, name) || strings.HasPrefix(name, "OPENCODE_") || strings.HasPrefix(name, "T3CODE_")) {
+				return invalid
+			}
+			seen[name] = true
 		}
 	default:
 		return invalid
