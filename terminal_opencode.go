@@ -17,18 +17,12 @@ func (a *app) prepareTerminalOpenCodeProfile(library modelLibrary) error {
 	}
 	selection := editorSelection{Initial: library.DefaultModel}
 	for _, model := range terminalLibraryChoices(library, readNativeCatalogCache(a.dir, a.catalogScopeLocked())) {
-		name := model.DisplayName
-		if name == "" {
-			name = model.Model.Name
-		}
-		if name == "" {
-			name = model.Model.ID
-		}
 		limits, err := contextPolicyForChoice(model)
 		if err != nil {
 			return err
 		}
-		selection.Models = append(selection.Models, editorModel{ID: model.Model.ID, Name: name, Context: limits.ContextWindow, Output: limits.MaxOutputTokens})
+		levels, initial := nativeReasoningFor(model)
+		selection.Models = append(selection.Models, editorModel{ID: model.Model.ID, Name: nativeCodexDisplayName(model), Context: limits.ContextWindow, Output: limits.MaxOutputTokens, Variants: levels, ReasoningEffort: initial})
 	}
 	if err := validateEditorSelection(selection); err != nil {
 		return err

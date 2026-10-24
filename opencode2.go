@@ -134,15 +134,12 @@ func (a *app) openCode2Config(library modelLibrary) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		model := map[string]any{"modelID": choice.Model.ID, "name": choice.DisplayName}
+		model := map[string]any{"modelID": choice.Model.ID, "name": nativeCodexDisplayName(choice)}
 		model["package"] = "@opencode/ai/providers/openai-compatible"
 		model["settings"] = map[string]any{"baseURL": "http://127.0.0.1:" + strconv.Itoa(a.config.Port) + "/v1", "apiKey": "{env:KILO_OPENCODE2_API_KEY}"}
 		model["headers"] = map[string]string{"Authorization": "Bearer {env:KILO_OPENCODE2_API_KEY}"}
 		if capabilities := t3CodeOpenCodeCapabilities(choice.Model); capabilities != nil {
 			model["capabilities"] = capabilities
-		}
-		if choice.DisplayName == "" {
-			model["name"] = choice.Model.ID
 		}
 		limit := map[string]int{}
 		if limits.ContextWindow > 0 {
@@ -154,11 +151,22 @@ func (a *app) openCode2Config(library modelLibrary) ([]byte, error) {
 		if len(limit) > 0 {
 			model["limit"] = limit
 		}
+		levels, initial := nativeReasoningFor(choice)
 		body := map[string]any{"model": choice.Model.ID}
-		if choice.DefaultReasoning != "" {
+		if helperContains(levels, choice.DefaultReasoning) {
 			body["reasoning_effort"] = choice.DefaultReasoning
+		} else if initial != "" {
+			// The saved default is not one of the model's declared levels, so
+			// use the level nativeReasoningFor resolved for the Default option.
+			body["reasoning_effort"] = initial
 		}
 		model["body"] = body
+		variants := []map[string]any{}
+		for _, level := range levels {
+			variants = append(variants, map[string]any{"id": level,
+				"body": map[string]any{"model": choice.Model.ID, "reasoning_effort": level}})
+		}
+		model["variants"] = variants
 		models[choice.Model.ID] = model
 	}
 	return json.MarshalIndent(map[string]any{

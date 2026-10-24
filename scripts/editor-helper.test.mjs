@@ -39,3 +39,24 @@ test('OpenCode launcher quotes paths, clears inline override and scopes environm
 });
 
 test('OpenCode PowerShell launch restores prior configuration and escapes paths',()=>{const command=editorLaunch("C:\\Users\\Team's profile\\opencode.json",'vendor/model','powershell');assert.match(command,/Team''s profile/);assert.match(command,/finally/);assert.match(command,/Remove-Item -LiteralPath Env:OPENCODE_CONFIG_CONTENT/);assert.match(command,/if \(\$null -eq \$kiloPrevious\[\$kiloName\]\)/);assert.match(command,/Remove-Item -LiteralPath "Env:\$kiloName"/);assert.match(command,/Set-Item -LiteralPath "Env:\$kiloName" -Value \$kiloPrevious\[\$kiloName\]/);assert.doesNotMatch(command,/kl_local_/)});
+test('Editor payload emits canonical, deduplicated reasoning variants and only a declared default',()=>{
+ const [model]=editorPayload([{id:'vendor/a',reasoningEfforts:['ultra','bogus','high','high','none'],reasoningEffort:'high'}],'vendor/a').models;
+ assert.deepEqual(model.variants,['none','high','ultra']);assert.equal(model.reasoningEffort,'high');
+ const [unavailable]=editorPayload([{id:'vendor/b',reasoningEfforts:['low','high'],reasoningEffort:'max'}],'vendor/b').models;
+ assert.deepEqual(unavailable.variants,['low','high']);assert.equal('reasoningEffort' in unavailable,false);
+ const [empty]=editorPayload([{id:'vendor/c',reasoningEfforts:[]}],'vendor/c').models;
+ assert.equal('variants' in empty,false);assert.equal('reasoningEffort' in empty,false);
+});
+test('Editor payload prefers custom library levels and round-trips a saved selection',()=>{
+ const [custom]=editorPayload([{id:'vendor/a',reasoningCustom:true,reasoningLevels:['xhigh','low'],reasoningEfforts:['none','medium'],reasoningEffort:'low'}],'vendor/a').models;
+ assert.deepEqual(custom.variants,['low','xhigh']);assert.equal(custom.reasoningEffort,'low');
+ const [disabled]=editorPayload([{id:'vendor/b',reasoningCustom:true,reasoningLevels:[],reasoningEfforts:['low','high']}],'vendor/b').models;
+ assert.equal('variants' in disabled,false);
+ const [saved]=editorPayload([{id:'vendor/c',variants:['high','low','unknown'],reasoningEffort:'high'}],'vendor/c').models;
+ assert.deepEqual(saved.variants,['low','high']);assert.equal(saved.reasoningEffort,'high');
+});
+test('Zed payload keeps the previous shape without reasoning variants',()=>{
+ const [model]=editorPayload([{id:'vendor/a',reasoningEfforts:['low','high'],reasoningEffort:'low'}],'vendor/a',{reasoning:false}).models;
+ assert.deepEqual(Object.keys(model).sort(),['contextWindow','id','maxOutputTokens','name']);
+ assert.equal('variants' in model,false);assert.equal('reasoningEffort' in model,false);
+});

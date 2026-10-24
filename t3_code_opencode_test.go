@@ -155,8 +155,12 @@ func TestT3CodeOpenCodeKiloProfilesExactModelsSecretsReadinessAndTamper(t *testi
 			if !second {
 				variants := one["variants"].(map[string]any)
 				high := variants["high"].(map[string]any)
-				if len(variants) != 2 || high["model"] != "vendor/one" || high["reasoningEffort"] != "high" || high["baseURL"] != "http://127.0.0.1:9988/v1" || high["apiKey"] != "{env:"+t3CodeOpenCodeKey+"}" || high["headers"].(map[string]any)["Authorization"] != "Bearer {env:"+t3CodeOpenCodeKey+"}" {
-					t.Fatal("OpenCode 1 declared variant did not pin its route and authentication")
+				if len(variants) != 2 || high["model"] != "vendor/one" || high["reasoningEffort"] != "high" || high["baseURL"] != nil || high["apiKey"] != nil || high["headers"] != nil {
+					t.Fatal("OpenCode 1 declared variant leaked provider options")
+				}
+				options := localProvider["options"].(map[string]any)
+				if options["baseURL"] != "http://127.0.0.1:9988/v1" || options["apiKey"] != "{env:"+t3CodeOpenCodeKey+"}" || len(options) != 2 {
+					t.Fatal("OpenCode 1 provider options lost the routed credentials")
 				}
 			}
 			for _, data := range [][]byte{settings, selection, config} {
@@ -337,6 +341,31 @@ func TestT3CodeOpenCode2UsesDeclaredVariantsCapabilitiesAndProviderPolicies(t *t
 	capabilities := one["capabilities"].(map[string]any)
 	if capabilities["tools"] != false || !reflect.DeepEqual(capabilities["input"], []any{"declared-future-modality"}) || !reflect.DeepEqual(capabilities["output"], []any{"text"}) || two["capabilities"] != nil {
 		t.Fatal("OpenCode 2 capabilities were changed or emitted without required modality arrays", one, two)
+	}
+}
+
+func TestT3CodeOpenCode2ResolvesDefaultOutsideDeclaredVariants(t *testing.T) {
+	prefs := normalizeT3CodePreferences(t3CodePreferences{})
+	prefs.OpenCode2 = true
+	library := modelLibrary{SchemaVersion: 1, DefaultModel: "vendor/one", Models: []modelLibraryItem{
+		{ID: "vendor/one", ReasoningEffort: "medium", ContextWindow: 128000, MaxOutputTokens: 4096},
+		{ID: "vendor/two", ReasoningEffort: "high", ContextWindow: 128000, MaxOutputTokens: 4096},
+	}}
+	catalog := []modelInfo{{ID: "vendor/one", ReasoningEfforts: []string{"low", "high"}}, {ID: "vendor/two", ReasoningEfforts: []string{"low", "high"}}}
+	data, err := t3CodeOpenCodeConfig(t3CodeProfileOptions{Preferences: &prefs, Library: library, Catalog: catalog, Port: 9988})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if json.Unmarshal(data, &config) != nil {
+		t.Fatal("invalid native OpenCode 2 config")
+	}
+	models := config["providers"].(map[string]any)["kilo-local"].(map[string]any)["models"].(map[string]any)
+	if got := models["vendor/one"].(map[string]any)["body"].(map[string]any)["reasoning_effort"]; got != "low" {
+		t.Fatalf("default reasoning effort outside the declared variants was not resolved: %v", got)
+	}
+	if got := models["vendor/two"].(map[string]any)["body"].(map[string]any)["reasoning_effort"]; got != "high" {
+		t.Fatalf("declared default reasoning effort was not preserved: %v", got)
 	}
 }
 

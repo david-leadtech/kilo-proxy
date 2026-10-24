@@ -111,26 +111,12 @@ func t3CodeOpenCodeConfigWithKey(options t3CodeProfileOptions, keyName string) (
 			if err != nil {
 				return nil, err
 			}
-			name := choice.DisplayName
-			if name == "" {
-				name = choice.Model.ID
-			}
-			selection.Models = append(selection.Models, editorModel{ID: choice.Model.ID, Name: name, Context: limits.ContextWindow, Output: limits.MaxOutputTokens})
+			levels, initial := nativeReasoningFor(choice)
+			selection.Models = append(selection.Models, editorModel{ID: choice.Model.ID, Name: nativeCodexDisplayName(choice), Context: limits.ContextWindow, Output: limits.MaxOutputTokens, Variants: levels, ReasoningEffort: initial})
 		}
 		data, err := mergeEditorSettings(nil, "opencode", selection, baseURL, "{env:"+keyName+"}")
 		if err != nil || json.Unmarshal(data, &config) != nil {
 			return nil, errors.New("Cannot build the private T3 OpenCode configuration.")
-		}
-		models := config["provider"].(map[string]any)["kilo-local"].(map[string]any)["models"].(map[string]any)
-		for _, choice := range choices {
-			variants := map[string]any{}
-			levels, _ := nativeReasoningFor(choice)
-			key := "{env:" + keyName + "}"
-			for _, level := range levels {
-				variants[level] = map[string]any{"model": choice.Model.ID, "baseURL": baseURL, "apiKey": key,
-					"headers": map[string]string{"Authorization": "Bearer " + key}, "reasoningEffort": level}
-			}
-			models[choice.Model.ID].(map[string]any)["variants"] = variants
 		}
 		config["enabled_providers"] = []string{"kilo-local"}
 		config["autoupdate"] = false
@@ -141,10 +127,7 @@ func t3CodeOpenCodeConfigWithKey(options t3CodeProfileOptions, keyName string) (
 			if err != nil {
 				return nil, err
 			}
-			name := choice.DisplayName
-			if name == "" {
-				name = choice.Model.ID
-			}
+			name := nativeCodexDisplayName(choice)
 			key := "{env:" + keyName + "}"
 			body := map[string]any{"model": choice.Model.ID}
 			model := map[string]any{"modelID": choice.Model.ID, "name": name,
@@ -156,7 +139,7 @@ func t3CodeOpenCodeConfigWithKey(options t3CodeProfileOptions, keyName string) (
 				model["capabilities"] = capabilities
 			}
 			variants := []map[string]any{}
-			levels, _ := nativeReasoningFor(choice)
+			levels, initial := nativeReasoningFor(choice)
 			for _, level := range levels {
 				variants = append(variants, map[string]any{"id": level,
 					"settings": map[string]any{"baseURL": baseURL, "apiKey": key},
@@ -174,7 +157,9 @@ func t3CodeOpenCodeConfigWithKey(options t3CodeProfileOptions, keyName string) (
 			if len(limit) > 0 {
 				model["limit"] = limit
 			}
-			if choice.DefaultReasoning != "" {
+			if initial != "" && !helperContains(levels, choice.DefaultReasoning) {
+				body["reasoning_effort"] = initial
+			} else if choice.DefaultReasoning != "" {
 				body["reasoning_effort"] = choice.DefaultReasoning
 			}
 			models[choice.Model.ID] = model

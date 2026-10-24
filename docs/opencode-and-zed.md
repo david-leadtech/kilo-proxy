@@ -1,6 +1,6 @@
 # OpenCode and Zed helpers
 
-The native **OpenCode** and **Zed** cards use the same [shared model library](shared-models.md). Edit up to 50 IDs, names, a default model and token limits in **Models**. Unknown models start with a 200,000-token context assumption; review it against provider metadata. An output limit of zero is unspecified. Both integrations use Chat Completions; reasoning remains automatic, and model listing does not certify inference compatibility.
+The native **OpenCode** and **Zed** cards use the same [shared model library](shared-models.md). Edit up to 50 IDs, names, a default model and token limits in **Models**. Unknown models start with a 200,000-token context assumption; review it against provider metadata. An output limit of zero is unspecified. Both integrations use Chat Completions; OpenCode 1 and OpenCode 2 expose each model's supported reasoning levels as variants, while Zed reasoning remains automatic. Model listing does not certify inference compatibility.
 
 The optional browser helper remains a separate interface with independent per-client model selections and explicit profile preparation.
 
@@ -21,6 +21,8 @@ The launcher selects the profile through `OPENCODE_CONFIG`, clears an inherited 
 
 The custom provider includes the local proxy key in its protected configuration, so `/connect` is unnecessary for this profile. It never includes the upstream Kilo credential. The initial model also supplies `small_model` for internal requests. Context/output limits are emitted together when an output limit is known.
 
+Reasoning variants come from Kilo model metadata, plus any custom levels saved in the shared model library. The saved or resolved reasoning preference is emitted as the model's default `options.reasoningEffort`, and each declared level becomes a variant that OpenCode exposes with `--variant <level>` or its variant picker. Unknown levels are ignored by OpenCode. The official OpenCode 1.19.4 CLI sent the selected level to a synthetic local gateway.
+
 This is a separate configuration file, not a complete OpenCode sandbox: global and project configurations still merge, and project settings can override this file. The helper does not change ordinary global OpenCode settings, auth storage, permissions, plugins, or project files. Check the resolved settings if a repository overrides the Kilo provider.
 
 The optional configuration export contains the local key; keep it private. The launch command contains only the configuration path and model ID. It restores the parent shell environment on Unix and PowerShell.
@@ -38,6 +40,8 @@ Adding OpenCode to T3 is a separate choice under **Settings → T3 Code**. Its n
 `kilo-opencode` follows the selected major version and prepares this same private home and XDG directories, so terminal launches share the separate accounts and chats. With no pack assigned to **OpenCode**, OpenCode 2 uses the shared library; an assigned pack applies to both major versions and to the terminal command.
 
 The official OpenCode 2.0.27 CLI completed a streaming request against a synthetic local gateway using the generated v2 config, exact model ID and local bearer key. No paid inference or personal account was used.
+
+Each model's declared reasoning levels are exposed as variants, selected as `kilo-local/<id>#<level>`. The Default option uses the saved reasoning preference, or a resolved declared level when that preference is not available. Internal/title requests use the lowest declared level when `none` is available, and otherwise the model's default level. A profile prepared by an older version re-prepares once after upgrading, and again after a catalog refresh that changes model names or declared levels. The official OpenCode 2.1.3 CLI sent the selected level to a synthetic local gateway.
 
 ## Zed
 

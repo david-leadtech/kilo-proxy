@@ -3,8 +3,24 @@ import {contextLimits,contextControls,contextModel,syncContextModels,contextErro
 import {validModelID,modelPriceDetails,filterModels,sortModels,configureModelSort,setModelSort,mergeModelSelection,filterModelLab,configureModelLab,setModelLab} from './model-helper.mjs';
 import {ompPayload,ompLaunch,ompConfig,ompEfforts} from './omp-helper.mjs';
 import {clientConfig} from './client-config.mjs';
-export function editorPayload(models,initial) {
- return {models:models.map(m=>({id:m.id,name:(m.displayName||m.name||m.id).slice(0,80),contextWindow:contextLimits(m).contextWindow,maxOutputTokens:contextLimits(m).maxOutputTokens})),initial};
+import {reasoningLevels as knownReasoningLevels} from './codex-catalog.mjs';
+// Editor reasoning levels use the same canonical order as the Codex catalog.
+// Custom library levels win; otherwise use declared catalog efforts. A loaded
+// saved selection only carries `variants`, so accept that for round-tripping.
+export function editorReasoning(model) {
+ const declared=model.reasoningCustom===true&&Array.isArray(model.reasoningLevels)?model.reasoningLevels:Array.isArray(model.reasoningEfforts)?model.reasoningEfforts:Array.isArray(model.variants)?model.variants:null;
+ if(declared===null)return null;
+ const variants=knownReasoningLevels.filter(level=>declared.includes(level));
+ if(!variants.length)return {variants};
+ const preferred=typeof model.effort==='string'&&model.effort?model.effort:model.reasoningEffort;
+ return variants.includes(preferred)?{variants,reasoningEffort:preferred}:{variants};
+}
+export function editorPayload(models,initial,{reasoning=true}={}) {
+ return {models:models.map(m=>{
+  const entry={id:m.id,name:(m.displayName||m.name||m.id).slice(0,80),contextWindow:contextLimits(m).contextWindow,maxOutputTokens:contextLimits(m).maxOutputTokens};
+  const levels=reasoning?editorReasoning(m):null;
+  return levels?.variants.length?{...entry,...levels}:entry;
+ }),initial};
 }
 const quote=s=>"'"+s.replaceAll("'","'\\''")+"'";
 const ps=s=>"'"+s.replaceAll("'","''")+"'";
@@ -36,7 +52,7 @@ export function createEditorHelper({api,notify,copy,refreshCatalog,onChange=()=>
  let ctx={client:'opencode',language:'en',catalog:[]},working=false,signature='',renderedClient='',desktopLibraryLoaded=false,desktopLibraryLoading=false,desktopOmitted=0,desktopFallback=false,desktopExperimental=false,desktopPending=null,desktopLibrary={models:[],defaultModel:''},desktopOptionsSyncing=false,desktopOptionsRevision=0,desktopOptionsCheckedState=null;
  const desktopNames=new Map();
  const L=(en,es)=>ctx.language==='en'?en:es,s=()=>selections[ctx.client];
- const payload=()=>ctx.client==='claude-desktop'?claudeDesktopSelection([...s().models.values()],s().initial,desktopExperimental).selection:ctx.client==='omp'?ompPayload([...s().models.values()],s().initial):editorPayload([...s().models.values()],s().initial);
+ const payload=()=>ctx.client==='claude-desktop'?claudeDesktopSelection([...s().models.values()],s().initial,desktopExperimental).selection:ctx.client==='omp'?ompPayload([...s().models.values()],s().initial):editorPayload([...s().models.values()],s().initial,{reasoning:ctx.client!=='zed'});
  const endpoint=client=>client==='omp'?'omp/profile':client==='claude-desktop'?'claude-desktop/profile':'editors/'+client+'/profile';
  const launch=()=>ctx.client==='omp'?ompLaunch(s().profileDir,s().initial,$('editor-shell').value):editorLaunch(s().path,s().initial,$('editor-shell').value);
  const fingerprint=()=>JSON.stringify([ctx.client,contextPreview(payload),ctx.state?.baseURL,ctx.state?.zedBaseURL,ctx.state?.localKey,ctx.client==='omp'?ctx.state?.imageGeneration:null,ctx.client==='claude-desktop'?desktopExperimental:null]);

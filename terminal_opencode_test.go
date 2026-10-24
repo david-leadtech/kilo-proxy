@@ -85,6 +85,76 @@ func TestTerminalOpenCodeRefreshesSharedModelsAndPreservesMCP(t *testing.T) {
 	}
 }
 
+func TestTerminalOpenCodeDeclaresCatalogReasoningVariants(t *testing.T) {
+	a := terminalTestApp(t)
+	a.config.Port = 8899
+	catalog, _ := json.Marshal(nativeCachedCatalog{SchemaVersion: 1, OrgID: a.config.OrgID, Models: []modelInfo{
+		{ID: "vendor/one", Name: "One", ContextWindow: 128000, ReasoningEfforts: []string{"low", "medium", "high"}},
+		{ID: "vendor/two", Name: "Two", ContextWindow: 128000},
+	}})
+	if err := atomicCatalogFile(filepath.Join(a.dir, "model-catalog.json"), catalog); err != nil {
+		t.Fatal(err)
+	}
+	state := a.modelLibrary.snapshot()
+	state.Library.Models = append(state.Library.Models, modelLibraryItem{ID: "vendor/three", DisplayName: "Three", ContextWindow: 128000})
+	if _, err := a.modelLibrary.save(state.Library, state.Revision, false); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	err := a.prepareTerminalProfile("opencode", a.launcher.home, a.modelLibrary.snapshot().Library, claudeCapabilities{})
+	a.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, path, _, _ := a.editorPaths("opencode")
+	var config struct {
+		Provider map[string]struct {
+			Options map[string]any `json:"options"`
+			Models  map[string]struct {
+				Options  map[string]any `json:"options"`
+				Variants map[string]struct {
+					Model, ReasoningEffort string
+				} `json:"variants"`
+			} `json:"models"`
+		} `json:"provider"`
+	}
+	raw := terminalInstallerRead(t, path)
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	provider := config.Provider["kilo-local"]
+	baseURL, key := "http://127.0.0.1:8899/v1", a.config.LocalKey
+	if provider.Options["baseURL"] != baseURL || provider.Options["apiKey"] != key || len(provider.Options) != 2 {
+		t.Fatalf("provider options must carry only the routed credentials: %v", provider.Options)
+	}
+	variants := provider.Models["vendor/one"].Variants
+	if len(variants) != 3 {
+		t.Fatalf("catalog reasoning variants missing: %v", variants)
+	}
+	for _, level := range []string{"low", "medium", "high"} {
+		v, ok := variants[level]
+		if !ok || v.Model != "vendor/one" || v.ReasoningEffort != level {
+			t.Fatalf("bad %s variant: %+v", level, v)
+		}
+	}
+	low, medium, high := bytes.Index(raw, []byte(`"low":`)), bytes.Index(raw, []byte(`"medium":`)), bytes.Index(raw, []byte(`"high":`))
+	if low < 0 || medium < 0 || high < 0 || !(low < medium && medium < high) {
+		t.Fatalf("catalog reasoning levels were not serialized in declaration order: %s", raw)
+	}
+	if got := config.Provider["kilo-local"].Models["vendor/one"].Options["reasoningEffort"]; got != "medium" {
+		t.Fatalf("default reasoning effort was not emitted: %v", got)
+	}
+	if got := config.Provider["kilo-local"].Models["vendor/two"].Variants; len(got) != 2 || got["low"].ReasoningEffort != "low" || got["high"].ReasoningEffort != "high" {
+		t.Fatalf("custom reasoning levels were not preserved: %v", got)
+	}
+	if got := config.Provider["kilo-local"].Models["vendor/two"].Options["reasoningEffort"]; got != "high" {
+		t.Fatalf("saved default reasoning effort was not emitted: %v", got)
+	}
+	if got := config.Provider["kilo-local"].Models["vendor/three"].Variants; got != nil {
+		t.Fatalf("model without reasoning levels declared variants: %v", got)
+	}
+}
+
 func TestTerminalOpenCodeRejectsUntrustedExecutionParameters(t *testing.T) {
 	a := terminalTestApp(t)
 	cleanup, err := a.publishTerminalRuntime()
