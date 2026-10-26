@@ -509,7 +509,9 @@ func prepareT3CodeRuntimeWithMuse(privateRoot, executable, platform string, inpu
 	result = t3CodePrivateRuntime{Revision: t3CodeRuntimeRevision, SourceDigest: installation.SourceDigest, SourceArchive: archive.file.Name(), ModelAllowlist: policy, ModelDefaults: defaults, OpenCodeVariants: variants, MuseReasoningLevels: muse.Levels, MuseReasoningDefaults: muse.Defaults, Files: map[string]string{}, SourceFiles: map[string]string{}}
 	for name, data := range files {
 		result.SourceFiles[name] = openDesignHash(data)
-		if strings.HasPrefix(name, "assets/settings.providers-") && strings.HasSuffix(name, ".js") {
+		isProvidersAsset := strings.HasPrefix(name, "assets/settings.providers-") ||
+			strings.HasPrefix(name, "assets/_chat.settings.providers-")
+		if isProvidersAsset && strings.HasSuffix(name, ".js") {
 			if result.ProvidersAsset != "" {
 				return t3CodePrivateRuntime{}, errors.New("Ambiguous T3 Code Providers interface assets.")
 			}
