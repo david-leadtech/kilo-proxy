@@ -26,6 +26,17 @@ func t3CodeRuntimeFixtureProviders() string {
 
 func t3CodeRuntimeSynthetic(t *testing.T, platform string) (string, string, t3CodePrivateRuntime) {
 	t.Helper()
+	binary := t3CodeRuntimeSyntheticPackage(t, platform, []string{"assets/settings.providers-Fixture.js"})
+	root := t.TempDir()
+	record, err := prepareT3CodeRuntime(root, binary, platform, map[string][]string{t3CodeClaudeProxyID: {"claude-opus-5-5"}, t3CodeCodexProxyID: {"gpt-5.5"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return binary, root, record
+}
+
+func t3CodeRuntimeSyntheticPackage(t *testing.T, platform string, providersAssets []string) string {
+	t.Helper()
 	binary := syntheticT3CodeExecutable(t, t.TempDir(), platform, "0.99.0-nightly.1")
 	archive, err := t3CodeOpenPackage(binary, platform)
 	if err != nil {
@@ -41,17 +52,49 @@ func t3CodeRuntimeSynthetic(t *testing.T, platform string) (string, string, t3Co
 	}
 	archive.file.Close()
 	files["apps/desktop/dist-electron/main.cjs"] = append(files["apps/desktop/dist-electron/main.cjs"], []byte(" VITE_DEV_SERVER_URL T3CODE_PORT configuredBackendPort getDesktopScheme targetOrigin proxyRequest DesktopDevelopmentBackendPortRequiredError t3code-dev")...)
-	files["apps/server/dist/client/index.html"] = []byte(`<html><script type="module" src="/assets/settings.providers-Fixture.js"></script></html>`)
-	files["apps/server/dist/client/assets/settings.providers-Fixture.js"] = []byte(t3CodeRuntimeFixtureProvidersSource)
+	files["apps/server/dist/client/index.html"] = []byte(`<html><script type="module" src="/` + providersAssets[0] + `"></script></html>`)
+	for _, name := range providersAssets {
+		files["apps/server/dist/client/"+name] = []byte(t3CodeRuntimeFixtureProvidersSource)
+	}
 	files["apps/server/dist/client/assets/utils-Fixture.js"] = []byte(t3CodeRuntimeFixtureProjectionSource)
 	files["apps/server/dist/client/assets/public.css"] = []byte("body{color:red}")
 	writeT3CodeFixtureASAR(t, archivePath, files)
-	root := t.TempDir()
-	record, err := prepareT3CodeRuntime(root, binary, platform, map[string][]string{t3CodeClaudeProxyID: {"claude-opus-5-5"}, t3CodeCodexProxyID: {"gpt-5.5"}})
-	if err != nil {
-		t.Fatal(err)
+	return binary
+}
+
+func TestT3CodeRuntimeProviderAssetNames(t *testing.T) {
+	const legacy = "assets/settings.providers-Fixture.js"
+	const chat = "assets/_chat.settings.providers-Fixture.js"
+	for _, test := range []struct {
+		name      string
+		assets    []string
+		wantError string
+	}{
+		{name: "legacy route", assets: []string{legacy}},
+		{name: "chat route", assets: []string{chat}},
+		{name: "ambiguous routes", assets: []string{legacy, chat}, wantError: "Ambiguous T3 Code Providers interface assets."},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			binary := t3CodeRuntimeSyntheticPackage(t, "macos", test.assets)
+			record, err := prepareT3CodeRuntime(t.TempDir(), binary, "macos", map[string][]string{t3CodeClaudeProxyID: {"claude-opus-5-5"}})
+			if test.wantError != "" {
+				if err == nil || err.Error() != test.wantError {
+					t.Fatalf("expected %q, got %v", test.wantError, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if record.ProvidersAsset != test.assets[0] || !t3CodeRuntimeReady(record, binary, "macos") {
+				t.Fatalf("provider asset %q did not produce a ready runtime", record.ProvidersAsset)
+			}
+			patched, err := os.ReadFile(filepath.Join(record.Root, filepath.FromSlash(record.ProvidersAsset)))
+			if err != nil || !strings.Contains(string(patched), t3CodeClaudeNormalID) {
+				t.Fatalf("provider account patch missing: %v", err)
+			}
+		})
 	}
-	return binary, root, record
 }
 
 func TestT3CodeRuntimePatchKeepsAccountsAndOtherProviders(t *testing.T) {
