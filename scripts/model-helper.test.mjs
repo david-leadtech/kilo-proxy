@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {filterModels,formatPrice,validModelID,sortModels,modelSortOptions,mergeModelSelection,modelLab,modelLabOptions,filterModelLab} from '../ui/model-helper.mjs';
+import {modelHasUserByok,modelByokBadge,filterModels,formatPrice,validModelID,sortModels,modelSortOptions,mergeModelSelection,modelLab,modelLabOptions,filterModelLab} from '../ui/model-helper.mjs';
 import {clientConfig} from '../ui/client-config.mjs';
 import {translate} from '../ui/i18n.mjs';
 const models = [
@@ -137,4 +137,35 @@ test('lab filters combine with search and coding filters while preserving hidden
  assert.deepEqual(filterModelLab([...selected.values()]).map(m=>m.id),[...selected.keys()]);
  assert.equal(JSON.stringify([...selected]),snapshot);
  assert.equal(initial,'openai/code');
+});
+
+
+test('BYOK requires a current explicit Kilo flag and keeps account and subscription observations isolated',()=>{
+ const model={id:'vendor/model',hasUserByokAvailable:true},state={kiloReady:true,orgId:'team-a'};
+ for(const [value,want] of [[true,true],[false,false],[undefined,false],[null,false],['true',false],[1,false]]) {
+  assert.equal(modelHasUserByok(model,[{id:model.id,connection:'kilo',hasUserByokAvailable:value}],state),want);
+ }
+ assert.equal(modelHasUserByok(model,new Map([[model.id,{id:model.id,connection:'kilo',hasUserByokAvailable:true}]]),state),true);
+ assert.equal(modelHasUserByok(model,[],state),false);
+ assert.equal(modelHasUserByok(model,[{id:model.id,hasUserByokAvailable:true}],state),false);
+ assert.equal(modelHasUserByok(model,[{id:model.id,connection:'chatgpt',hasUserByokAvailable:true}],state),false);
+ assert.equal(modelHasUserByok({...model,connection:'chatgpt'},[{id:model.id,connection:'kilo',hasUserByokAvailable:true}],state),false);
+ assert.equal(modelHasUserByok({id:'chatgpt/model'},[{id:'chatgpt/model',connection:'kilo',hasUserByokAvailable:true}],state),false);
+ assert.equal(modelHasUserByok(model,[{id:model.id,connection:'kilo',hasUserByokAvailable:true}],{...state,kiloReady:false}),false);
+ const otherTeam=[{id:model.id,connection:'kilo',hasUserByokAvailable:false}];
+ assert.equal(modelHasUserByok(model,otherTeam,{...state,orgId:'team-b'}),false);
+ assert.equal(modelHasUserByok(model,[{id:model.id,connection:'kilo'}],{...state,orgId:'team-b'}),false);
+ assert.equal(model.hasUserByokAvailable,true,'saved selection was not modified');
+});
+test('BYOK badge visibly names availability for the current account or team without inferring prices',()=>{
+ const previous=globalThis.document;
+ globalThis.document={createElement:tag=>({tagName:tag})};
+ try {
+  const model={id:'vendor/model'},catalog=[{id:model.id,connection:'kilo',hasUserByokAvailable:true,inputPrice:99}];
+  const badge=modelByokBadge(model,catalog,{kiloReady:true,orgId:'team'},'es');
+  assert.equal(badge.tagName,'span');assert.equal(badge.className,'model-byok-badge');assert.equal(badge.textContent,'BYOK');
+  assert.equal(badge.title,'Conexión BYOK disponible en el equipo seleccionado.');
+  assert.match(modelByokBadge(model,catalog,{kiloReady:true},'en').title,/current Kilo account/);
+  assert.equal(modelByokBadge(model,[{...catalog[0],hasUserByokAvailable:false,inputPrice:0}],{kiloReady:true}),null);
+ } finally { if(previous===undefined)delete globalThis.document;else globalThis.document=previous; }
 });

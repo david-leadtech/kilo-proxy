@@ -31,6 +31,10 @@ func (a *app) headlessCatalogAPI(w http.ResponseWriter, r *http.Request) {
 		cache.Models = []modelInfo{}
 	}
 	if r.Method == http.MethodGet {
+		// A saved catalog retains capabilities, not current BYOK availability.
+		for i := range cache.Models {
+			cache.Models[i].HasUserByokAvailable = nil
+		}
 		jsonResponse(w, http.StatusOK, headlessCatalogState{Models: cache.Models, Revision: revision, Complete: !cache.FetchedAt.IsZero(), FetchedAt: cache.FetchedAt})
 		return
 	}
@@ -58,6 +62,9 @@ func (a *app) headlessCatalogAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, model := range cache.Models {
 			if !seen[model.ID] {
+				// Cached-only rows retain capabilities, but BYOK availability
+				// must come from the current connection's catalog response.
+				model.HasUserByokAvailable = nil
 				models = append(models, model)
 			}
 		}

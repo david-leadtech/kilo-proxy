@@ -469,6 +469,7 @@ func (u *nativeUI) uxmLibraryTable() layout.Widget {
 	query := u.value(prefix + "search")
 	visible := nativeFilterSavedModels(u.sharedModelOrder(), s, query)
 	rows := []layout.Widget{u.uxmTableHeader(columns)}
+	currentByok := u.modelByokIDs()
 	for _, model := range visible {
 		choice := s.choice(model.ID)
 		if choice == nil {
@@ -491,6 +492,13 @@ func (u *nativeUI) uxmLibraryTable() layout.Widget {
 			badge = u.uxmDefaultBadge()
 		}
 		m := choice.Model
+		if byok := u.modelByokBadge(m, currentByok); byok != nil {
+			if badge != nil {
+				badge = u.pills(badge, byok)
+			} else {
+				badge = byok
+			}
+		}
 		cell := []layout.Widget{u.uxmModelCell(nativeCodexDisplayName(*choice), modelLabLabel(modelLab(m)), id, badge)}
 		if _, found := u.packCatalogModel(id); !found {
 			cell = append(cell, u.uxmSubtle(12, u.tr("Saved model · catalog unavailable", "Modelo guardado · catálogo no disponible")))

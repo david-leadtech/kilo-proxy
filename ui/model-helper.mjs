@@ -1,3 +1,20 @@
+// Availability belongs to this account's current Kilo catalog, never a saved
+// selection, provider name, price or inferred capability.
+export function modelHasUserByok(model, catalog, state) {
+  if(state?.kiloReady!==true || !model?.id || model.id.startsWith('chatgpt/') || model.connection && model.connection!=='kilo')return false;
+  const current=catalog instanceof Map?catalog.get(model.id):catalog.find(entry=>entry.id===model.id);
+  return current?.connection==='kilo' && current.hasUserByokAvailable===true;
+}
+export function modelByokBadge(model, catalog, state, language='en') {
+  if(!modelHasUserByok(model,catalog,state))return null;
+  const badge=document.createElement('span');
+  badge.className='model-byok-badge';badge.textContent='BYOK';
+  const team=!!state?.orgId;
+  badge.title=language==='es'
+    ? team?'Conexión BYOK disponible en el equipo seleccionado.':'Conexión BYOK disponible en la cuenta actual de Kilo.'
+    : team?'BYOK connection available for the selected team.':'BYOK connection available for the current Kilo account.';
+  return badge;
+}
 export function filterModels(models, query = '', coding = true) {
   const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
   return models.filter(m => (!coding || (m.tools === true && m.outputModalities?.includes('text'))) && terms.every(term => `${m.name} ${m.id}`.toLowerCase().includes(term)));

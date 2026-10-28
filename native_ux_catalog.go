@@ -215,7 +215,7 @@ var uxmCatalogColumns = []uxmColumn{{width: 48}, {weight: 3}, {width: 150, hideB
 
 // uxmCatalogRow is one compact clickable model row. Selected rows are citrus
 // with a black check box and keep their place.
-func (u *nativeUI) uxmCatalogRow(target uxmCatalogTarget, m modelInfo, order string, picked bool, toggle func()) layout.Widget {
+func (u *nativeUI) uxmCatalogRow(target uxmCatalogTarget, m modelInfo, order string, currentByok map[string]bool, picked bool, toggle func()) layout.Widget {
 	id := m.ID
 	label := m.Name
 	if label == "" {
@@ -239,7 +239,11 @@ func (u *nativeUI) uxmCatalogRow(target uxmCatalogTarget, m modelInfo, order str
 				})
 			}
 		}
-		name := []layout.Widget{u.uxmTitle(15, label), uxmGap(2), u.uxmSubtle(12, id)}
+		title := u.uxmTitle(15, label)
+		if badge := u.modelByokBadge(m, currentByok); badge != nil {
+			title = u.pills(title, badge)
+		}
+		name := []layout.Widget{title, uxmGap(2), u.uxmSubtle(12, id)}
 		if m.MayTrain != nil && *m.MayTrain {
 			name = append(name, u.uxmSubtle(12, u.tr("Kilo reports that this model may use prompts for training.", "Kilo indica que este modelo puede usar los mensajes para entrenamiento.")))
 		}
@@ -282,6 +286,7 @@ func (u *nativeUI) uxmCatalogPageFor(target uxmCatalogTarget) layout.Widget {
 	order := modelSortOrder(u.value("models.sort"))
 	query := strings.TrimSpace(u.value(prefix + "search"))
 	available := nativeVisibleModels(u.models, s, query, u.checked(prefix+"selected"), u.checked(prefix+"coding"), order, u.value("models.lab"))
+	currentByok := u.modelByokIDs()
 	refresh := u.iconButton(prefix+"refresh", u.tr("Refresh catalog", "Actualizar catálogo"), nativeButtonLink, nativeIconRefresh, u.refreshModels)
 	header := uxmHStack(16, u.textStyle(26, target.title, nativeInk, font.Bold), nil, refresh)
 	filters := u.uxmCatalogFilterCount(prefix)
@@ -313,7 +318,7 @@ func (u *nativeUI) uxmCatalogPageFor(target uxmCatalogTarget) layout.Widget {
 	row := func(m modelInfo) layout.Widget {
 		m2 := m
 		picked := s.choice(m2.ID) != nil
-		return u.uxmCatalogRow(target, m2, order, picked, func() {
+		return u.uxmCatalogRow(target, m2, order, currentByok, picked, func() {
 			if s.choice(m2.ID) != nil {
 				target.remove(m2.ID)
 			} else {
@@ -338,17 +343,44 @@ func (u *nativeUI) uxmCatalogPageFor(target uxmCatalogTarget) layout.Widget {
 		}
 		widgets = append(widgets, u.uxmCatalogGroup(heading, rows))
 	} else {
-		recommended, rest := []layout.Widget{}, []layout.Widget{}
-		for _, m := range u.recommendedModels() {
-			recommended = append(recommended, row(m))
+		byok, recommended, rest := []layout.Widget{}, []layout.Widget{}, []layout.Widget{}
+		byokAvailable := func(m modelInfo) bool { return nativeModelHasUserByok(m, currentByok) }
+		byokCount := 0
+		for _, m := range available {
+			if byokAvailable(m) {
+				byokCount++
+				if len(byok) < 150 {
+					byok = append(byok, row(m))
+				}
+			}
 		}
-		count := 0
+		if len(byok) == 0 {
+			empty := u.tr("The current catalog does not report any models with BYOK available. Refresh after changing your Kilo account or team.", "El catálogo actual no informa de modelos con BYOK disponible. Actualiza después de cambiar de cuenta o equipo de Kilo.")
+			if u.catalogCached {
+				empty = u.tr("Refresh the catalog to check BYOK availability for your current Kilo account or team.", "Actualiza el catálogo para comprobar la disponibilidad BYOK de tu cuenta o equipo actual de Kilo.")
+			}
+			byok = append(byok, u.note(empty))
+		} else {
+			byok = append([]layout.Widget{u.uxmSubtle(13, u.modelByokContext())}, byok...)
+		}
+		byokHeading := u.tr("Models with BYOK", "Modelos con BYOK")
+		if byokCount > 0 {
+			byokHeading += fmt.Sprintf(" · %d", byokCount)
+		}
+		widgets = append(widgets, u.uxmCatalogGroup(byokHeading, byok))
+		if byokCount > 150 {
+			widgets = append(widgets, u.note(u.tr("Showing the first 150 BYOK models. Search to narrow the catalog.", "Se muestran los primeros 150 modelos con BYOK. Busca para acotar el catálogo.")))
+		}
+		for _, m := range u.recommendedModels() {
+			if !byokAvailable(m) {
+				recommended = append(recommended, row(m))
+			}
+		}
 		for _, m := range shown {
-			if m.Recommendation != nil {
+			if m.Recommendation != nil || byokAvailable(m) {
 				continue
 			}
 			rest = append(rest, row(m))
-			count++
 		}
 		if len(recommended) > 0 {
 			widgets = append(widgets, u.uxmCatalogGroup(fmt.Sprintf(u.tr("Recommended · %d", "Recomendados · %d"), len(recommended)), recommended))
@@ -356,7 +388,7 @@ func (u *nativeUI) uxmCatalogPageFor(target uxmCatalogTarget) layout.Widget {
 		if len(rest) > 0 {
 			total := 0
 			for _, m := range available {
-				if m.Recommendation == nil {
+				if m.Recommendation == nil && !byokAvailable(m) {
 					total++
 				}
 			}
