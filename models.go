@@ -16,25 +16,26 @@ import (
 )
 
 type modelInfo struct {
-	Connection       string               `json:"connection,omitempty"`
-	CodeModeRank     *float64             `json:"codeModeRank"`
-	CodingIndex      *float64             `json:"codingIndex"`
-	Speed            *float64             `json:"speed"`
-	ReasoningEfforts []string             `json:"reasoningEfforts,omitempty"`
-	ID               string               `json:"id"`
-	Name             string               `json:"name"`
-	Provider         string               `json:"provider"`
-	ContextWindow    int                  `json:"contextWindow,omitempty"`
-	MaxOutputTokens  int                  `json:"maxOutputTokens,omitempty"`
-	InputModalities  []string             `json:"inputModalities,omitempty"`
-	OutputModalities []string             `json:"outputModalities,omitempty"`
-	Tools            *bool                `json:"tools"`
-	Reasoning        *bool                `json:"reasoning"`
-	InputPrice       *float64             `json:"inputPrice"`
-	OutputPrice      *float64             `json:"outputPrice"`
-	MayTrain         *bool                `json:"mayTrain"`
-	ExpirationDate   string               `json:"expirationDate,omitempty"`
-	Recommendation   *modelRecommendation `json:"recommendation,omitempty"`
+	Connection           string               `json:"connection,omitempty"`
+	CodeModeRank         *float64             `json:"codeModeRank"`
+	CodingIndex          *float64             `json:"codingIndex"`
+	Speed                *float64             `json:"speed"`
+	ReasoningEfforts     []string             `json:"reasoningEfforts,omitempty"`
+	ID                   string               `json:"id"`
+	Name                 string               `json:"name"`
+	Provider             string               `json:"provider"`
+	ContextWindow        int                  `json:"contextWindow,omitempty"`
+	MaxOutputTokens      int                  `json:"maxOutputTokens,omitempty"`
+	InputModalities      []string             `json:"inputModalities,omitempty"`
+	OutputModalities     []string             `json:"outputModalities,omitempty"`
+	Tools                *bool                `json:"tools"`
+	Reasoning            *bool                `json:"reasoning"`
+	InputPrice           *float64             `json:"inputPrice"`
+	OutputPrice          *float64             `json:"outputPrice"`
+	MayTrain             *bool                `json:"mayTrain"`
+	HasUserByokAvailable *bool                `json:"hasUserByokAvailable"`
+	ExpirationDate       string               `json:"expirationDate,omitempty"`
+	Recommendation       *modelRecommendation `json:"recommendation,omitempty"`
 }
 type catalogError struct {
 	status  int
@@ -311,11 +312,12 @@ func parseModels(body []byte) ([]modelInfo, error) {
 				Input  []string `json:"input_modalities"`
 				Output []string `json:"output_modalities"`
 			} `json:"architecture"`
-			OpenCode   json.RawMessage            `json:"opencode"`
-			Parameters []string                   `json:"supported_parameters"`
-			Pricing    map[string]json.RawMessage `json:"pricing"`
-			MayTrain   *bool                      `json:"mayTrainOnYourPrompts"`
-			Expiration string                     `json:"expiration_date"`
+			OpenCode             json.RawMessage            `json:"opencode"`
+			Parameters           []string                   `json:"supported_parameters"`
+			Pricing              map[string]json.RawMessage `json:"pricing"`
+			MayTrain             *bool                      `json:"mayTrainOnYourPrompts"`
+			HasUserByokAvailable *bool                      `json:"hasUserByokAvailable"`
+			Expiration           string                     `json:"expiration_date"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &source); err != nil {
@@ -354,7 +356,7 @@ func parseModels(body []byte) ([]modelInfo, error) {
 		if output <= 0 || output > 100000000 {
 			output = 0
 		}
-		m := modelInfo{ID: raw.ID, Name: name, Provider: strings.SplitN(raw.ID, "/", 2)[0], ContextWindow: context, MaxOutputTokens: output, InputModalities: modalities(raw.Architecture.Input), OutputModalities: modalities(raw.Architecture.Output), InputPrice: tokenPrice(raw.Pricing["prompt"]), OutputPrice: tokenPrice(raw.Pricing["completion"]), MayTrain: raw.MayTrain}
+		m := modelInfo{ID: raw.ID, Name: name, Provider: strings.SplitN(raw.ID, "/", 2)[0], ContextWindow: context, MaxOutputTokens: output, InputModalities: modalities(raw.Architecture.Input), OutputModalities: modalities(raw.Architecture.Output), InputPrice: tokenPrice(raw.Pricing["prompt"]), OutputPrice: tokenPrice(raw.Pricing["completion"]), MayTrain: raw.MayTrain, HasUserByokAvailable: raw.HasUserByokAvailable}
 		m.ReasoningEfforts = catalogReasoningEfforts(raw.OpenCode)
 		if raw.Parameters != nil {
 			tools, reasoning := false, false

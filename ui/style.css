@@ -162,3 +162,10 @@
 #opencode-executable,#cli-path-codex-cli,#cli-path-claude{min-width:0;max-width:100%}
 .usage-query-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:16px 0}.usage-query-fields label{display:flex;flex-direction:column;gap:7px;font-size:12px}.usage-query-fields input,.usage-query-fields select{width:100%;min-width:0;padding:9px 11px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--ink)}#usage-explorer fieldset{border:1px solid var(--border);padding:14px;margin:18px 0}#usage-explorer legend{font-size:12px;font-weight:600;padding:0 6px}.usage-query-groups{display:flex;flex-wrap:wrap;gap:12px 20px}.usage-query-groups label{display:flex;align-items:center;gap:7px;font-size:12px}#usage-explorer .account-heading{justify-content:flex-start;margin-top:20px}#usage-explorer td{overflow-wrap:anywhere;max-width:340px}@media(max-width:750px){.usage-query-fields{grid-template-columns:1fr}}
 #usage-explorer table{min-width:1250px}#usage-explorer td{min-width:110px;white-space:pre-wrap}
+
+/* Current-account Kilo BYOK observations share the model title, never a price column. */
+.model-byok-badge{display:inline-block;width:max-content;border:1px solid #566b38;background:#f2f4e9;color:#394c25;padding:1px 6px;margin-top:5px;font:600 10px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.04em}
+.model-byok-heading{grid-column:1/-1;padding:12px 8px 8px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600}
+.model-byok-heading strong,.model-byok-heading small{display:block}
+.model-byok-heading small{margin-top:4px;color:var(--muted);font-size:11px;font-weight:400}
+#model-details>.model-byok-badge{margin-left:8px}

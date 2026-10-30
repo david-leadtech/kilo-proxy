@@ -277,6 +277,12 @@ func TestE2EServer(t *testing.T) {
 					models = append(models, map[string]any{"id": model.ID, "name": model.Name, "context_length": 128000, "supported_parameters": []string{"tools", "reasoning"}, "architecture": map[string]any{"output_modalities": []string{"text"}}})
 				}
 			}
+			if readLaunchControl()["byokModels"] == true {
+				for _, value := range models {
+					model := value.(map[string]any)
+					model["hasUserByokAvailable"] = model["id"] == "vendor/one" && r.Header.Get("X-KiloCode-OrganizationId") == "e2e-team"
+				}
+			}
 			if readLaunchControl()["imageModels"] == true {
 				models = append(models, map[string]any{"id": "image-lab/painter", "name": "Synthetic Image Painter", "architecture": map[string]any{"input_modalities": []string{"text", "image"}, "output_modalities": []string{"image"}}})
 			}

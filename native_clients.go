@@ -805,6 +805,7 @@ func (u *nativeUI) clientPicker(key string, s *nativeClientSelection) layout.Wid
 	}
 	cards := []layout.Widget{}
 	cardIDs := []string{}
+	currentByok := u.modelByokIDs()
 	for i, model := range available {
 		if i >= 150 {
 			break
@@ -827,6 +828,9 @@ func (u *nativeUI) clientPicker(key string, s *nativeClientSelection) layout.Wid
 				s.remove(id)
 			}
 		}), u.note(id)}
+		if badge := u.modelByokBadge(m, currentByok); badge != nil {
+			heading = append(heading, badge)
+		}
 		row := []layout.Widget{u.modelCardHeading(heading...), u.modelPriceCells(m)}
 		if metric := u.modelSortMetric(m, order); metric != "" && (!shared || catalog || u.expanded[prefix+"advanced"]) {
 			row = append(row, u.note(metric))

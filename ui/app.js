@@ -19,7 +19,7 @@ import {claudeCapabilities,claudeEfforts,claudeSelection,claudeSettings} from '.
 import {reportedCost, reportedSpend, inferenceCostNote, costSourceLabel, cacheStats, lastCacheStats} from './usage-helper.mjs';
 import {formatTraceJSON} from './activity-helper.mjs';
 import {codexCatalog,codexDisplayName,reasoningFor,reasoningLevels} from './codex-catalog.mjs';
-import {filterModels, formatPrice, modelPriceDetails, validModelID, sortModels, configureModelSort, setModelSort, mergeModelSelection, filterModelLab, configureModelLab, setModelLab} from './model-helper.mjs';
+import {modelHasUserByok, modelByokBadge, filterModels, formatPrice, modelPriceDetails, validModelID, sortModels, configureModelSort, setModelSort, mergeModelSelection, filterModelLab, configureModelLab, setModelLab} from './model-helper.mjs';
 import {imageGenerationModels,imageGenerationSelection,imageGenerationValid,imageGenerationProvider,imageGenerationConnectionReady,codexImageMCPConfig} from './model-helper.mjs';
 import {clientConfig, launchCommand} from './client-config.mjs';
 import {chooseLanguage, translate, bindDocument} from './i18n.mjs';
@@ -827,13 +827,28 @@ function renderModels() {
   const caret=document.activeElement?.classList.contains('codex-name-input') ? [document.activeElement.selectionStart,document.activeElement.selectionEnd] : null;
   const expanded=new Set([...picker.querySelectorAll('details[open]')].map(el=>el.dataset.model));
   picker.replaceChildren();
-  for (const m of matches) {
+  const currentCatalog=new Map(catalog.map(model=>[model.id,model]));
+  const groupByok=!$('model-search').value.trim() && !$('model-lab').value;
+  const byok=groupByok?matches.filter(model=>modelHasUserByok(model,currentCatalog,state)):[];
+  const ordered=groupByok?[...byok,...matches.filter(model=>!modelHasUserByok(model,currentCatalog,state))]:matches;
+  if(groupByok){
+    const heading=document.createElement('div');heading.className='model-byok-heading';
+    const title=document.createElement('strong');title.textContent=language==='en'?'Models with BYOK':'Modelos con BYOK';heading.append(title);
+    const note=document.createElement('small');
+    note.textContent=byok.length
+      ? language==='en'?(state?.orgId?'BYOK connection available for the selected team.':'BYOK connection available for the current Kilo account.'):(state?.orgId?'Conexión BYOK disponible en el equipo seleccionado.':'Conexión BYOK disponible en la cuenta actual de Kilo.')
+      : language==='en'?'The current catalog does not report any models with BYOK available. Refresh after changing your Kilo account or team.':'El catálogo actual no informa de modelos con BYOK disponible. Actualiza después de cambiar de cuenta o equipo de Kilo.';
+    heading.append(note);picker.append(heading);
+  }
+  for (const [index,m] of ordered.entries()) {
+    if(groupByok && index===byok.length){const heading=document.createElement('div');heading.className='model-byok-heading';heading.textContent=language==='en'?'All other models':'Resto de modelos';picker.append(heading);}
     const row = document.createElement('label'), radio = document.createElement('input'), name = document.createElement('span');
     row.className = 'model-option'; radio.type = ['codex','codex-cli','claude'].includes(client) ? 'checkbox' : 'radio'; radio.name = 'model-choice'; radio.value = m.id;radio.dataset.focus='model:'+m.id; radio.checked = isCodexClient() ? codexSelection().models.has(m.id) : client==='claude' ? multiClients.claude.models.has(m.id) : m.id === selectedID; radio.disabled = catalogLoading;
     const shownName=isCodexClient() ? codexDisplayName(m) : client==='claude' ? (m.displayName || m.name || m.id) : m.name;
     radio.setAttribute('aria-label',shownName + ' · ' + m.id);
     const title = document.createElement('strong'), id = document.createElement('small'); title.textContent = shownName; id.textContent = m.id; name.append(title,id);
     name.className='model-option-title';
+    const byokBadge=modelByokBadge(m,currentCatalog,state,language);if(byokBadge)name.append(byokBadge);
     row.append(radio,name,modelPriceDetails(m,language));
     if(isCodexClient()){
       const entry=document.createElement('div');entry.className='codex-model-entry';entry.classList.toggle('is-selected',codexSelection().models.has(m.id));entry.append(row);
@@ -855,7 +870,7 @@ function renderModels() {
     if (selectedID) details.textContent = t('ID manual o no encontrado en el catálogo actual. Revisa el modelo y su ventana de contexto.');
     return;
   }
-  const title = document.createElement('strong'); title.textContent = selected.name; details.append(title);
+  const title = document.createElement('strong'); title.textContent = selected.name; details.append(title);const byokBadge=modelByokBadge(selected,currentCatalog,state,language);if(byokBadge)details.append(byokBadge);
   const grid = document.createElement('dl');
   const count = n => n ? n.toLocaleString(language) : t('Coste desconocido');
   const flag = value => value === true ? t('Sí') : value === false ? t('No') : t('Coste desconocido');
